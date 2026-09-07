@@ -2,8 +2,8 @@ import mongoose from "mongoose";
 import Form, { IForm } from "../models/Form";
 
 export class FormRepository {
-  async create(workspaceId: string, data: Partial<IForm>): Promise<IForm> {
-    return await Form.create({ ...data, workspaceId });
+  async create(workspaceId: string | null, data: Partial<IForm>): Promise<IForm> {
+    return await Form.create({ ...data, workspaceId: workspaceId || null });
   }
 
   async findById(id: string, workspaceId?: string): Promise<IForm | null> {

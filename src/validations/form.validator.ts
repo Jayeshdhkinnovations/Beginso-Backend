@@ -216,6 +216,8 @@ export const createFormSchema = z
     publishedSlug: z.string().trim().optional(),
     branding: brandingSchema.optional(),
     settings: settingsSchema.optional(),
+    workspaceId: z.string().trim().nullable().optional(),
+    destinationWorkspaceId: z.string().trim().nullable().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.pages && data.pages.length > 0) {

@@ -8,6 +8,7 @@ const profilePatchSchema = z.object({
   fullName: z.string().min(1).max(100).optional(),
   avatarUrl: z.union([z.string().url(), z.null()]).optional(),
   email: z.string().optional(),
+  theme: z.enum(["light", "dark", "system"]).nullable().optional(),
 });
 
 /**
@@ -35,6 +36,7 @@ export const getProfileMe = async (req: Request, res: Response, next: NextFuncti
         role: u.role,
         status: u.status || "active",
         onboardingCompleted: u.onboardingCompleted ?? false,
+        theme: u.theme || "system",
         createdAt: u.createdAt,
         lastLoginAt: u.lastLogin || null,
       },
@@ -75,7 +77,7 @@ export const patchProfileMe = async (req: Request, res: Response, next: NextFunc
     }
 
     const updates: any = {};
-    const { name, fullName, avatarUrl } = parseResult.data;
+    const { name, fullName, avatarUrl, theme } = parseResult.data;
 
     const newName = name || fullName;
     if (newName) {
@@ -84,6 +86,10 @@ export const patchProfileMe = async (req: Request, res: Response, next: NextFunc
 
     if (avatarUrl !== undefined) {
       updates.avatarUrl = avatarUrl;
+    }
+
+    if (theme !== undefined) {
+      updates.theme = theme;
     }
 
     const updatedUser = await User.findByIdAndUpdate(authReq.user._id, updates, {
@@ -102,6 +108,7 @@ export const patchProfileMe = async (req: Request, res: Response, next: NextFunc
         role: updatedUser!.role,
         status: updatedUser!.status || "active",
         onboardingCompleted: updatedUser!.onboardingCompleted ?? false,
+        theme: updatedUser!.theme || "system",
         createdAt: updatedUser!.createdAt,
         lastLoginAt: updatedUser!.lastLogin || null,
       },

@@ -5,15 +5,19 @@ export interface INotificationPreferences {
   productUpdatesEmail: boolean;
 }
 
+import crypto from "crypto";
+
 export interface IWorkspace extends Document {
   name: string;
+  slug: string;
+  timezone: string;
   description?: string;
   logo?: string;
   logoUrl?: string | null;
   branding?: Record<string, any>;
   notificationPreferences?: INotificationPreferences;
   owner: mongoose.Types.ObjectId;
-  status: "active";
+  status: "active" | "suspended" | "deleted";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +27,33 @@ const WorkspaceSchema = new Schema<IWorkspace>(
       type: String,
       required: true,
       trim: true,
+    },
+
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      index: true,
+    },
+
+    timezone: {
+      type: String,
+      default: "UTC",
+      trim: true,
+      validate: {
+        validator: function (v: string) {
+          if (!v) return false;
+          try {
+            Intl.DateTimeFormat(undefined, { timeZone: v });
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        message: "Invalid IANA timezone string",
+      },
     },
 
     description: {
@@ -67,6 +98,20 @@ const WorkspaceSchema = new Schema<IWorkspace>(
     timestamps: true,
   }
 );
+
+// Auto-generate slug if not provided before validation
+WorkspaceSchema.pre("validate", function () {
+  if (!this.slug && this.name) {
+    const baseSlug = this.name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "workspace";
+    const suffix = crypto.randomBytes(3).toString("hex");
+    this.slug = `${baseSlug}-${suffix}`;
+  }
+});
+
 const Workspace = mongoose.model<IWorkspace>(
   "Workspace",
   WorkspaceSchema

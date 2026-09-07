@@ -21,10 +21,11 @@ export interface IUser extends Document {
   email: string;
   avatarUrl?: string | null;
   role: "admin" | "super_admin";
-  workspaceId: mongoose.Types.ObjectId;
+  workspaceId?: mongoose.Types.ObjectId | null;
   isActive: boolean;
   status: "active" | "suspended";
   onboardingCompleted: boolean;
+  theme?: "light" | "dark" | "system" | null;
   lastLogin: Date;
   loginHistory: ILoginEntry[];
   createdAt?: Date;
@@ -86,6 +87,12 @@ const UserSchema = new Schema<IUser>(
     onboardingCompleted: {
       type: Boolean,
       default: false,
+    },
+
+    theme: {
+      type: String,
+      enum: ["light", "dark", "system", null],
+      default: "system",
     },
 
     lastLogin: {

@@ -60,7 +60,7 @@ export class ResponseService {
         throw err;
       }
 
-      if (form.workspaceId.toString() !== workspaceId) {
+      if (!form.workspaceId || form.workspaceId.toString() !== workspaceId) {
         const err: any = new Error("Forbidden: You do not own this form's workspace");
         err.statusCode = 403;
         throw err;
@@ -146,7 +146,7 @@ export class ResponseService {
         throw err;
       }
 
-      if (form.workspaceId.toString() !== workspaceId) {
+      if (!form.workspaceId || form.workspaceId.toString() !== workspaceId) {
         const err: any = new Error("Forbidden: You do not own this form's workspace");
         err.statusCode = 403;
         throw err;
@@ -201,7 +201,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!form || form.workspaceId.toString() !== workspaceId) {
+    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;
@@ -291,7 +291,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!form || form.workspaceId.toString() !== workspaceId) {
+    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;
@@ -322,7 +322,7 @@ export class ResponseService {
     try {
       const responseDir = path.join(
         uploadDir,
-        form.workspaceId.toString(),
+        form.workspaceId ? form.workspaceId.toString() : "personal",
         form._id.toString(),
         "responses",
         responseId
@@ -356,7 +356,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!form || form.workspaceId.toString() !== workspaceId) {
+    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;

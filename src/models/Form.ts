@@ -76,7 +76,8 @@ export interface IFormSettings {
 export interface IForm extends Document {
   title: string;
   description?: string;
-  workspaceId: mongoose.Types.ObjectId;
+  workspaceId?: mongoose.Types.ObjectId | null;
+  createdBy?: mongoose.Types.ObjectId | null;
   status: "draft" | "published" | "closed";
   fields: IFormField[];
   pages: IFormPage[];
@@ -192,7 +193,15 @@ const FormSchema = new Schema<IForm>(
     workspaceId: {
       type: Schema.Types.ObjectId,
       ref: "Workspace",
-      required: true,
+      required: false,
+      default: null,
+      index: true,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+      default: null,
       index: true,
     },
     status: {

@@ -47,25 +47,16 @@ export const signup = async (
       password: validatedData.password,
     });
 
-    // Step 4: Save User in MongoDB (initially without workspace)
+    // Step 4: Save User in MongoDB (lazy model C1.3: no workspace created at signup)
     const user = await User.create({
       fullName: validatedData.fullName,
       email: validatedData.email,
       firebaseUid: firebaseUser.uid,
       role: "admin",
+      theme: "system",
     });
 
-    // Step 5: Create Workspace with owner
-    const workspace = await Workspace.create({
-      name: `${validatedData.fullName}'s Workspace`,
-      owner: user._id,
-    });
-
-    // Step 6: Link Workspace ID to User
-    user.workspaceId = workspace._id as any;
-    await user.save();
-
-    // Step 7: Generate JWT
+    // Step 5: Generate JWT
     const token = generateToken({
       id: user._id.toString(),
       email: user.email,
@@ -137,6 +128,7 @@ export const getMe = async (
         role: u.role,
         status: u.status || "active",
         onboardingCompleted: u.onboardingCompleted ?? false,
+        theme: u.theme || "system",
         workspaceId: u.workspaceId?._id ? u.workspaceId._id.toString() : u.workspaceId?.toString() || "",
         createdAt: u.createdAt,
         lastLoginAt: u.lastLogin || null,
@@ -156,7 +148,8 @@ export const session = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { token, name } = req.body;
+    const token = req.body.token || req.body.idToken;
+    const name = req.body.name || req.body.fullName;
 
     if (!token) {
       res.status(400).json({
@@ -205,26 +198,14 @@ export const session = async (
     if (!user) {
       isNewUser = true;
 
-      // 1. Create User in MongoDB first
+      // 1. Create User in MongoDB first (lazy model C1.3: no workspace created at signup)
       user = await User.create({
         firebaseUid,
         fullName: name || decodedToken.name || "New User",
         email: email,
         role: "admin",
+        theme: "system",
       });
-
-      // 2. Create Workspace
-      const workspace = await Workspace.create({
-        name: `${user.fullName}'s Workspace`,
-        owner: user._id,
-      });
-
-      // 3. Update User with Workspace ID
-      user.workspaceId = workspace._id as any;
-      await user.save();
-
-      // Populate workspaceId
-      user = await User.findById(user._id).populate("workspaceId") as any;
 
       // Send Welcome Onboarding Email asynchronously
       const appUrl = process.env.APP_URL || "https://beginso.com";
@@ -328,6 +309,7 @@ export const session = async (
         role: user!.role,
         status: user!.status || "active",
         onboardingCompleted: user!.onboardingCompleted ?? false,
+        theme: user!.theme || "system",
         workspaceId: user!.workspaceId?._id ? user!.workspaceId._id.toString() : user!.workspaceId?.toString() || "",
         createdAt: user!.createdAt,
         lastLoginAt: user!.lastLogin || null,

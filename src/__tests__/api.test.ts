@@ -84,7 +84,7 @@ describe("Onboarding Platform Integration Tests", () => {
   // ==========================================
   
   describe("Signup API", () => {
-    it("Successful signup, workspace provisioning, and JWT return", async () => {
+    it("Successful signup, C1.3 lazy workspace provisioning, and JWT return", async () => {
       const signupData = {
         fullName: "Jayesh Chaudhary",
         email: "jayesh@test.com",
@@ -102,10 +102,22 @@ describe("Onboarding Platform Integration Tests", () => {
       expect(res.body.token).toBeDefined();
       expect(res.body.user).toBeDefined();
       expect(res.body.user.email).toBe(signupData.email);
-      expect(res.body.user.workspaceId).toBeDefined();
+      // Under C1.3 lazy workspace model, no workspace row is created at signup
+      expect(res.body.user.workspaceId).toBeFalsy();
+      const count = await Workspace.countDocuments({ owner: res.body.user._id });
+      expect(count).toBe(0);
+
+      // Workspace is only created when user explicitly creates one
+      const wsRes = await request(app)
+        .post("/api/workspaces")
+        .set("Authorization", `Bearer ${res.body.token}`)
+        .send({ name: "Jayesh's Workspace", slug: "jayesh-workspace" });
+      expect(wsRes.status).toBe(201);
+      expect(wsRes.body.workspace).toBeDefined();
+      expect(wsRes.body.workspace._id).toBeDefined();
 
       // Validate workspace exists and points to user
-      const workspace = await Workspace.findById(res.body.user.workspaceId);
+      const workspace = await Workspace.findById(wsRes.body.workspace._id);
       expect(workspace).toBeDefined();
       expect(workspace!.owner.toString()).toBe(res.body.user._id);
     });

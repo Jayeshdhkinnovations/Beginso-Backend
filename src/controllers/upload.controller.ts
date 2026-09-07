@@ -325,7 +325,7 @@ export const getFile = async (
             const responseDoc = await ResponseModel.findById(responseIdMatch[1]);
             if (responseDoc) {
               const formDoc = await Form.findById(responseDoc.formId);
-              if (formDoc && formDoc.workspaceId.toString() === userWorkspaceId) {
+              if (formDoc && formDoc.workspaceId && formDoc.workspaceId.toString() === userWorkspaceId) {
                 isAuthorized = true;
               }
             }
@@ -335,7 +335,7 @@ export const getFile = async (
             const formIdMatch = forwardSlashPath.match(/\/([0-9a-fA-F]{24})\//);
             if (formIdMatch && formIdMatch[1]) {
               const formDoc = await Form.findById(formIdMatch[1]);
-              if (formDoc && formDoc.workspaceId.toString() === userWorkspaceId) {
+              if (formDoc && formDoc.workspaceId && formDoc.workspaceId.toString() === userWorkspaceId) {
                 isAuthorized = true;
               }
             }

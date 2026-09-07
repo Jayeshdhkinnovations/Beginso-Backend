@@ -93,7 +93,7 @@ export class FormService {
     return { fields: updatedFields, fieldsChanged };
   }
 
-  async createForm(workspaceId: string, formDetails: Partial<IForm>): Promise<IForm> {
+  async createForm(workspaceId: string | null, formDetails: Partial<IForm>): Promise<IForm> {
     // Seed default page if none provided
     if (!formDetails.pages || formDetails.pages.length === 0) {
       formDetails.pages = [

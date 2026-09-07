@@ -21,8 +21,8 @@ const runTest = async () => {
 
     console.log("Found Form:", form.title, form._id);
 
-    const report = await ReportModel.create({
-      workspaceId: form.workspaceId,
+    const report: any = await ReportModel.create({
+      workspaceId: form.workspaceId || new mongoose.Types.ObjectId(),
       format: "pdf",
       filters: {
         formId: form._id.toString(),

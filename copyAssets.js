@@ -14,3 +14,16 @@ if (fs.existsSync(srcDir)) {
 } else {
   console.warn('⚠️ src/config/firebase directory not found, skipping asset copy.');
 }
+
+const assetsSrcDir = path.join(__dirname, 'src', 'assets');
+const assetsDestDir = path.join(__dirname, 'dist', 'assets');
+
+if (fs.existsSync(assetsSrcDir)) {
+  fs.mkdirSync(assetsDestDir, { recursive: true });
+  const files = fs.readdirSync(assetsSrcDir);
+  for (const file of files) {
+    fs.copyFileSync(path.join(assetsSrcDir, file), path.join(assetsDestDir, file));
+  }
+  console.log('✅ Assets copied to dist directory');
+}
+

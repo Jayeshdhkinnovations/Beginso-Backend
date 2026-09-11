@@ -11,7 +11,16 @@ import {
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
+import teamRoutes from "./team.routes";
+import invitationRoutes from "./invitation.routes";
+
 const router = Router();
+
+// Sub-routes for workspace members and invitations
+router.use("/:id/members", teamRoutes);
+router.use("/:workspaceId/members", teamRoutes);
+router.use("/:id/invitations", invitationRoutes);
+router.use("/:workspaceId/invitations", invitationRoutes);
 
 router.get("/current", protect as any, blockSuspended as any, requirePermission("workspace:read") as any, getCurrentWorkspace);
 router.patch("/current", protect as any, blockSuspended as any, requirePermission("workspace:settings") as any, patchCurrentWorkspace);

@@ -6,6 +6,8 @@ import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import Report from "../models/Report";
 import SessionModel from "../models/Session";
+import FormAccessGrant from "../models/FormAccessGrant";
+import Invitation from "../models/Invitation";
 import { WorkspaceRole } from "../types/workspace.types";
 
 export interface RequirePermissionOptions {
@@ -19,14 +21,29 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "workspace:read",
     "workspace:settings",
     "workspace:export",
-    "forms:*",
+    "forms:read",
+    "forms:create",
+    "forms:write",
+    "forms:publish",
+    // NOTE: forms:delete is strictly OWNER ONLY! Admin does NOT have forms:delete or forms:*
     "responses:*",
+    "responses:read",
+    "responses:write",
+    "responses:delete",
     "dashboard:*",
     "analytics:*",
     "reports:*",
+    "reports:read",
+    "reports:create",
     "templates:*",
+    "templates:read",
+    "templates:create",
     "uploads:*",
+    "uploads:read",
+    "uploads:create",
     "team:*",
+    "team:read",
+    "team:manage",
     "sessions:*",
   ],
   editor: [
@@ -34,14 +51,14 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "forms:read",
     "forms:create",
     "forms:write",
-    "forms:publish",
-    "forms:delete",
+    // No forms:publish, no forms:delete
     "responses:read",
     "responses:write",
+    // No responses:delete
     "dashboard:read",
     "analytics:read",
     "reports:read",
-    "reports:create",
+    "reports:create", // Can export
     "templates:read",
     "uploads:create",
     "uploads:read",
@@ -52,14 +69,14 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "forms:read",
     "forms:create",
     "forms:write",
-    "forms:publish",
-    "forms:delete",
+    // No forms:publish, no forms:delete
     "responses:read",
     "responses:write",
+    // No responses:delete
     "dashboard:read",
     "analytics:read",
     "reports:read",
-    "reports:create",
+    "reports:create", // Can export
     "templates:read",
     "uploads:create",
     "uploads:read",
@@ -68,7 +85,10 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
   reviewer: [
     "workspace:read",
     "forms:read",
+    // No forms:create, forms:write, forms:publish, forms:delete
     "responses:read",
+    // No responses:write, responses:delete
+    // No reports:create (cannot export per C2.1 role matrix)
     "dashboard:read",
     "analytics:read",
     "reports:read",
@@ -95,7 +115,7 @@ export const hasPermission = (role: WorkspaceRole, requiredPermission?: string):
   if (permissions.includes("*")) return true;
   if (permissions.includes(requiredPermission)) return true;
 
-  // Resource-level wildcard match (e.g., 'forms:*' matches 'forms:read')
+  // Resource-level wildcard match (e.g., 'responses:*' matches 'responses:read')
   const [resource] = requiredPermission.split(":");
   if (permissions.includes(`${resource}:*`)) return true;
 
@@ -144,6 +164,57 @@ export const requirePermission = (
         }
       }
 
+      // Check for Per-Form Access Grant (BE 0.6) before workspace checks
+      // Works identically whether form's workspaceId is set or null (personal form)
+      if (options?.resourceType === "form" || options?.resourceType === "response") {
+        const rawParam = req.params.formId || req.params.responseId || req.params.id;
+        const paramId = Array.isArray(rawParam) ? rawParam[0] : rawParam;
+
+        if (paramId && typeof paramId === "string" && mongoose.Types.ObjectId.isValid(paramId)) {
+          let targetForm: any = null;
+
+          if (options.resourceType === "form") {
+            targetForm = await Form.findById(paramId).select("_id workspaceId").lean();
+          } else if (options.resourceType === "response") {
+            const resp = await ResponseModel.findById(paramId).select("formId").lean();
+            if (resp && resp.formId) {
+              targetForm = await Form.findById(resp.formId).select("_id workspaceId").lean();
+            }
+          }
+
+          if (targetForm) {
+            // Check if user has direct per-form grant
+            const grant = await FormAccessGrant.findOne({
+              formId: targetForm._id,
+              userId: user._id,
+            }).lean();
+
+            if (grant) {
+              // Check permission against grant's role
+              if (permission && !hasPermission(grant.role, permission)) {
+                res.status(403).json({
+                  success: false,
+                  message: "Forbidden: Insufficient permissions for this action",
+                  error: {
+                    code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
+                    message: "Forbidden: Insufficient permissions",
+                  },
+                });
+                return;
+              }
+
+              // Caller authorized via per-form grant!
+              authReq.workspaceId = targetForm.workspaceId ? targetForm.workspaceId.toString() : null;
+              authReq.formAccessGrant = grant;
+              authReq.workspaceRole = grant.role;
+              authReq.membership = null;
+              authReq.membershipId = null;
+              return next();
+            }
+          }
+        }
+      }
+
       // 1. Resolve target workspace ID
       let targetWorkspaceId: string | null = null;
 
@@ -174,12 +245,21 @@ export const requirePermission = (
 
       // Resource-based workspace resolution
       if (!targetWorkspaceId && options?.resourceType) {
-        const rawParam = req.params.formId || req.params.responseId || req.params.reportId || req.params.workspaceId || req.params.id;
+        const rawParam = req.params.workspaceId || req.params.formId || req.params.responseId || req.params.reportId || req.params.id;
         const paramId = Array.isArray(rawParam) ? rawParam[0] : rawParam;
         if (paramId && typeof paramId === "string") {
           if (options.resourceType === "workspace") {
             if (mongoose.Types.ObjectId.isValid(paramId)) {
-              targetWorkspaceId = paramId;
+              const ws = await Workspace.findById(paramId).select("_id").lean();
+              if (ws) {
+                targetWorkspaceId = ws._id.toString();
+              } else {
+                // Check if paramId happens to be an invitation ID shadowing workspace :id
+                const inv = await Invitation.findById(paramId).select("workspaceId").lean();
+                if (inv && inv.workspaceId) {
+                  targetWorkspaceId = inv.workspaceId.toString();
+                }
+              }
             } else {
               const ws = await Workspace.findOne({ slug: paramId.trim().toLowerCase() }).select("_id").lean();
               if (ws) {
@@ -192,19 +272,19 @@ export const requirePermission = (
               if (form && form.workspaceId) {
                 targetWorkspaceId = form.workspaceId.toString();
               }
-            }
-          } else if (options.resourceType === "response") {
-            const resp = await ResponseModel.findById(paramId).select("formId").lean();
-            if (resp && resp.formId) {
-              const form = await Form.findById(resp.formId).select("workspaceId").lean();
-              if (form && form.workspaceId) {
-                targetWorkspaceId = form.workspaceId.toString();
+            } else if (options.resourceType === "response") {
+              const resp = await ResponseModel.findById(paramId).select("formId").lean();
+              if (resp && resp.formId) {
+                const form = await Form.findById(resp.formId).select("workspaceId").lean();
+                if (form && form.workspaceId) {
+                  targetWorkspaceId = form.workspaceId.toString();
+                }
               }
-            }
-          } else if (options.resourceType === "report") {
-            const report = await Report.findById(paramId).select("workspaceId").lean();
-            if (report && report.workspaceId) {
-              targetWorkspaceId = report.workspaceId.toString();
+            } else if (options.resourceType === "report") {
+              const report = await Report.findById(paramId).select("workspaceId").lean();
+              if (report && report.workspaceId) {
+                targetWorkspaceId = report.workspaceId.toString();
+              }
             }
           }
         }

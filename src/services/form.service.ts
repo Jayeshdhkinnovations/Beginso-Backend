@@ -129,12 +129,15 @@ export class FormService {
     return await this.formRepository.create(workspaceId, formDetails);
   }
 
-  async getFormById(formId: string, workspaceId: string): Promise<IForm> {
+  async getFormById(formId: string, workspaceId: string, isGrant?: boolean): Promise<IForm> {
     const exists = await this.formRepository.findById(formId);
     if (!exists) {
       const err = new Error("Form not found");
       (err as any).statusCode = 404;
       throw err;
+    }
+    if (isGrant) {
+      return exists;
     }
     const form = await this.formRepository.findById(formId, workspaceId);
     if (!form) {
@@ -613,8 +616,8 @@ export class FormService {
     return newResponse;
   }
 
-  async getSubmissions(formId: string, workspaceId: string) {
-    await this.getFormById(formId, workspaceId);
+  async getSubmissions(formId: string, workspaceId: string, isGrant?: boolean) {
+    await this.getFormById(formId, workspaceId, isGrant);
     return await ResponseModel.find({ formId });
   }
 

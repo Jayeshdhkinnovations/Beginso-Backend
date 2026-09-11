@@ -5,6 +5,8 @@ import { createFormSchema, patchFormSchema } from "../validations/form.validator
 import mongoose from "mongoose";
 import Form from "../models/Form";
 import Membership from "../models/Membership";
+import FormAccessGrant from "../models/FormAccessGrant";
+import User from "../models/User";
 import { hasPermission } from "../middleware/permission.middleware";
 import { SystemLog } from "../models/SystemLog";
 import Workspace from "../models/Workspace";
@@ -235,17 +237,22 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
       return;
     }
 
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
-      res.status(403).json({
-        success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
-      });
-      return;
+    const hasGrant = !!authReq.formAccessGrant || !!(await FormAccessGrant.findOne({ formId, userId: authReq.user._id }));
+    let form: any;
+    if (hasGrant) {
+      form = await formService.getFormById(formId as string, "", true);
+    } else {
+      const workspaceId = authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user);
+      if (!workspaceId) {
+        res.status(403).json({
+          success: false,
+          message: "Forbidden: No active workspace found for this user",
+          error: { message: "Forbidden: No active workspace found for this user" }
+        });
+        return;
+      }
+      form = await formService.getFormById(formId as string, workspaceId);
     }
-
-    const form = await formService.getFormById(formId as string, workspaceId);
 
     res.status(200).json({
       _id: form._id,
@@ -631,17 +638,22 @@ export const getSubmissions = async (req: Request, res: Response, next: NextFunc
     }
 
     const { formId } = req.params;
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
-      res.status(403).json({
-        success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
-      });
-      return;
+    const hasGrant = !!authReq.formAccessGrant || !!(await FormAccessGrant.findOne({ formId, userId: authReq.user._id }));
+    let submissions: any;
+    if (hasGrant) {
+      submissions = await formService.getSubmissions(formId as string, "", true);
+    } else {
+      const workspaceId = authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user);
+      if (!workspaceId) {
+        res.status(403).json({
+          success: false,
+          message: "Forbidden: No active workspace found for this user",
+          error: { message: "Forbidden: No active workspace found for this user" }
+        });
+        return;
+      }
+      submissions = await formService.getSubmissions(formId as string, workspaceId);
     }
-
-    const submissions = await formService.getSubmissions(formId as string, workspaceId);
 
     res.status(200).json({
       success: true,
@@ -1281,5 +1293,133 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
     next(error);
   }
 };
+
+export const listFormGrants = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const rawId = req.params.formId || req.params.id;
+    const grants = await FormAccessGrant.find({ formId: rawId })
+      .populate("userId", "fullName email avatarUrl")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = grants.map((g: any) => ({
+      id: g._id.toString(),
+      _id: g._id,
+      formId: g.formId.toString(),
+      userId: g.userId?._id ? g.userId._id.toString() : g.userId?.toString(),
+      user: g.userId
+        ? {
+            id: g.userId._id ? g.userId._id.toString() : "",
+            fullName: g.userId.fullName || "User",
+            email: g.userId.email || "",
+            avatarUrl: g.userId.avatarUrl || null,
+          }
+        : null,
+      role: g.role,
+      createdAt: g.createdAt,
+      updatedAt: g.updatedAt,
+    }));
+
+    res.status(200).json({
+      success: true,
+      grants: formatted,
+      total: formatted.length,
+      data: formatted,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createFormGrant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    const rawId = req.params.formId || req.params.id;
+    const { email, userId, role } = req.body;
+
+    let targetUserId: string | null = userId;
+    if (!targetUserId && email) {
+      const u = await User.findOne({ email: email.toLowerCase().trim() });
+      if (u) {
+        targetUserId = u._id.toString();
+      } else {
+        res.status(404).json({
+          success: false,
+          message: "User with this email does not exist",
+          error: { message: "User with this email does not exist" },
+        });
+        return;
+      }
+    }
+
+    if (!targetUserId) {
+      res.status(400).json({
+        success: false,
+        message: "email or userId is required",
+        error: { message: "email or userId is required" },
+      });
+      return;
+    }
+
+    const assignedRole = role || "reviewer";
+    const validRoles = ["admin", "editor", "member", "reviewer", "viewer"];
+    if (!validRoles.includes(assignedRole)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid role: must be one of ${validRoles.join(", ")}`,
+        error: { message: `Invalid role: must be one of ${validRoles.join(", ")}` },
+      });
+      return;
+    }
+
+    const grant = await FormAccessGrant.findOneAndUpdate(
+      { formId: rawId, userId: targetUserId },
+      {
+        formId: rawId,
+        userId: targetUserId,
+        role: assignedRole,
+        grantedBy: authReq.user._id,
+      },
+      { upsert: true, new: true }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Form access grant saved successfully",
+      grant,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const revokeFormGrant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const rawId = req.params.formId || req.params.id;
+    const rawUser = req.params.userId;
+    const userIdStr = String(Array.isArray(rawUser) ? rawUser[0] : rawUser || "").trim();
+
+    const orConditions: any[] = [];
+    if (mongoose.Types.ObjectId.isValid(userIdStr)) {
+      orConditions.push({ _id: userIdStr });
+      orConditions.push({ userId: userIdStr });
+    }
+
+    if (orConditions.length > 0) {
+      await FormAccessGrant.findOneAndDelete({
+        formId: rawId,
+        $or: orConditions,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Form access grant revoked successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 

@@ -8,6 +8,8 @@ import User from "../models/User";
 import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
+import FormAccessGrant from "../models/FormAccessGrant";
+import Membership from "../models/Membership";
 import { UploadResponse } from "../types/upload";
 
 // ponytail: This implementation utilizes local disk storage for keeping uploaded assets.
@@ -192,8 +194,13 @@ export const getFile = async (
       ]
     });
 
-    const targetPath = uploadDoc ? uploadDoc.path : safeFilename;
-    const filePath = path.resolve(uploadDir, targetPath);
+    let targetPath = uploadDoc ? uploadDoc.path : normalizedPath;
+    let filePath = path.resolve(uploadDir, targetPath);
+
+    if (!fs.existsSync(filePath)) {
+      targetPath = safeFilename;
+      filePath = path.resolve(uploadDir, targetPath);
+    }
 
     // Double check that the resolved path is indeed inside the upload directory
     if (!filePath.startsWith(path.resolve(uploadDir))) {
@@ -291,7 +298,9 @@ export const getFile = async (
 
         let isAuthorized = user.role === "super_admin";
 
-        if (!isAuthorized && uploadDoc && uploadDoc.owner) {
+        const isResponseOrFormFile = !!forwardSlashPath.match(/(?:^|\/)(responses|[0-9a-fA-F]{24})\//);
+
+        if (!isAuthorized && uploadDoc && uploadDoc.owner && !isResponseOrFormFile) {
           const ownerId = uploadDoc.owner.toString();
           if (userId === ownerId) {
             isAuthorized = true;
@@ -318,25 +327,53 @@ export const getFile = async (
           }
         }
 
-        // Additional path-based workspace resolution (extract responseId or formId from URL path)
-        if (!isAuthorized && userWorkspaceId) {
-          const responseIdMatch = forwardSlashPath.match(/\/responses\/([0-9a-fA-F]{24})\//);
+        // Additional path-based resolution and per-form access grant check (BE 0.6 / R3)
+        if (!isAuthorized) {
+          let targetFormId: string | null = null;
+          const responseIdMatch = forwardSlashPath.match(/(?:^|\/)responses\/([0-9a-fA-F]{24})(?:\/|$)/);
           if (responseIdMatch && responseIdMatch[1]) {
             const responseDoc = await ResponseModel.findById(responseIdMatch[1]);
-            if (responseDoc) {
-              const formDoc = await Form.findById(responseDoc.formId);
-              if (formDoc && formDoc.workspaceId && formDoc.workspaceId.toString() === userWorkspaceId) {
-                isAuthorized = true;
+            if (responseDoc && responseDoc.formId) {
+              targetFormId = responseDoc.formId.toString();
+            }
+          }
+
+          if (!targetFormId) {
+            const formIdMatch = forwardSlashPath.match(/(?:^|\/)([0-9a-fA-F]{24})(?:\/|$)/);
+            if (formIdMatch && formIdMatch[1]) {
+              const formDoc = await Form.findById(formIdMatch[1]);
+              if (formDoc) {
+                targetFormId = formDoc._id.toString();
               }
             }
           }
 
-          if (!isAuthorized) {
-            const formIdMatch = forwardSlashPath.match(/\/([0-9a-fA-F]{24})\//);
-            if (formIdMatch && formIdMatch[1]) {
-              const formDoc = await Form.findById(formIdMatch[1]);
-              if (formDoc && formDoc.workspaceId && formDoc.workspaceId.toString() === userWorkspaceId) {
+          if (targetFormId) {
+            const formDoc = await Form.findById(targetFormId);
+            if (formDoc) {
+              // 1. Workspace membership or ownership check
+              if (formDoc.workspaceId) {
+                const isOwner = userWorkspaceId && formDoc.workspaceId.toString() === userWorkspaceId;
+                const membership = await Membership.findOne({
+                  workspaceId: formDoc.workspaceId,
+                  userId: user._id,
+                });
+                if (isOwner || membership) {
+                  isAuthorized = true;
+                }
+              } else if (formDoc.createdBy && formDoc.createdBy.toString() === userId) {
                 isAuthorized = true;
+              }
+
+              // 2. Per-form grant check (works on personal and workspace forms)
+              if (!isAuthorized) {
+                const grant = await FormAccessGrant.findOne({
+                  formId: formDoc._id,
+                  userId: user._id,
+                });
+                if (grant) {
+                  isAuthorized = true;
+                }
               }
             }
           }

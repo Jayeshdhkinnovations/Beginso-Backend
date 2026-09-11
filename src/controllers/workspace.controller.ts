@@ -207,16 +207,33 @@ export const getWorkspace = async (req: Request, res: Response, next: NextFuncti
 
     const memberCount = await Membership.countDocuments({ workspaceId: workspace._id });
     const role = membership?.role || (isOwner ? "owner" : "member");
+    const isOwnerFinal = isOwner || role === "owner";
+
+    const workspaceData = {
+      _id: workspace._id,
+      id: workspace._id.toString(),
+      name: workspace.name,
+      slug: workspace.slug,
+      timezone: workspace.timezone || "UTC",
+      description: workspace.description || "",
+      logo: workspace.logo || null,
+      logoUrl: workspace.logoUrl || null,
+      branding: workspace.branding || {},
+      notificationPreferences: workspace.notificationPreferences || {},
+      owner: workspace.owner,
+      role,
+      isOwner: isOwnerFinal,
+      memberCount: Math.max(memberCount, isOwnerFinal ? 1 : 0),
+      createdAt: workspace.createdAt,
+      updatedAt: workspace.updatedAt,
+    };
 
     res.status(200).json({
       success: true,
-      workspace: {
-        ...workspace,
-        id: workspace._id.toString(),
-        role,
-        isOwner: isOwner || role === "owner",
-        memberCount: Math.max(memberCount, 1),
-      },
+      workspace: workspaceData,
+      data: workspaceData,
+      role,
+      isOwner: isOwnerFinal,
     });
   } catch (error) {
     next(error);

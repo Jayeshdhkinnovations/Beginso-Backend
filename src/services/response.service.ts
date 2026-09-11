@@ -130,12 +130,18 @@ export class ResponseService {
 
   async getResponseStats(
     workspaceId: string,
-    formId?: string
-  ): Promise<{ total: number; new: number; in_progress: number; completed: number }> {
-    if (formId && formId.trim() !== "") {
+    formId?: string,
+    isGrant?: boolean
+  ): Promise<{
+    total: number;
+    new: number;
+    in_progress: number;
+    completed: number;
+  }> {
+    if (formId) {
       if (!mongoose.Types.ObjectId.isValid(formId)) {
-        const err: any = new Error("Form not found");
-        err.statusCode = 404;
+        const err: any = new Error("Invalid formId parameter");
+        err.statusCode = 400;
         throw err;
       }
 
@@ -146,7 +152,7 @@ export class ResponseService {
         throw err;
       }
 
-      if (!form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+      if (!isGrant && (!form.workspaceId || form.workspaceId.toString() !== workspaceId)) {
         const err: any = new Error("Forbidden: You do not own this form's workspace");
         err.statusCode = 403;
         throw err;
@@ -191,7 +197,8 @@ export class ResponseService {
     workspaceId: string,
     responseId: string,
     host: string,
-    protocol: string
+    protocol: string,
+    isGrant?: boolean
   ): Promise<IResponse> {
     const response = await this.responseRepository.findById(responseId);
     if (!response) {
@@ -201,7 +208,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+    if (!isGrant && (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;
@@ -346,7 +353,8 @@ export class ResponseService {
     fileId: string,
     host: string,
     protocol: string,
-    sessionToken?: string
+    sessionToken?: string,
+    isGrant?: boolean
   ): Promise<{ url: string }> {
     const response = await this.responseRepository.findById(responseId);
     if (!response) {
@@ -356,7 +364,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+    if (!isGrant && (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;

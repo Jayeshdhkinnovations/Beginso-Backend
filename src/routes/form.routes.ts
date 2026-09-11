@@ -12,6 +12,9 @@ import {
   publishForm,
   closeForm,
   moveForm,
+  listFormGrants,
+  createFormGrant,
+  revokeFormGrant,
 } from "../controllers/form.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
@@ -29,6 +32,11 @@ router.delete("/:formId", protect as any, blockSuspended as any, requirePermissi
 router.post("/:formId/duplicate", protect as any, blockSuspended as any, requirePermission("forms:create", { resourceType: "form" }) as any, duplicateForm);
 router.post("/:formId/publish", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, publishForm);
 router.post("/:formId/close", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, closeForm);
+
+// Per-form access panel routes (BE 0.6 / C2.7 / CF1.6)
+router.get("/:formId/grants", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, listFormGrants);
+router.post("/:formId/grants", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, createFormGrant);
+router.delete("/:formId/grants/:userId", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, revokeFormGrant);
 
 router.post("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "form" }) as any, submitForm);
 router.get("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getSubmissions);

@@ -17,6 +17,8 @@ import superadminRoutes from "./routes/superadmin.routes";
 import analyticsRoutes from "./routes/analytics.routes";
 import reportRoutes from "./routes/report.routes";
 import notificationRoutes from "./routes/notification.routes";
+import invitationRoutes from "./routes/invitation.routes";
+import sharedWithMeRoutes from "./routes/shared_with_me.routes";
 import { errorHandler } from "./middleware/error.middleware";
 
 // Continuous Deployment Test Comment
@@ -93,6 +95,8 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/templates", templateRoutes);
 app.use("/api/superadmin", superadminRoutes);
+app.use("/api/invitations", invitationRoutes);
+app.use("/api/shared-with-me", sharedWithMeRoutes);
 app.use("/api", healthRoutes);
 
 app.use(errorHandler as any);

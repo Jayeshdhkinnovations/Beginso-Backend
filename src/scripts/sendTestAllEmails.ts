@@ -46,7 +46,7 @@ const sendAllTestEmails = async () => {
     });
 
     // 5. Password Changed Security Alert Template
-    console.log("✉️ Sending 5/5: password_changed_success template...");
+    console.log("✉️ Sending 5/6: password_changed_success template...");
     await mailService.sendMail({
       to: targetEmail,
       template: "password_changed_success",
@@ -54,7 +54,19 @@ const sendAllTestEmails = async () => {
       name: "Jayesh",
     });
 
-    console.log(`\n🎉 ALL 5 EMAIL TEMPLATES SENT SUCCESSFULLY TO ${targetEmail}!`);
+    // 6. Workspace Invitation Template
+    console.log("✉️ Sending 6/6: workspace_invitation template...");
+    await mailService.sendMail({
+      to: targetEmail,
+      template: "workspace_invitation",
+      actionUrl: "https://beginso.com/invite/sample_invite_token_123",
+      name: "Jayesh",
+      workspaceName: "Acme Product Team",
+      inviterName: "Alex Smith",
+      role: "admin",
+    });
+
+    console.log(`\n🎉 ALL 6 EMAIL TEMPLATES SENT SUCCESSFULLY TO ${targetEmail}!`);
   } catch (error) {
     console.error("❌ Error sending test emails:", error);
   }

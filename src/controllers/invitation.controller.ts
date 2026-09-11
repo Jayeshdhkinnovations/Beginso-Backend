@@ -152,12 +152,16 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
 
       // Send email asynchronously
       const inviteUrl = `${appUrl}/invite/${existingInv.token}`;
+      const inviterName = authReq.user?.fullName || authReq.user?.name || "A team member";
       mailService
         .sendMail({
           to: normalizedEmail,
-          template: "welcome_user" as any,
+          template: "workspace_invitation",
           name: normalizedEmail,
           actionUrl: inviteUrl,
+          workspaceName: workspace.name,
+          inviterName,
+          role: assignedRole,
         })
         .catch(() => {});
 
@@ -184,12 +188,16 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
     });
 
     const inviteUrl = `${appUrl}/invite/${token}`;
+    const inviterName = authReq.user?.fullName || authReq.user?.name || "A team member";
     mailService
       .sendMail({
         to: normalizedEmail,
-        template: "welcome_user" as any,
+        template: "workspace_invitation",
         name: normalizedEmail,
         actionUrl: inviteUrl,
+        workspaceName: workspace.name,
+        inviterName,
+        role: assignedRole,
       })
       .catch(() => {});
 
@@ -238,12 +246,23 @@ export const resendInvitation = async (req: Request, res: Response, next: NextFu
     // BE 0.3: Resend does NOT change the existing expiry
     const appUrl = process.env.APP_URL || "https://beginso.com";
     const inviteUrl = `${appUrl}/invite/${invitation.token}`;
+    let workspaceName = "Workspace";
+    if (invitation.workspaceId) {
+      const ws = await Workspace.findById(invitation.workspaceId).select("name").lean();
+      if (ws && (ws as any).name) workspaceName = (ws as any).name;
+    }
+    const authReq = req as any;
+    const inviterName = authReq?.user?.fullName || authReq?.user?.name || "A team member";
+
     mailService
       .sendMail({
         to: invitation.email,
-        template: "welcome_user" as any,
+        template: "workspace_invitation",
         name: invitation.email,
         actionUrl: inviteUrl,
+        workspaceName,
+        inviterName,
+        role: invitation.role,
       })
       .catch(() => {});
 

@@ -8,7 +8,8 @@ export type AuthMailType =
   | "reset_password"
   | "welcome_user"
   | "email_verified_success"
-  | "password_changed_success";
+  | "password_changed_success"
+  | "workspace_invitation";
 
 export interface SendMailOptions {
   to: string;
@@ -18,6 +19,9 @@ export interface SendMailOptions {
   name?: string;
   firebaseUid?: string;
   requestId?: string;
+  workspaceName?: string;
+  inviterName?: string;
+  role?: string;
 }
 
 class MailService {
@@ -52,14 +56,14 @@ class MailService {
     const from = `"${fromName}" <${fromEmail}>`;
     const appUrl = process.env.APP_URL || "https://beginso.com";
 
-    const { to, template, actionUrl, code, name, firebaseUid } = options;
+    const { to, template, actionUrl, code, name, firebaseUid, workspaceName, inviterName, role } = options;
 
     let mappedLogTemplate: "verification" | "password_reset" | "welcome" | null = null;
     if (template === "verify_email" || template === "verify_email_otp") {
       mappedLogTemplate = "verification";
     } else if (template === "reset_password") {
       mappedLogTemplate = "password_reset";
-    } else if (template === "welcome_user") {
+    } else if (template === "welcome_user" || template === "workspace_invitation") {
       mappedLogTemplate = "welcome";
     }
 
@@ -317,6 +321,115 @@ class MailService {
                       <!-- Footer -->
                       <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
                         Need help getting started? Simply reply directly to this email.<br/>
+                        &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+    } else if (template === "workspace_invitation") {
+      const wsName = workspaceName || "our workspace";
+      const inviter = inviterName || "A team member";
+      const rawRole = role || "member";
+      const roleDisplay = rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase();
+      const acceptUrl = actionUrl || `${appUrl}/dashboard`;
+
+      subject = `You've been invited to join ${wsName} on Beginso ✉️`;
+
+      textContent = `You've been invited to join ${wsName} on Beginso!\n\n${inviter} has invited you to collaborate in the ${wsName} workspace as a ${roleDisplay}.\n\nWorkspace: ${wsName}\nYour Role: ${roleDisplay}\nInvited Email: ${to}\n\nAccept your invitation: ${acceptUrl}\n\nThis invitation link expires in 7 days. If you weren't expecting this invitation, you can safely ignore this email.\n\n© ${new Date().getFullYear()} Beginso Inc. All rights reserved.`;
+
+      htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${subject}</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 16px;">
+            <tr>
+              <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);">
+                  <!-- Header Gradient Bar -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%); height: 8px;"></td>
+                  </tr>
+                  
+                  <!-- Main Content Area -->
+                  <tr>
+                    <td style="padding: 40px 36px 36px 36px;">
+                      <!-- Logo -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
+                        <tr>
+                          <td>
+                            <span style="font-size: 26px; font-weight: 800; color: #1E40AF; letter-spacing: -0.8px; display: inline-flex; align-items: center;">
+                              Beginso
+                              <span style="display: inline-block; width: 6px; height: 6px; background-color: #2563EB; border-radius: 50%; margin-left: 4px;"></span>
+                            </span>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Heading -->
+                      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">You've been invited to ${wsName}! ✉️</h1>
+                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0;"><strong>${inviter}</strong> has invited you to collaborate in the <strong>${wsName}</strong> workspace on Beginso as a <strong>${roleDisplay}</strong>.</p>
+
+                      <!-- Invitation Details Box (Same layout as welcome mail) -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
+                        <tr>
+                          <td style="background-color: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 12px; padding: 20px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                              <tr>
+                                <td style="padding-bottom: 12px;">
+                                  <span style="font-size: 13px; color: #6B7280;">🏢 Workspace</span>
+                                  <strong style="font-size: 15px; color: #111827; display: block; margin-top: 2px;">${wsName}</strong>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td style="padding-bottom: 12px;">
+                                  <span style="font-size: 13px; color: #6B7280;">👤 Assigned Role</span>
+                                  <div style="margin-top: 4px;">
+                                    <span style="font-size: 12px; font-weight: 700; color: #1D4ED8; background-color: #DBEAFE; padding: 3px 10px; border-radius: 20px; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px;">${roleDisplay}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td>
+                                  <span style="font-size: 13px; color: #6B7280;">✉️ Invited Email</span>
+                                  <strong style="font-size: 14px; color: #111827; display: block; margin-top: 2px;">${to}</strong>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Primary CTA Button -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                        <tr>
+                          <td align="center">
+                            <a href="${acceptUrl}" target="_blank" style="background-color: #2563EB; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);">Accept Invitation</a>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Backup Link -->
+                      <p style="font-size: 13px; color: #6B7280; line-height: 1.5; margin: 0 0 24px 0; text-align: center;">
+                        Button not working? Copy and paste this URL into your browser:<br/>
+                        <a href="${acceptUrl}" style="color: #2563EB; word-break: break-all; text-decoration: underline;">${acceptUrl}</a>
+                      </p>
+
+                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0;" />
+                      
+                      <!-- Footer -->
+                      <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
+                        This invitation link expires in 7 days. If you weren't expecting this invitation, you can safely ignore this email.<br/>
                         &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
                       </p>
                     </td>

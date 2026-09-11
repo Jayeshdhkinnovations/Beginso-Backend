@@ -206,7 +206,7 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
 // POST /api/invitations/:id/resend
 export const resendInvitation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const rawParam = req.params.invitationId || req.params.id;
+    const rawParam = req.params.invitationId || req.params.token || req.params.id;
     const rawId = String(Array.isArray(rawParam) ? rawParam[0] : rawParam || "").trim();
     let invitation: any = null;
 
@@ -260,7 +260,7 @@ export const resendInvitation = async (req: Request, res: Response, next: NextFu
 // POST /api/invitations/:id/revoke or DELETE /api/invitations/:id
 export const revokeInvitation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const rawParam = req.params.invitationId || req.params.id;
+    const rawParam = req.params.invitationId || req.params.token || req.params.id;
     const rawId = String(Array.isArray(rawParam) ? rawParam[0] : rawParam || "").trim();
     let invitation: any = null;
 

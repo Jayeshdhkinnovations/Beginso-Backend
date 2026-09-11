@@ -54,6 +54,13 @@ router.post(
   requirePermission("team:manage", { resourceType: "workspace" }) as any,
   resendInvitation
 );
+router.post(
+  "/:token/resend",
+  protect as any,
+  blockSuspended as any,
+  requirePermission("team:manage", { resourceType: "workspace" }) as any,
+  resendInvitation
+);
 
 router.post(
   "/:invitationId/revoke",
@@ -69,6 +76,13 @@ router.post(
   requirePermission("team:manage", { resourceType: "workspace" }) as any,
   revokeInvitation
 );
+router.post(
+  "/:token/revoke",
+  protect as any,
+  blockSuspended as any,
+  requirePermission("team:manage", { resourceType: "workspace" }) as any,
+  revokeInvitation
+);
 
 router.delete(
   "/:invitationId",
@@ -79,6 +93,13 @@ router.delete(
 );
 router.delete(
   "/:id",
+  protect as any,
+  blockSuspended as any,
+  requirePermission("team:manage", { resourceType: "workspace" }) as any,
+  revokeInvitation
+);
+router.delete(
+  "/:token",
   protect as any,
   blockSuspended as any,
   requirePermission("team:manage", { resourceType: "workspace" }) as any,

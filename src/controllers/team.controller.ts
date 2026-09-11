@@ -60,13 +60,21 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
       const userObj = m.userId || {};
       const fullName = userObj.fullName || "Team Member";
       const email = userObj.email || "";
+      const uid = userObj._id ? userObj._id.toString() : m.userId?.toString();
+      const isOwner = m.role === "owner" || (workspace.owner && workspace.owner.toString() === uid);
       return {
         id: m._id.toString(),
         _id: m._id,
-        userId: userObj._id ? userObj._id.toString() : m.userId?.toString(),
+        membershipId: m._id.toString(),
+        userId: uid,
         name: fullName,
         fullName: fullName,
         email: email,
+        avatarUrl: userObj.avatarUrl || null,
+        isOwner,
+        role: m.role,
+        joinedAt: m.createdAt,
+        lastActiveAt: m.updatedAt || m.createdAt,
         user: {
           id: userObj._id ? userObj._id.toString() : "",
           fullName: fullName,
@@ -74,8 +82,6 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
           email: email,
           avatarUrl: userObj.avatarUrl || null,
         },
-        role: m.role,
-        joinedAt: m.createdAt,
         notificationPreference: m.notificationPreference,
         timezoneOverride: m.timezoneOverride || null,
         createdAt: m.createdAt,
@@ -91,10 +97,13 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
         membersList.unshift({
           id: `owner-${workspace._id.toString()}`,
           _id: workspace.owner,
+          membershipId: `owner-${workspace._id.toString()}`,
           userId: workspace.owner.toString(),
           name: ownerUser.fullName || "Owner",
           fullName: ownerUser.fullName || "Owner",
           email: ownerUser.email || "",
+          avatarUrl: ownerUser.avatarUrl || null,
+          isOwner: true,
           user: {
             id: workspace.owner.toString(),
             fullName: ownerUser.fullName || "Owner",
@@ -104,6 +113,7 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
           },
           role: "owner",
           joinedAt: workspace.createdAt,
+          lastActiveAt: workspace.updatedAt || workspace.createdAt,
           notificationPreference: "all" as any,
           timezoneOverride: null,
           createdAt: workspace.createdAt,
@@ -201,8 +211,10 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
 
     const memberData = {
       id: membership._id.toString(),
+      membershipId: membership._id.toString(),
       userId: membership.userId.toString(),
       role: membership.role,
+      isOwner: membership.role === "owner",
       notificationPreference: membership.notificationPreference,
       updatedAt: membership.updatedAt,
     };

@@ -251,6 +251,10 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
 
       const first = res.body.members[0];
       expect(first).toHaveProperty("userId");
+      expect(first).toHaveProperty("membershipId");
+      expect(first).toHaveProperty("isOwner");
+      expect(first).toHaveProperty("avatarUrl");
+      expect(first).toHaveProperty("lastActiveAt");
       expect(first).toHaveProperty("name");
       expect(first).toHaveProperty("email");
       expect(first).toHaveProperty("role");
@@ -273,6 +277,24 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
         userId: reviewerUser._id,
       });
       expect(updatedMem?.role).toBe("editor");
+    });
+
+    it("PATCH /api/workspaces/:id/members/:memberId works when keyed by membershipId instead of userId", async () => {
+      const mem = await Membership.findOne({
+        workspaceId: workspace._id,
+        userId: reviewerUser._id,
+      });
+      expect(mem).not.toBeNull();
+
+      const res = await request(app)
+        .patch(`/api/workspaces/${workspace._id}/members/${mem!._id}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ role: "reviewer" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.member.role).toBe("reviewer");
+      expect(res.body.member.membershipId).toBe(mem!._id.toString());
     });
 
     it("PATCH /api/workspaces/:id/members/:userId rejects changing owner role", async () => {
@@ -420,6 +442,32 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
 
       const invInDb = await Invitation.findById(inviteId);
       expect(invInDb?.status).toBe("revoked");
+    });
+
+    it("POST /api/invitations/:token/resend and DELETE /api/invitations/:token work with token directly", async () => {
+      const resCreate = await request(app)
+        .post(`/api/workspaces/${workspace._id}/invitations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ email: "flat-test@example.com", role: "member" });
+
+      const flatToken = resCreate.body.invitation.token;
+
+      // Resend via flat token route
+      const resResend = await request(app)
+        .post(`/api/invitations/${flatToken}/resend`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+      expect(resResend.status).toBe(200);
+      expect(resResend.body.success).toBe(true);
+
+      // Revoke via flat token DELETE route
+      const resRevoke = await request(app)
+        .delete(`/api/invitations/${flatToken}`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+      expect(resRevoke.status).toBe(200);
+      expect(resRevoke.body.success).toBe(true);
+
+      const inDb = await Invitation.findOne({ token: flatToken });
+      expect(inDb?.status).toBe("revoked");
     });
   });
 
@@ -653,6 +701,8 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.grant.userId).toBe(outsiderUser._id.toString());
+      expect(res.body.grant.accessLevel).toBe("read");
+      expect(res.body.grant.role).toBeDefined();
     });
 
     it("Grantee can now read form via GET /api/forms/:id", async () => {

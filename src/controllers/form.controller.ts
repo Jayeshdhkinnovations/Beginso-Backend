@@ -1302,23 +1302,34 @@ export const listFormGrants = async (req: Request, res: Response, next: NextFunc
       .sort({ createdAt: -1 })
       .lean();
 
-    const formatted = grants.map((g: any) => ({
-      id: g._id.toString(),
-      _id: g._id,
-      formId: g.formId.toString(),
-      userId: g.userId?._id ? g.userId._id.toString() : g.userId?.toString(),
-      user: g.userId
-        ? {
-            id: g.userId._id ? g.userId._id.toString() : "",
-            fullName: g.userId.fullName || "User",
-            email: g.userId.email || "",
-            avatarUrl: g.userId.avatarUrl || null,
-          }
-        : null,
-      role: g.role,
-      createdAt: g.createdAt,
-      updatedAt: g.updatedAt,
-    }));
+    const formatted = grants.map((g: any) => {
+      const isWrite =
+        g.role === "admin" ||
+        g.role === "editor" ||
+        g.role === "member" ||
+        g.role === "owner" ||
+        g.role === "write";
+      const accessLevel = isWrite ? "write" : "read";
+      return {
+        id: g._id.toString(),
+        _id: g._id,
+        formId: g.formId.toString(),
+        userId: g.userId?._id ? g.userId._id.toString() : g.userId?.toString(),
+        user: g.userId
+          ? {
+              id: g.userId._id ? g.userId._id.toString() : "",
+              fullName: g.userId.fullName || "User",
+              email: g.userId.email || "",
+              avatarUrl: g.userId.avatarUrl || null,
+            }
+          : null,
+        role: g.role,
+        accessLevel,
+        permission: accessLevel,
+        createdAt: g.createdAt,
+        updatedAt: g.updatedAt,
+      };
+    });
 
     res.status(200).json({
       success: true,
@@ -1335,7 +1346,7 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
   try {
     const authReq = req as any;
     const rawId = req.params.formId || req.params.id;
-    const { email, userId, role } = req.body;
+    const { email, userId, role, accessLevel, permission } = req.body;
 
     let targetUserId: string | null = userId;
     if (!targetUserId && email) {
@@ -1361,13 +1372,17 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
       return;
     }
 
-    const assignedRole = role || "reviewer";
+    // Support both 2-tier (accessLevel: 'read' | 'write') and 4-tier / 6-tier roles
+    let assignedRole = role || accessLevel || permission || "reviewer";
+    if (assignedRole === "write") assignedRole = "member";
+    if (assignedRole === "read") assignedRole = "viewer";
+
     const validRoles = ["admin", "editor", "member", "reviewer", "viewer"];
     if (!validRoles.includes(assignedRole)) {
       res.status(400).json({
         success: false,
-        message: `Invalid role: must be one of ${validRoles.join(", ")}`,
-        error: { message: `Invalid role: must be one of ${validRoles.join(", ")}` },
+        message: `Invalid role: must be one of ${validRoles.join(", ")} or read/write`,
+        error: { message: `Invalid role: must be one of ${validRoles.join(", ")} or read/write` },
       });
       return;
     }
@@ -1380,13 +1395,25 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
         role: assignedRole,
         grantedBy: authReq.user._id,
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after", new: true }
     );
+
+    const grantObj = grant ? (grant.toObject ? grant.toObject() : grant) : {};
+    const isWrite =
+      assignedRole === "admin" ||
+      assignedRole === "editor" ||
+      assignedRole === "member" ||
+      assignedRole === "owner";
+    const resAccessLevel = isWrite ? "write" : "read";
 
     res.status(201).json({
       success: true,
       message: "Form access grant saved successfully",
-      grant,
+      grant: {
+        ...grantObj,
+        accessLevel: resAccessLevel,
+        permission: resAccessLevel,
+      },
     });
   } catch (error) {
     next(error);

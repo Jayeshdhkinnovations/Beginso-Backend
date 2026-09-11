@@ -245,7 +245,14 @@ export const requirePermission = (
 
       // Resource-based workspace resolution
       if (!targetWorkspaceId && options?.resourceType) {
-        const rawParam = req.params.workspaceId || req.params.formId || req.params.responseId || req.params.reportId || req.params.id;
+        const rawParam =
+          req.params.workspaceId ||
+          req.params.formId ||
+          req.params.responseId ||
+          req.params.reportId ||
+          req.params.invitationId ||
+          req.params.id ||
+          req.params.token;
         const paramId = Array.isArray(rawParam) ? rawParam[0] : rawParam;
         if (paramId && typeof paramId === "string") {
           if (options.resourceType === "workspace") {
@@ -264,6 +271,12 @@ export const requirePermission = (
               const ws = await Workspace.findOne({ slug: paramId.trim().toLowerCase() }).select("_id").lean();
               if (ws) {
                 targetWorkspaceId = ws._id.toString();
+              } else {
+                // Check if paramId happens to be an invitation token
+                const inv = await Invitation.findOne({ token: paramId.trim() }).select("workspaceId").lean();
+                if (inv && inv.workspaceId) {
+                  targetWorkspaceId = inv.workspaceId.toString();
+                }
               }
             }
           } else if (mongoose.Types.ObjectId.isValid(paramId)) {

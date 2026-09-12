@@ -298,15 +298,15 @@ export const getFile = async (
 
         let isAuthorized = user.role === "super_admin";
 
-        const isResponseOrFormFile = !!forwardSlashPath.match(/(?:^|\/)(responses|[0-9a-fA-F]{24})\//);
+        const isResponseFile = !!forwardSlashPath.match(/(?:^|\/)responses\//);
 
-        if (!isAuthorized && uploadDoc && uploadDoc.owner && !isResponseOrFormFile) {
+        if (!isAuthorized && uploadDoc && uploadDoc.owner) {
           const ownerId = uploadDoc.owner.toString();
           if (userId === ownerId) {
             isAuthorized = true;
           }
 
-          if (!isAuthorized && userWorkspaceId) {
+          if (!isAuthorized && !isResponseFile && userWorkspaceId) {
             const ownerWs = await Workspace.findOne({ owner: ownerId });
             const ownerWsId = ownerWs ? ownerWs._id.toString() : "";
             if (ownerWsId && userWorkspaceId === ownerWsId) {
@@ -314,7 +314,7 @@ export const getFile = async (
             }
           }
 
-          if (!isAuthorized) {
+          if (!isAuthorized && !isResponseFile) {
             const workspace = await Workspace.findOne({
               $or: [
                 { owner: ownerId, "members.user": userId },

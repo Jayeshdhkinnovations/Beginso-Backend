@@ -22,7 +22,6 @@ const FormAccessGrantSchema = new Schema<IFormAccessGrant>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     role: {
       type: String,

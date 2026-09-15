@@ -738,12 +738,31 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
       expect(shared.title).toBe("Personal Grant Form");
       expect(shared.accessLevel).toBe("read");
       expect(shared.sharedBy).toBeDefined();
+      expect(shared.sharedByName).toBe("Owner User");
+      expect(shared.sharedByEmail).toBe(ownerUser.email);
+      expect(shared.sharedByUser).toBeDefined();
+      expect(shared.sharedByUser.name).toBe("Owner User");
 
       // Check owner sees empty shared-with-me list since no one shared with them
       const ownerRes = await request(app)
         .get("/api/shared-with-me")
         .set("Authorization", `Bearer ${ownerToken}`);
       expect(ownerRes.body.forms.length).toBe(0);
+    });
+
+    it("GET /api/forms/:id/grants returns list of grants with email and user details", async () => {
+      const res = await request(app)
+        .get(`/api/forms/${personalForm._id}/grants`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.grants)).toBe(true);
+      expect(res.body.grants.length).toBe(1);
+      expect(res.body.grants[0].email).toBe(outsiderUser.email);
+      expect(res.body.grants[0].accessLevel).toBe("read");
+      expect(res.body.grants[0].user).toBeDefined();
+      expect(res.body.grants[0].user.email).toBe(outsiderUser.email);
     });
 
     it("File download R3: Grantee can download attachment for Form A responses", async () => {

@@ -1310,16 +1310,22 @@ export const listFormGrants = async (req: Request, res: Response, next: NextFunc
         g.role === "owner" ||
         g.role === "write";
       const accessLevel = isWrite ? "write" : "read";
+      const email = g.userId?.email || "";
+      const fullName = g.userId?.fullName || "User";
       return {
         id: g._id.toString(),
         _id: g._id,
         formId: g.formId.toString(),
         userId: g.userId?._id ? g.userId._id.toString() : g.userId?.toString(),
+        email,
+        name: fullName,
+        fullName,
         user: g.userId
           ? {
               id: g.userId._id ? g.userId._id.toString() : "",
-              fullName: g.userId.fullName || "User",
-              email: g.userId.email || "",
+              fullName,
+              name: fullName,
+              email,
               avatarUrl: g.userId.avatarUrl || null,
             }
           : null,
@@ -1406,11 +1412,27 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
       assignedRole === "owner";
     const resAccessLevel = isWrite ? "write" : "read";
 
+    const targetUser = await User.findById(targetUserId).select("fullName email avatarUrl").lean();
+    const userEmail = targetUser?.email || email || "";
+    const userFullName = targetUser?.fullName || "User";
+
     res.status(201).json({
       success: true,
       message: "Form access grant saved successfully",
       grant: {
         ...grantObj,
+        email: userEmail,
+        name: userFullName,
+        fullName: userFullName,
+        user: targetUser
+          ? {
+              id: targetUser._id.toString(),
+              fullName: userFullName,
+              name: userFullName,
+              email: userEmail,
+              avatarUrl: targetUser.avatarUrl || null,
+            }
+          : null,
         accessLevel: resAccessLevel,
         permission: resAccessLevel,
       },

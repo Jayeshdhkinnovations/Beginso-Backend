@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import FormAccessGrant from "../models/FormAccessGrant";
 import Form from "../models/Form";
 import Workspace from "../models/Workspace";
+import User from "../models/User";
 
 export const getSharedWithMe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -51,12 +52,35 @@ export const getSharedWithMe = async (req: Request, res: Response, next: NextFun
       wsMap.set(ws._id.toString(), ws.name);
     }
 
+    // Collect sharer user IDs (g.grantedBy or form.createdBy)
+    const sharerUserIds = new Set<string>();
+    for (const g of grants) {
+      if (g.grantedBy) {
+        sharerUserIds.add(g.grantedBy.toString());
+      }
+      const form = formMap.get(g.formId.toString());
+      if (form && form.createdBy) {
+        sharerUserIds.add(form.createdBy.toString());
+      }
+    }
+
+    const sharerUsers = await User.find({ _id: { $in: Array.from(sharerUserIds) } })
+      .select("fullName email avatarUrl")
+      .lean();
+    const sharerMap = new Map<string, any>();
+    for (const u of sharerUsers) {
+      sharerMap.set(u._id.toString(), u);
+    }
+
     const result = grants
       .map((g) => {
         const form = formMap.get(g.formId.toString());
         if (!form) return null;
 
         const wsName = form.workspaceId ? wsMap.get(form.workspaceId.toString()) || null : null;
+        const sharerId = (g.grantedBy || form.createdBy)?.toString() || null;
+        const sharer = sharerId ? sharerMap.get(sharerId) : null;
+        const sharerName = sharer?.fullName || sharer?.email || null;
 
         return {
           id: form._id.toString(),
@@ -68,7 +92,18 @@ export const getSharedWithMe = async (req: Request, res: Response, next: NextFun
           role: g.role,
           accessLevel: (g.role === "editor" || g.role === "member" || g.role === "admin") ? "write" : "read",
           permission: (g.role === "editor" || g.role === "member" || g.role === "admin") ? "write" : "read",
-          sharedBy: form.createdBy ? form.createdBy.toString() : null,
+          sharedBy: sharerId,
+          sharedByName: sharerName,
+          sharedByEmail: sharer?.email || null,
+          sharedByUser: sharer
+            ? {
+                id: sharerId,
+                name: sharerName,
+                fullName: sharer?.fullName || null,
+                email: sharer?.email || null,
+                avatarUrl: sharer?.avatarUrl || null,
+              }
+            : null,
           responseCount: form.responseCount || 0,
           workspaceId: form.workspaceId ? form.workspaceId.toString() : null,
           workspaceName: wsName,

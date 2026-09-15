@@ -1,7 +1,6 @@
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { recordMailLog } from "../models/MailLog";
-import { BEGINSO_LOGO_ATTACHMENT } from "../assets/logoAsset";
 
 export type AuthMailType =
   | "verify_email"
@@ -25,7 +24,8 @@ export interface SendMailOptions {
   role?: string;
 }
 
-const BEGINSO_LOGO_IMG = `<img src="cid:beginso_logo" alt="Beginso" width="168" height="46" style="display: block; width: 168px; max-width: 100%; height: auto; border: 0; outline: none; text-decoration: none; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 24px; font-weight: 800; color: #041347;" />`;
+const EMAIL_LOGO_URL = process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-full-light.svg";
+const BEGINSO_LOGO_IMG = `<img src="${EMAIL_LOGO_URL}" alt="Beginso" width="168" height="46" style="display: block; width: 168px; max-width: 100%; height: auto; border: 0; outline: none; text-decoration: none;" />`;
 const BEGINSO_LOGO_SVG = BEGINSO_LOGO_IMG;
 
 
@@ -594,7 +594,6 @@ class MailService {
         subject,
         text: textContent,
         html: htmlContent,
-        attachments: [BEGINSO_LOGO_ATTACHMENT],
       });
       console.log(`✉️ Email sent successfully to ${to} [template: ${template}]`);
 

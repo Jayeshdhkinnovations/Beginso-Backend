@@ -136,7 +136,7 @@ export class FormService {
       (err as any).statusCode = 404;
       throw err;
     }
-    if (isGrant) {
+    if (isGrant || !workspaceId) {
       return exists;
     }
     const form = await this.formRepository.findById(formId, workspaceId);

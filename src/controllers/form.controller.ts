@@ -31,6 +31,48 @@ const getWorkspaceIdFromUser = async (user: any): Promise<string> => {
   return workspace ? workspace._id.toString() : "";
 };
 
+const resolveFormAccess = async (
+  formId: string,
+  user: any,
+  formAccessGrant?: any
+): Promise<{ formDoc: any; workspaceId: string; isAuthorized: boolean }> => {
+  if (!formId || !mongoose.Types.ObjectId.isValid(formId)) {
+    return { formDoc: null, workspaceId: "", isAuthorized: false };
+  }
+  const formDoc = await Form.findById(formId);
+  if (!formDoc) {
+    return { formDoc: null, workspaceId: "", isAuthorized: false };
+  }
+
+  // 1. Super admin platform bypass
+  if (user.role === "super_admin") {
+    return { formDoc, workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : "", isAuthorized: true };
+  }
+
+  // 2. Direct per-form grant
+  if (formAccessGrant || (await FormAccessGrant.findOne({ formId: formDoc._id, userId: user._id }))) {
+    return { formDoc, workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : "", isAuthorized: true };
+  }
+
+  // 3. Personal form or form created by the user
+  if (formDoc.createdBy?.toString() === user._id.toString()) {
+    return { formDoc, workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : "", isAuthorized: true };
+  }
+
+  // 4. Workspace membership / ownership check
+  if (formDoc.workspaceId) {
+    const wsId = formDoc.workspaceId.toString();
+    const membership = await Membership.findOne({ userId: user._id, workspaceId: wsId });
+    const ws = await Workspace.findById(wsId).select("owner");
+    const isOwner = ws?.owner?.toString() === user._id.toString();
+    if (membership || isOwner) {
+      return { formDoc, workspaceId: wsId, isAuthorized: true };
+    }
+  }
+
+  return { formDoc, workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : "", isAuthorized: false };
+};
+
 export const createForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
@@ -237,22 +279,31 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
       return;
     }
 
-    const hasGrant = !!authReq.formAccessGrant || !!(await FormAccessGrant.findOne({ formId, userId: authReq.user._id }));
-    let form: any;
-    if (hasGrant) {
-      form = await formService.getFormById(formId as string, "", true);
-    } else {
-      const workspaceId = authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user);
-      if (!workspaceId) {
-        res.status(403).json({
-          success: false,
-          message: "Forbidden: No active workspace found for this user",
-          error: { message: "Forbidden: No active workspace found for this user" }
-        });
-        return;
-      }
-      form = await formService.getFormById(formId as string, workspaceId);
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
     }
+
+    if (!isAuthorized) {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: You do not have permission to access this form",
+        error: { message: "Forbidden: You do not have permission to access this form" }
+      });
+      return;
+    }
+
+    const form = await formService.getFormById(formId as string, workspaceId, !workspaceId || !!authReq.formAccessGrant);
 
     res.status(200).json({
       _id: form._id,
@@ -358,12 +409,26 @@ export const updateForm = async (req: Request, res: Response, next: NextFunction
     }
 
     const formId = req.params.formId || req.params.id;
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
+    }
+
+    if (!isAuthorized) {
       res.status(403).json({
         success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
+        message: "Forbidden: You do not have permission to update this form",
+        error: { message: "Forbidden: You do not have permission to update this form" }
       });
       return;
     }
@@ -418,12 +483,26 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
     }
 
     const formId = req.params.formId || req.params.id;
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
+    }
+
+    if (!isAuthorized) {
       res.status(403).json({
         success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
+        message: "Forbidden: You do not have permission to update this form",
+        error: { message: "Forbidden: You do not have permission to update this form" }
       });
       return;
     }
@@ -493,12 +572,26 @@ export const publishForm = async (req: Request, res: Response, next: NextFunctio
     }
 
     const formId = req.params.formId || req.params.id;
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
+    }
+
+    if (!isAuthorized) {
       res.status(403).json({
         success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
+        message: "Forbidden: You do not have permission to publish this form",
+        error: { message: "Forbidden: You do not have permission to publish this form" }
       });
       return;
     }
@@ -540,12 +633,26 @@ export const closeForm = async (req: Request, res: Response, next: NextFunction)
     }
 
     const formId = req.params.formId || req.params.id;
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
+    }
+
+    if (!isAuthorized) {
       res.status(403).json({
         success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
+        message: "Forbidden: You do not have permission to close this form",
+        error: { message: "Forbidden: You do not have permission to close this form" }
       });
       return;
     }
@@ -584,12 +691,26 @@ export const deleteForm = async (req: Request, res: Response, next: NextFunction
     }
 
     const formId = req.params.formId || req.params.id;
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
+    }
+
+    if (!isAuthorized) {
       res.status(403).json({
         success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
+        message: "Forbidden: You do not have permission to delete this form",
+        error: { message: "Forbidden: You do not have permission to delete this form" }
       });
       return;
     }
@@ -641,22 +762,31 @@ export const getSubmissions = async (req: Request, res: Response, next: NextFunc
     }
 
     const { formId } = req.params;
-    const hasGrant = !!authReq.formAccessGrant || !!(await FormAccessGrant.findOne({ formId, userId: authReq.user._id }));
-    let submissions: any;
-    if (hasGrant) {
-      submissions = await formService.getSubmissions(formId as string, "", true);
-    } else {
-      const workspaceId = authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user);
-      if (!workspaceId) {
-        res.status(403).json({
-          success: false,
-          message: "Forbidden: No active workspace found for this user",
-          error: { message: "Forbidden: No active workspace found for this user" }
-        });
-        return;
-      }
-      submissions = await formService.getSubmissions(formId as string, workspaceId);
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
     }
+
+    if (!isAuthorized) {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: You do not have permission to view submissions for this form",
+        error: { message: "Forbidden: You do not have permission to view submissions for this form" }
+      });
+      return;
+    }
+
+    const submissions = await formService.getSubmissions(formId as string, workspaceId, !workspaceId || !!authReq.formAccessGrant);
 
     res.status(200).json({
       success: true,
@@ -689,12 +819,26 @@ export const duplicateForm = async (req: Request, res: Response, next: NextFunct
     }
 
     const formId = req.params.formId || req.params.id;
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
+    }
+
+    if (!isAuthorized) {
       res.status(403).json({
         success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
+        message: "Forbidden: You do not have permission to duplicate this form",
+        error: { message: "Forbidden: You do not have permission to duplicate this form" }
       });
       return;
     }

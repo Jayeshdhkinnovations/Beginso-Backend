@@ -203,6 +203,7 @@ export const session = async (
         firebaseUid,
         fullName: name || decodedToken.name || "New User",
         email: email,
+        avatarUrl: decodedToken.picture || null,
         role: "admin",
         theme: "system",
       });
@@ -216,6 +217,23 @@ export const session = async (
           name: user.fullName,
           actionUrl: `${appUrl}/dashboard`,
         }).catch((e) => console.error("Failed to send welcome email:", e));
+      }
+    } else {
+      let needsSave = false;
+      if (user.firebaseUid !== firebaseUid) {
+        user.firebaseUid = firebaseUid;
+        needsSave = true;
+      }
+      if (!user.avatarUrl && decodedToken.picture) {
+        user.avatarUrl = decodedToken.picture;
+        needsSave = true;
+      }
+      if ((!user.fullName || user.fullName === "New User") && (name || decodedToken.name)) {
+        user.fullName = name || decodedToken.name;
+        needsSave = true;
+      }
+      if (needsSave) {
+        await user.save();
       }
     }
 

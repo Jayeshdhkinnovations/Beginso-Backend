@@ -303,10 +303,13 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
     const workspaceId = await getWorkspaceIdFromUser(authReq.user);
 
     if (!workspaceId) {
-      res.status(403).json({
-        success: false,
-        message: "Forbidden: No active workspace found for this user",
-        error: { message: "Forbidden: No active workspace found for this user" }
+      res.status(200).json({
+        success: true,
+        forms: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+        pages: 0,
       });
       return;
     }

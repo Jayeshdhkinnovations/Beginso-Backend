@@ -124,7 +124,14 @@ export const getReports = async (req: Request, res: Response, next: NextFunction
   try {
     const userWorkspaceId = await getWorkspaceId(req);
     if (!userWorkspaceId) {
-      res.status(403).json({ success: false, message: "Workspace not found or access denied" });
+      res.status(200).json({
+        success: true,
+        reports: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+        totalPages: 0,
+      });
       return;
     }
 

@@ -40,10 +40,13 @@ export const getResponses = async (
 
     const workspaceId = await getWorkspaceIdFromUser(authReq.user);
     if (!workspaceId) {
-      res.status(400).json({
-        success: false,
-        message: "User is not associated with any workspace",
-        error: { message: "User is not associated with any workspace" },
+      res.status(200).json({
+        success: true,
+        responses: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+        totalPages: 0,
       });
       return;
     }
@@ -102,10 +105,12 @@ export const getResponseStats = async (
       }
     }
     if (!workspaceId && !isGrant) {
-      res.status(400).json({
-        success: false,
-        message: "User is not associated with any workspace",
-        error: { message: "User is not associated with any workspace" },
+      res.status(200).json({
+        success: true,
+        total: 0,
+        new: 0,
+        in_progress: 0,
+        completed: 0,
       });
       return;
     }

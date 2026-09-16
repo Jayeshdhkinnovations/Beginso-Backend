@@ -215,6 +215,30 @@ export const requirePermission = (
         }
       }
 
+      // Explicit personal-space signal: "personal"/"null"/"none" in the x-workspace-id or
+      // x-workspace-slug header, or the workspaceId query param, means the caller is
+      // deliberately viewing their personal (workspaceId: null) context and must NOT fall
+      // back to their default workspace below — otherwise a member of any workspace could
+      // never actually see/create in their personal space, and personal forms silently
+      // resolve into the wrong context on list/stat endpoints.
+      const isPersonalSignal = (val: unknown): boolean => {
+        const raw = Array.isArray(val) ? val[0] : val;
+        return typeof raw === "string" && ["personal", "null", "none"].includes(raw.trim().toLowerCase());
+      };
+      if (
+        isPersonalSignal(req.headers["x-workspace-id"]) ||
+        isPersonalSignal(req.headers["x-workspace-slug"]) ||
+        isPersonalSignal(req.query.workspaceId)
+      ) {
+        authReq.workspaceId = null;
+        authReq.explicitPersonalContext = true;
+        authReq.membership = null;
+        authReq.membershipId = null;
+        authReq.workspaceRole = null;
+        next();
+        return;
+      }
+
       // 1. Resolve target workspace ID
       let targetWorkspaceId: string | null = null;
 

@@ -11,15 +11,20 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // 1. Get workspace associated with the user
-    let workspaceId = authReq.user.workspaceId;
-    if (workspaceId && typeof workspaceId === "object" && workspaceId._id) {
-      workspaceId = workspaceId._id.toString();
+    // 1. Get workspace context. authReq.workspaceId (resolved by requirePermission from the
+    // x-workspace-id/x-workspace-slug header, or explicitly null for a personal-context
+    // request) takes priority over the user's legacy default workspace field, so that
+    // switching context in the frontend actually changes which forms these stats cover.
+    let workspaceId: string | null = authReq.explicitPersonalContext
+      ? null
+      : authReq.workspaceId || authReq.user.workspaceId;
+    if (workspaceId && typeof workspaceId === "object" && (workspaceId as any)._id) {
+      workspaceId = (workspaceId as any)._id.toString();
     } else if (workspaceId) {
       workspaceId = workspaceId.toString();
     }
 
-    if (!workspaceId) {
+    if (!workspaceId && !authReq.explicitPersonalContext) {
       const workspace = await Workspace.findOne({ owner: authReq.user._id });
       if (workspace) {
         workspaceId = workspace._id.toString();

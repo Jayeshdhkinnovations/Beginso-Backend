@@ -351,7 +351,9 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    const workspaceId = authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user);
+    const workspaceId = authReq.explicitPersonalContext
+      ? ""
+      : (authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user));
 
     // Extract query parameters for search, status, and pagination
     const search = req.query.search as string | undefined;

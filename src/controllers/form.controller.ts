@@ -351,19 +351,7 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-
-    if (!workspaceId) {
-      res.status(200).json({
-        success: true,
-        forms: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        pages: 0,
-      });
-      return;
-    }
+    const workspaceId = authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user);
 
     // Extract query parameters for search, status, and pagination
     const search = req.query.search as string | undefined;
@@ -371,11 +359,13 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
     const page = req.query.page ? Number(req.query.page) : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
 
-    const result = await formService.listForms(workspaceId, {
+    const result = await formService.listForms(workspaceId || "", {
       search,
       status,
       page,
       limit,
+      // C1.6: no active workspace -> list the caller's personal (workspaceId: null) forms instead of nothing
+      personalUserId: workspaceId ? undefined : authReq.user._id.toString(),
     });
 
     res.status(200).json({

@@ -155,13 +155,18 @@ export class FormService {
       status?: string;
       page?: number;
       limit?: number;
+      personalUserId?: string;
     }
   ) {
     const page = Number(options.page) || 1;
     const limit = Number(options.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const query: any = { workspaceId };
+    const query: any = workspaceId
+      ? { workspaceId }
+      : options.personalUserId
+      ? { workspaceId: null, createdBy: options.personalUserId }
+      : { workspaceId };
 
     if (options.status) {
       query.status = options.status;

@@ -26,32 +26,11 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
       }
     }
 
-    if (!workspaceId) {
-      res.status(200).json({
-        success: true,
-        analytics: {
-          totalForms: 0,
-          publishedForms: 0,
-          totalResponses: 0,
-          responsesThisMonth: 0,
-          recentActivity: [],
-          formsBreakdown: [],
-        },
-        data: {
-          totalForms: 0,
-          publishedForms: 0,
-          totalResponses: 0,
-          responsesThisMonth: 0,
-          recentActivity: [],
-        },
-      });
-      return;
-    }
-
-    const workspaceIdStr = workspaceId.toString();
-
-    // 2. Find all forms in the workspace
-    const forms = await Form.find({ workspaceId: workspaceIdStr });
+    // 2. Find all forms in the workspace, or the caller's personal (workspaceId: null) forms
+    // if they have no active workspace (C1.6 lazy-workspace model).
+    const forms = workspaceId
+      ? await Form.find({ workspaceId: workspaceId.toString() })
+      : await Form.find({ workspaceId: null, createdBy: authReq.user._id });
     const formIds = forms.map((f) => f._id);
     const formMap = new Map(forms.map((f) => [f._id.toString(), f.title]));
 

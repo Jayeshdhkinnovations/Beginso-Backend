@@ -92,7 +92,15 @@ export const getSharedWithMe = async (req: Request, res: Response, next: NextFun
           role: g.role,
           accessLevel: (g.role === "editor" || g.role === "member" || g.role === "admin") ? "write" : "read",
           permission: (g.role === "editor" || g.role === "member" || g.role === "admin") ? "write" : "read",
-          sharedBy: sharerId,
+          sharedBy: sharer
+            ? {
+                id: sharerId,
+                name: sharerName || "Unknown",
+                fullName: sharer?.fullName || null,
+                email: sharer?.email || null,
+                avatarUrl: sharer?.avatarUrl || null,
+              }
+            : sharerId,
           sharedByName: sharerName,
           sharedByEmail: sharer?.email || null,
           sharedByUser: sharer

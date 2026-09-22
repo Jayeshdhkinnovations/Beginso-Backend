@@ -353,7 +353,15 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
-    const workspaceId = authReq.explicitPersonalContext
+    const qWsId = String(req.query.workspaceId || "").toLowerCase().trim();
+    const isExplicitPersonal =
+      authReq.explicitPersonalContext ||
+      qWsId === "personal" ||
+      qWsId === "null" ||
+      qWsId === "none" ||
+      qWsId === "personal-only";
+
+    const workspaceId = isExplicitPersonal
       ? ""
       : (authReq.workspaceId || await getWorkspaceIdFromUser(authReq.user));
 
@@ -368,8 +376,8 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
       status,
       page,
       limit,
-      // C1.6: no active workspace -> list the caller's personal (workspaceId: null) forms instead of nothing
-      personalUserId: workspaceId ? undefined : authReq.user._id.toString(),
+      // C1.6: no active workspace or explicit personal context -> list caller's personal forms
+      personalUserId: (isExplicitPersonal || !workspaceId) ? authReq.user._id.toString() : undefined,
     });
 
     res.status(200).json({

@@ -1,6 +1,18 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import { Event } from "../models/Event";
+import Workspace from "../models/Workspace";
 import { Logger } from "../utils/logger";
+
+async function resolveWorkspaceObjectId(rawId: string): Promise<string | null> {
+  if (!rawId) return null;
+  const str = String(rawId).trim();
+  if (mongoose.Types.ObjectId.isValid(str)) {
+    return str;
+  }
+  const ws = await Workspace.findOne({ slug: str }).select("_id").lean();
+  return ws ? ws._id.toString() : null;
+}
 
 function mapEventItem(event: any) {
   return {
@@ -24,9 +36,14 @@ function mapEventItem(event: any) {
 export const listWorkspaceActivity = async (req: Request, res: Response) => {
   try {
     const authReq = req as any;
-    const workspaceId = req.params.id || req.params.workspaceId || authReq.workspaceId;
-    if (!workspaceId) {
+    const rawWsId = req.params.id || req.params.workspaceId || authReq.workspaceId;
+    if (!rawWsId) {
       return res.status(400).json({ success: false, message: "Workspace ID is required" });
+    }
+
+    const workspaceId = await resolveWorkspaceObjectId(rawWsId);
+    if (!workspaceId) {
+      return res.status(404).json({ success: false, message: "Workspace not found" });
     }
 
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
@@ -56,9 +73,14 @@ export const listWorkspaceActivity = async (req: Request, res: Response) => {
 export const listWorkspaceAudit = async (req: Request, res: Response) => {
   try {
     const authReq = req as any;
-    const workspaceId = req.params.id || req.params.workspaceId || authReq.workspaceId;
-    if (!workspaceId) {
+    const rawWsId = req.params.id || req.params.workspaceId || authReq.workspaceId;
+    if (!rawWsId) {
       return res.status(400).json({ success: false, message: "Workspace ID is required" });
+    }
+
+    const workspaceId = await resolveWorkspaceObjectId(rawWsId);
+    if (!workspaceId) {
+      return res.status(404).json({ success: false, message: "Workspace not found" });
     }
 
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);

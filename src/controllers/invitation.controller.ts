@@ -35,7 +35,17 @@ export const listInvitations = async (req: Request, res: Response, next: NextFun
       return;
     }
 
-    const invitations = await Invitation.find({ workspaceId: workspace._id })
+    const statusFilter = req.query.status as string | undefined;
+    const filterQuery: any = { workspaceId: workspace._id };
+    if (statusFilter && statusFilter !== "all") {
+      if (statusFilter === "actionable" || statusFilter === "pending_only") {
+        filterQuery.status = "pending";
+      } else {
+        filterQuery.status = statusFilter;
+      }
+    }
+
+    const invitations = await Invitation.find(filterQuery)
       .populate("invitedBy", "fullName email")
       .sort({ createdAt: -1 })
       .lean();

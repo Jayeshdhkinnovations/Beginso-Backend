@@ -165,7 +165,7 @@ export class FormService {
     const query: any = workspaceId
       ? { workspaceId }
       : options.personalUserId
-      ? { workspaceId: null, createdBy: options.personalUserId }
+      ? { createdBy: options.personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] }
       : { workspaceId };
 
     if (options.status) {

@@ -19,10 +19,13 @@ import {
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
+import { listFormEvents } from "../controllers/event.controller";
+
 const router = Router();
 
 router.post("/", protect as any, blockSuspended as any, requirePermission("forms:create") as any, createForm);
 router.get("/", protect as any, blockSuspended as any, requirePermission("forms:read") as any, listForms);
+router.get("/:formId/events", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, listFormEvents);
 router.get("/:formId", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, getForm);
 router.put("/:formId", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, updateForm);
 router.patch("/:formId", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, patchForm);

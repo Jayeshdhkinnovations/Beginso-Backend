@@ -16,6 +16,7 @@ import path from "path";
 import fs from "fs";
 import { getUploadDir } from "./upload.controller";
 import { getRealClientIp, hashIp } from "../utils/ip";
+import { logWorkspaceEvent } from "../services/event.service";
 
 const formService = new FormService();
 

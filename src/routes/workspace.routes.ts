@@ -14,6 +14,8 @@ import { requirePermission } from "../middleware/permission.middleware";
 import teamRoutes from "./team.routes";
 import invitationRoutes from "./invitation.routes";
 
+import { listWorkspaceActivity, listWorkspaceAudit } from "../controllers/event.controller";
+
 const router = Router();
 
 // Sub-routes for workspace members and invitations
@@ -21,6 +23,12 @@ router.use("/:id/members", teamRoutes);
 router.use("/:workspaceId/members", teamRoutes);
 router.use("/:id/invitations", invitationRoutes);
 router.use("/:workspaceId/invitations", invitationRoutes);
+
+// Activity Feed & Audit Log routes (BE 0.3 / BE 0.4)
+router.get("/:id/events", protect as any, blockSuspended as any, requirePermission("workspace:read", { resourceType: "workspace" }) as any, listWorkspaceActivity);
+router.get("/:workspaceId/events", protect as any, blockSuspended as any, requirePermission("workspace:read", { resourceType: "workspace" }) as any, listWorkspaceActivity);
+router.get("/:id/audit", protect as any, blockSuspended as any, requirePermission("workspace:audit", { resourceType: "workspace" }) as any, listWorkspaceAudit);
+router.get("/:workspaceId/audit", protect as any, blockSuspended as any, requirePermission("workspace:audit", { resourceType: "workspace" }) as any, listWorkspaceAudit);
 
 router.get("/current", protect as any, blockSuspended as any, requirePermission("workspace:read") as any, getCurrentWorkspace);
 router.patch("/current", protect as any, blockSuspended as any, requirePermission("workspace:settings") as any, patchCurrentWorkspace);

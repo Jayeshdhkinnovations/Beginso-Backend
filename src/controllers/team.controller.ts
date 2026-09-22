@@ -4,6 +4,7 @@ import Membership from "../models/Membership";
 import Workspace from "../models/Workspace";
 import User from "../models/User";
 import SessionModel from "../models/Session";
+import { logWorkspaceEvent } from "../services/event.service";
 
 // Helper to resolve workspace from param (ObjectId or slug)
 const resolveWorkspace = async (paramId: any) => {
@@ -209,6 +210,20 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
       { $set: { revokedAt: new Date() } }
     );
 
+    const authReq = req as any;
+    if (authReq.user) {
+      const targetUserDoc = await User.findById(membership.userId).select("email fullName").lean();
+      logWorkspaceEvent({
+        workspaceId: workspace._id,
+        actor: { id: authReq.user._id, email: authReq.user.email, name: authReq.user.fullName || authReq.user.name },
+        action: "member.role_change",
+        targetId: membership.userId.toString(),
+        targetType: "member",
+        targetLabel: targetUserDoc?.email || membership.userId.toString(),
+        metadata: { newRole: role }
+      });
+    }
+
     const memberData = {
       id: membership._id.toString(),
       membershipId: membership._id.toString(),
@@ -299,6 +314,19 @@ export const removeMember = async (req: Request, res: Response, next: NextFuncti
       },
       { $set: { revokedAt: new Date() } }
     );
+
+    const authReq = req as any;
+    if (authReq.user) {
+      const targetUserDoc = await User.findById(membership.userId).select("email fullName").lean();
+      logWorkspaceEvent({
+        workspaceId: workspace._id,
+        actor: { id: authReq.user._id, email: authReq.user.email, name: authReq.user.fullName || authReq.user.name },
+        action: "member.remove",
+        targetId: membership.userId.toString(),
+        targetType: "member",
+        targetLabel: targetUserDoc?.email || membership.userId.toString()
+      });
+    }
 
     res.status(200).json({
       success: true,

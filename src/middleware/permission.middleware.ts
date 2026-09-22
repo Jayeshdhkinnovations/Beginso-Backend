@@ -21,6 +21,7 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "workspace:read",
     "workspace:settings",
     "workspace:export",
+    "workspace:audit",
     "forms:read",
     "forms:create",
     "forms:write",

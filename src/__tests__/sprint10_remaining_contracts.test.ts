@@ -296,4 +296,46 @@ describe("Sprint 10 — Remaining Backend Contracts (BE 0.6–BE 0.11)", () => {
       expect(typeof res).toBe("boolean");
     });
   });
+
+  describe("Dashboard Analytics Personal Scoping Leak Fix", () => {
+    it("strictly scopes GET /api/dashboard/analytics?workspaceId=personal to personal forms without leaking workspace forms", async () => {
+      const ws = await Workspace.create({
+        name: "Member Workspace",
+        slug: "ws-member-dash",
+        owner: userB._id,
+      });
+      await Membership.create({
+        userId: userA._id,
+        workspaceId: ws._id,
+        role: "member",
+      });
+      userA.workspaceId = ws._id;
+      await userA.save();
+
+      // Create workspace form
+      await Form.create({
+        title: "Workspace Form",
+        workspaceId: ws._id,
+        createdBy: userB._id,
+        fields: [],
+      });
+
+      // Create personal form for User A
+      await Form.create({
+        title: "User A Personal Form",
+        workspaceId: null,
+        createdBy: userA._id,
+        fields: [],
+      });
+
+      const res = await request(app)
+        .get("/api/dashboard/analytics?workspaceId=personal")
+        .set("Authorization", `Bearer ${tokenA}`);
+
+      expect(res.status).toBe(200);
+      const data = res.body.data || res.body.analytics;
+      expect(data.totalForms).toBe(1); // Only 1 personal form, not 2!
+      expect(data.formsBreakdown[0].title).toBe("User A Personal Form");
+    });
+  });
 });

@@ -15,27 +15,40 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
     // x-workspace-id/x-workspace-slug header, or explicitly null for a personal-context
     // request) takes priority over the user's legacy default workspace field, so that
     // switching context in the frontend actually changes which forms these stats cover.
-    let workspaceId: string | null = authReq.explicitPersonalContext
+    const qWsId = String(req.query.workspaceId || req.headers["x-workspace-id"] || req.headers["x-workspace-slug"] || "").toLowerCase().trim();
+    const isExplicitPersonal =
+      authReq.explicitPersonalContext ||
+      qWsId === "personal" ||
+      qWsId === "null" ||
+      qWsId === "none" ||
+      qWsId === "personal-only";
+
+    let workspaceId: string | null = isExplicitPersonal
       ? null
-      : authReq.workspaceId || authReq.user.workspaceId;
+      : (authReq.workspaceId || null);
+
     if (workspaceId && typeof workspaceId === "object" && (workspaceId as any)._id) {
       workspaceId = (workspaceId as any)._id.toString();
     } else if (workspaceId) {
       workspaceId = workspaceId.toString();
     }
 
-    if (!workspaceId && !authReq.explicitPersonalContext) {
+    if (!workspaceId && !isExplicitPersonal) {
       const workspace = await Workspace.findOne({ owner: authReq.user._id });
       if (workspace) {
         workspaceId = workspace._id.toString();
+      } else if (authReq.user.workspaceId) {
+        workspaceId = authReq.user.workspaceId._id ? authReq.user.workspaceId._id.toString() : authReq.user.workspaceId.toString();
       }
     }
 
-    // 2. Find all forms in the workspace, or the caller's personal (workspaceId: null) forms
-    // if they have no active workspace (C1.6 lazy-workspace model).
-    const forms = workspaceId
-      ? await Form.find({ workspaceId: workspaceId.toString() })
-      : await Form.find({ workspaceId: null, createdBy: authReq.user._id });
+    // 2. Find all forms in the workspace, or caller's personal (workspaceId: null) forms if in personal context
+    const forms = (isExplicitPersonal || !workspaceId)
+      ? await Form.find({
+          createdBy: authReq.user._id,
+          $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }],
+        })
+      : await Form.find({ workspaceId: workspaceId.toString() });
     const formIds = forms.map((f) => f._id);
     const formMap = new Map(forms.map((f) => [f._id.toString(), f.title]));
 

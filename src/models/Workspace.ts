@@ -18,6 +18,7 @@ export interface IWorkspace extends Document {
   notificationPreferences?: INotificationPreferences;
   owner: mongoose.Types.ObjectId;
   status: "active" | "suspended" | "deleted";
+  metadata?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,6 +93,10 @@ const WorkspaceSchema = new Schema<IWorkspace>(
     status: {
       type: String,
       default: "active",
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {},
     },
   },
   {

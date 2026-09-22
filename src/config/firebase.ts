@@ -38,3 +38,13 @@ if (!getApps().length) {
 }
 
 export const auth = getAuth();
+
+export const revokeFirebaseUserTokens = async (uid: string): Promise<boolean> => {
+  try {
+    await auth.revokeRefreshTokens(uid);
+    return true;
+  } catch (err) {
+    console.error(`Failed to revoke Firebase tokens for ${uid}:`, err);
+    return false;
+  }
+};

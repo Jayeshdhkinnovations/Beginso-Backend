@@ -85,6 +85,7 @@ export interface IForm extends Document {
   slug?: string;
   publishedSlug?: string;
   publishedAt?: Date;
+  viewsCount?: number;
   branding?: IBranding;
   settings?: IFormSettings;
   createdAt: Date;
@@ -220,6 +221,7 @@ const FormSchema = new Schema<IForm>(
     slug: { type: String, unique: true, sparse: true, index: true },
     publishedSlug: { type: String, unique: true, sparse: true, index: true },
     publishedAt: { type: Date },
+    viewsCount: { type: Number, default: 0 },
     branding: { type: BrandingSchema, default: {} },
     settings: { type: FormSettingsSchema, default: {} },
   },

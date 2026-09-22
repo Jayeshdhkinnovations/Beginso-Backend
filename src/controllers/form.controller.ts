@@ -7,6 +7,7 @@ import Form from "../models/Form";
 import Membership from "../models/Membership";
 import FormAccessGrant from "../models/FormAccessGrant";
 import User from "../models/User";
+import ResponseModel from "../models/Response";
 import { hasPermission } from "../middleware/permission.middleware";
 import { SystemLog } from "../models/SystemLog";
 import Workspace from "../models/Workspace";
@@ -1609,6 +1610,79 @@ export const revokeFormGrant = async (req: Request, res: Response, next: NextFun
     next(error);
   }
 };
+
+export const getFormOverview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    const formId = req.params.formId || req.params.id;
+
+    if (!authReq.user) {
+      res.status(401).json({
+        success: false,
+        message: "Not authorized",
+        error: { message: "Not authorized" }
+      });
+      return;
+    }
+
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+      formId as string,
+      authReq.user,
+      authReq.formAccessGrant
+    );
+
+    if (!formDoc) {
+      res.status(404).json({
+        success: false,
+        message: "Form not found",
+        error: { message: "Form not found" }
+      });
+      return;
+    }
+
+    if (!isAuthorized) {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: You do not have permission to access this form overview",
+        error: { message: "Forbidden: You do not have permission to access this form overview" }
+      });
+      return;
+    }
+
+    const totalResponses = await ResponseModel.countDocuments({ formId: formDoc._id });
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const responseCountThisWeek = await ResponseModel.countDocuments({
+      formId: formDoc._id,
+      submittedAt: { $gte: oneWeekAgo }
+    });
+
+    // completionRate is nullable (null when view tracking isn't live yet, not a fabricated number)
+    const views = (formDoc as any).viewsCount || (formDoc as any).views || null;
+    const completionRate =
+      views && typeof views === "number" && views > 0
+        ? Number(((totalResponses / views) * 100).toFixed(2))
+        : null;
+
+    res.status(200).json({
+      success: true,
+      overview: {
+        formId: formDoc._id.toString(),
+        title: formDoc.title,
+        description: formDoc.description,
+        status: formDoc.status,
+        workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : null,
+        responseCount: totalResponses,
+        responseCountThisWeek: responseCountThisWeek,
+        completionRate: completionRate,
+        createdAt: formDoc.createdAt,
+        updatedAt: formDoc.updatedAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 

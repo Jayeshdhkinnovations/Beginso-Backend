@@ -15,6 +15,7 @@ import {
   listFormGrants,
   createFormGrant,
   revokeFormGrant,
+  getFormOverview,
 } from "../controllers/form.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
@@ -25,6 +26,7 @@ const router = Router();
 
 router.post("/", protect as any, blockSuspended as any, requirePermission("forms:create") as any, createForm);
 router.get("/", protect as any, blockSuspended as any, requirePermission("forms:read") as any, listForms);
+router.get("/:formId/overview", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, getFormOverview);
 router.get("/:formId/events", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, listFormEvents);
 router.get("/:formId", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, getForm);
 router.put("/:formId", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, updateForm);

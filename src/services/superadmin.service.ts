@@ -6,7 +6,7 @@ import Upload from "../models/Upload";
 import { SystemLog } from "../models/SystemLog";
 import { AuditLog } from "../models/AuditLog";
 import { MailLog } from "../models/MailLog";
-import { auth } from "../config/firebase";
+import { auth, revokeFirebaseUserTokens } from "../config/firebase";
 import fs from "fs";
 import path from "path";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
@@ -558,6 +558,9 @@ export class SuperAdminService {
     }
     if (data.status) {
       admin.status = data.status;
+      if (data.status === "suspended" && admin.firebaseUid) {
+        await revokeFirebaseUserTokens(admin.firebaseUid);
+      }
     }
     if (data.workspaceName && admin.workspaceId) {
       await Workspace.updateOne({ _id: admin.workspaceId }, { name: data.workspaceName });

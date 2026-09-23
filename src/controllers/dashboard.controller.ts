@@ -23,22 +23,18 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
       qWsId === "none" ||
       qWsId === "personal-only";
 
-    let workspaceId: string | null = isExplicitPersonal
-      ? null
-      : (authReq.workspaceId || null);
+    let workspaceId: string | null = null;
 
-    if (workspaceId && typeof workspaceId === "object" && (workspaceId as any)._id) {
-      workspaceId = (workspaceId as any)._id.toString();
-    } else if (workspaceId) {
-      workspaceId = workspaceId.toString();
-    }
-
-    if (!workspaceId && !isExplicitPersonal) {
+    if (!isExplicitPersonal && qWsId) {
+      if (authReq.workspaceId) {
+        workspaceId = typeof authReq.workspaceId === "object" && (authReq.workspaceId as any)._id
+          ? (authReq.workspaceId as any)._id.toString()
+          : authReq.workspaceId.toString();
+      }
+    } else if (!isExplicitPersonal && !qWsId) {
       const workspace = await Workspace.findOne({ owner: authReq.user._id });
       if (workspace) {
         workspaceId = workspace._id.toString();
-      } else if (authReq.user.workspaceId) {
-        workspaceId = authReq.user.workspaceId._id ? authReq.user.workspaceId._id.toString() : authReq.user.workspaceId.toString();
       }
     }
 

@@ -216,21 +216,38 @@ export const requirePermission = (
         }
       }
 
-      // Explicit personal-space signal: "personal"/"null"/"none" in the x-workspace-id or
-      // x-workspace-slug header, or the workspaceId query param, means the caller is
-      // deliberately viewing their personal (workspaceId: null) context and must NOT fall
+      // Explicit personal-space signal: "personal"/"null"/"none"/"personal-only" in the x-workspace-id or
+      // x-workspace-slug header, workspaceId query param, or body destination, means the caller is
+      // deliberately operating in their personal (workspaceId: null) context and must NOT fall
       // back to their default workspace below — otherwise a member of any workspace could
       // never actually see/create in their personal space, and personal forms silently
-      // resolve into the wrong context on list/stat endpoints.
+      // resolve into the wrong context on list/stat/create endpoints.
       const isPersonalSignal = (val: unknown): boolean => {
+        if (val === null) return true;
         const raw = Array.isArray(val) ? val[0] : val;
-        return typeof raw === "string" && ["personal", "null", "none"].includes(raw.trim().toLowerCase());
+        if (raw === null) return true;
+        if (typeof raw === "string") {
+          return ["personal", "null", "none", "personal-only"].includes(raw.trim().toLowerCase());
+        }
+        if (typeof raw === "object" && raw !== null) {
+          if ((raw as any).type === "personal" || (raw as any).workspaceId === null || (raw as any).destinationWorkspaceId === null) {
+            return true;
+          }
+        }
+        return false;
       };
-      if (
+
+      const hasExplicitPersonalSignal =
         isPersonalSignal(req.headers["x-workspace-id"]) ||
         isPersonalSignal(req.headers["x-workspace-slug"]) ||
-        isPersonalSignal(req.query.workspaceId)
-      ) {
+        isPersonalSignal(req.query.workspaceId) ||
+        (req.body && (
+          isPersonalSignal(req.body.destination) ||
+          (req.body.destinationWorkspaceId !== undefined && isPersonalSignal(req.body.destinationWorkspaceId)) ||
+          (req.body.workspaceId !== undefined && isPersonalSignal(req.body.workspaceId))
+        ));
+
+      if (hasExplicitPersonalSignal) {
         authReq.workspaceId = null;
         authReq.explicitPersonalContext = true;
         authReq.membership = null;

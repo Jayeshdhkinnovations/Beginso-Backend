@@ -501,12 +501,6 @@ export const acceptInvitation = async (req: Request, res: Response, next: NextFu
       timezoneOverride: null,
     });
 
-    // Link user active workspaceId if unset
-    if (!authReq.user.workspaceId) {
-      authReq.user.workspaceId = invitation.workspaceId;
-      await authReq.user.save();
-    }
-
     invitation.status = "accepted";
     await invitation.save();
 

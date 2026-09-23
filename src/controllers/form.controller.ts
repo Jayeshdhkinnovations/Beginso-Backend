@@ -91,141 +91,169 @@ export const createForm = async (req: Request, res: Response, next: NextFunction
     const validatedData = createFormSchema.parse(req.body);
 
     // Step 2: Determine target destination workspace (BE 0.4)
-    const explicitDestination =
-      req.body?.destinationWorkspaceId !== undefined
-        ? req.body.destinationWorkspaceId
-        : req.body?.workspaceId !== undefined
-        ? req.body.workspaceId
-        : req.headers["x-workspace-id"] !== undefined
-        ? req.headers["x-workspace-id"]
-        : req.query?.workspaceId;
+    const isExplicitPersonal =
+      authReq.explicitPersonalContext ||
+      req.body?.destination?.type === "personal" ||
+      req.body?.destination === "personal" ||
+      req.body?.destinationWorkspaceId === null ||
+      req.body?.destinationWorkspaceId === "null" ||
+      req.body?.destinationWorkspaceId === "personal" ||
+      req.body?.workspaceId === null ||
+      req.body?.workspaceId === "null" ||
+      req.body?.workspaceId === "personal" ||
+      req.headers["x-workspace-id"] === "personal" ||
+      req.headers["x-workspace-id"] === "null" ||
+      req.headers["x-workspace-slug"] === "personal" ||
+      req.headers["x-workspace-slug"] === "null" ||
+      req.query?.workspaceId === "personal" ||
+      req.query?.workspaceId === "null";
 
     let resolvedWorkspaceId: string | null = null;
 
-    if (explicitDestination !== undefined && explicitDestination !== null && explicitDestination !== "") {
-      const destStr = Array.isArray(explicitDestination) ? explicitDestination[0] : String(explicitDestination).trim();
-
-      if (destStr === "personal" || destStr === "null") {
-        resolvedWorkspaceId = null;
-      } else {
-        if (!mongoose.Types.ObjectId.isValid(destStr)) {
-          res.status(400).json({
-            success: false,
-            message: "Invalid workspaceId format",
-            error: { message: "Invalid workspaceId format" },
-          });
-          return;
-        }
-
-        const targetWs = await Workspace.findById(destStr);
-        if (!targetWs) {
-          res.status(404).json({
-            success: false,
-            message: "Workspace not found",
-            error: { message: "Workspace not found" },
-          });
-          return;
-        }
-
-        if (targetWs.status === "suspended") {
-          res.status(403).json({
-            success: false,
-            message: "Workspace is suspended",
-            error: { message: "Workspace is suspended" },
-          });
-          return;
-        }
-
-        if (authReq.user.role !== "super_admin") {
-          const membership = await Membership.findOne({
-            userId: authReq.user._id,
-            workspaceId: targetWs._id,
-          });
-          const isOwner = targetWs.owner.toString() === authReq.user._id.toString();
-          const role = membership ? membership.role : (isOwner ? "owner" : null);
-
-          if (!role) {
-            res.status(403).json({
-              success: false,
-              message: "Forbidden: Cross-workspace access denied",
-              error: {
-                code: "FORBIDDEN_WORKSPACE_ACCESS",
-                message: "Forbidden: Cross-workspace access denied",
-              },
-            });
-            return;
-          }
-
-          if (!hasPermission(role, "forms:create")) {
-            res.status(403).json({
-              success: false,
-              message: "Forbidden: Insufficient permissions to create forms in this workspace",
-              error: {
-                code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
-                message: "Forbidden: Insufficient permissions to create forms in this workspace",
-              },
-            });
-            return;
-          }
-        }
-
-        resolvedWorkspaceId = targetWs._id.toString();
-      }
-    } else if (req.headers["x-workspace-slug"]) {
-      const slugVal = Array.isArray(req.headers["x-workspace-slug"])
-        ? req.headers["x-workspace-slug"][0]
-        : String(req.headers["x-workspace-slug"]).trim().toLowerCase();
-      const targetWs = await Workspace.findOne({ slug: slugVal });
-      if (!targetWs) {
-        res.status(404).json({
-          success: false,
-          message: "Workspace not found",
-          error: { message: "Workspace not found" },
-        });
-        return;
-      }
-      if (authReq.user.role !== "super_admin") {
-        const membership = await Membership.findOne({
-          userId: authReq.user._id,
-          workspaceId: targetWs._id,
-        });
-        const isOwner = targetWs.owner.toString() === authReq.user._id.toString();
-        const role = membership ? membership.role : (isOwner ? "owner" : null);
-
-        if (!role) {
-          res.status(403).json({
-            success: false,
-            message: "Forbidden: Cross-workspace access denied",
-            error: {
-              code: "FORBIDDEN_WORKSPACE_ACCESS",
-              message: "Forbidden: Cross-workspace access denied",
-            },
-          });
-          return;
-        }
-
-        if (!hasPermission(role, "forms:create")) {
-          res.status(403).json({
-            success: false,
-            message: "Forbidden: Insufficient permissions to create forms in this workspace",
-            error: {
-              code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
-              message: "Forbidden: Insufficient permissions to create forms in this workspace",
-            },
-          });
-          return;
-        }
-      }
-      resolvedWorkspaceId = targetWs._id.toString();
+    if (isExplicitPersonal) {
+      resolvedWorkspaceId = null;
     } else {
-      // Default: caller's active workspace (or null if caller has no workspace, satisfying C1.6)
-      const defaultWsId = authReq.workspaceId || (await getWorkspaceIdFromUser(authReq.user));
-      resolvedWorkspaceId = defaultWsId || null;
+      const explicitDestination =
+        req.body?.destinationWorkspaceId !== undefined && req.body?.destinationWorkspaceId !== null
+          ? req.body.destinationWorkspaceId
+          : req.body?.destination?.workspaceId !== undefined && req.body?.destination?.workspaceId !== null
+          ? req.body.destination.workspaceId
+          : req.body?.workspaceId !== undefined && req.body?.workspaceId !== null
+          ? req.body.workspaceId
+          : req.headers["x-workspace-id"] !== undefined && req.headers["x-workspace-id"] !== null && req.headers["x-workspace-id"] !== ""
+          ? req.headers["x-workspace-id"]
+          : req.query?.workspaceId;
+
+      if (explicitDestination !== undefined && explicitDestination !== null && explicitDestination !== "") {
+        const destStr = Array.isArray(explicitDestination) ? explicitDestination[0] : String(explicitDestination).trim();
+
+        if (destStr === "personal" || destStr === "null" || destStr === "none") {
+          resolvedWorkspaceId = null;
+        } else {
+          if (!mongoose.Types.ObjectId.isValid(destStr)) {
+            res.status(400).json({
+              success: false,
+              message: "Invalid workspaceId format",
+              error: { message: "Invalid workspaceId format" },
+            });
+            return;
+          }
+
+          const targetWs = await Workspace.findById(destStr);
+          if (!targetWs) {
+            res.status(404).json({
+              success: false,
+              message: "Workspace not found",
+              error: { message: "Workspace not found" },
+            });
+            return;
+          }
+
+          if (targetWs.status === "suspended") {
+            res.status(403).json({
+              success: false,
+              message: "Workspace is suspended",
+              error: { message: "Workspace is suspended" },
+            });
+            return;
+          }
+
+          if (authReq.user.role !== "super_admin") {
+            const membership = await Membership.findOne({
+              userId: authReq.user._id,
+              workspaceId: targetWs._id,
+            });
+            const isOwner = targetWs.owner.toString() === authReq.user._id.toString();
+            const role = membership ? membership.role : (isOwner ? "owner" : null);
+
+            if (!role) {
+              res.status(403).json({
+                success: false,
+                message: "Forbidden: Cross-workspace access denied",
+                error: {
+                  code: "FORBIDDEN_WORKSPACE_ACCESS",
+                  message: "Forbidden: Cross-workspace access denied",
+                },
+              });
+              return;
+            }
+
+            if (!hasPermission(role, "forms:create")) {
+              res.status(403).json({
+                success: false,
+                message: "Forbidden: Insufficient permissions to create forms in this workspace",
+                error: {
+                  code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
+                  message: "Forbidden: Insufficient permissions to create forms in this workspace",
+                },
+              });
+              return;
+            }
+          }
+
+          resolvedWorkspaceId = targetWs._id.toString();
+        }
+      } else if (req.headers["x-workspace-slug"]) {
+        const slugVal = Array.isArray(req.headers["x-workspace-slug"])
+          ? req.headers["x-workspace-slug"][0]
+          : String(req.headers["x-workspace-slug"]).trim().toLowerCase();
+        if (slugVal === "personal" || slugVal === "null" || slugVal === "none") {
+          resolvedWorkspaceId = null;
+        } else {
+          const targetWs = await Workspace.findOne({ slug: slugVal });
+          if (!targetWs) {
+            res.status(404).json({
+              success: false,
+              message: "Workspace not found",
+              error: { message: "Workspace not found" },
+            });
+            return;
+          }
+          if (authReq.user.role !== "super_admin") {
+            const membership = await Membership.findOne({
+              userId: authReq.user._id,
+              workspaceId: targetWs._id,
+            });
+            const isOwner = targetWs.owner.toString() === authReq.user._id.toString();
+            const role = membership ? membership.role : (isOwner ? "owner" : null);
+
+            if (!role) {
+              res.status(403).json({
+                success: false,
+                message: "Forbidden: Cross-workspace access denied",
+                error: {
+                  code: "FORBIDDEN_WORKSPACE_ACCESS",
+                  message: "Forbidden: Cross-workspace access denied",
+                },
+              });
+              return;
+            }
+
+            if (!hasPermission(role, "forms:create")) {
+              res.status(403).json({
+                success: false,
+                message: "Forbidden: Insufficient permissions to create forms in this workspace",
+                error: {
+                  code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
+                  message: "Forbidden: Insufficient permissions to create forms in this workspace",
+                },
+              });
+              return;
+            }
+          }
+          resolvedWorkspaceId = targetWs._id.toString();
+        }
+      } else {
+        // Default: caller's active workspace (or null if caller has no workspace, satisfying C1.6)
+        const defaultWsId = authReq.workspaceId || (await getWorkspaceIdFromUser(authReq.user));
+        resolvedWorkspaceId = defaultWsId || null;
+      }
     }
 
     // Step 3: Clean helper fields and set createdBy
     delete (validatedData as any).workspaceId;
     delete (validatedData as any).destinationWorkspaceId;
+    delete (validatedData as any).destination;
     (validatedData as any).createdBy = authReq.user._id;
 
     // Step 4: Delegate to FormService

@@ -102,6 +102,33 @@ describe("Templates API Integration Tests", () => {
     expect(res.body.success).toBe(false);
   });
 
+  // --- Public gallery endpoint tests ---
+
+  it("should return active templates from /api/templates/public with NO auth", async () => {
+    const res = await request(app)
+      .get("/api/templates/public");
+    // No Authorization header — must succeed
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toBeDefined();
+    expect(Array.isArray(res.body.data)).toBe(true);
+    // Should contain only active templates (at least the one seeded)
+    expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+    res.body.data.forEach((t: any) => {
+      expect(t.isActive).toBe(true);
+    });
+  });
+
+  it("should exclude inactive templates from /api/templates/public", async () => {
+    const res = await request(app)
+      .get("/api/templates/public");
+
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((t: any) => t._id);
+    expect(ids).not.toContain(inactiveTemplateId);
+  });
+
   it("should create a form from an active template scoped to workspace", async () => {
     const res = await request(app)
       .post(`/api/templates/${activeTemplateId}/use`)

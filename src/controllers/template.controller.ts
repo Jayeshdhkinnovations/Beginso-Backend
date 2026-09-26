@@ -14,24 +14,42 @@ const getWorkspaceIdFromUser = async (user: any): Promise<string> => {
   return workspace ? workspace._id.toString() : "";
 };
 
-// GET /api/templates - Returns all active templates
+// Shared helper — single source of truth for "fetch active templates + serialize"
+const fetchActiveTemplates = async () => {
+  const templates = await Template.find({ isActive: true });
+  return templates.map((t) => ({
+    _id: t._id.toString(),
+    id: t._id.toString(),
+    name: t.name,
+    category: t.category,
+    fields: t.fields,
+    theme: t.theme,
+    isActive: t.isActive,
+  }));
+};
+
+// GET /api/templates - Returns all active templates (authenticated)
 export const getTemplates = async (req: Request, res: Response): Promise<void> => {
   try {
-    const templates = await Template.find({ isActive: true });
-    res.status(200).json({
-      success: true,
-      data: templates.map((t) => ({
-        _id: t._id.toString(),
-        id: t._id.toString(),
-        name: t.name,
-        category: t.category,
-        fields: t.fields,
-        theme: t.theme,
-        isActive: t.isActive,
-      })),
-    });
+    const data = await fetchActiveTemplates();
+    res.status(200).json({ success: true, data });
   } catch (error: any) {
     console.error("Error fetching templates:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching templates",
+      error: error.message,
+    });
+  }
+};
+
+// GET /api/templates/public - Returns all active templates (unauthenticated, public gallery)
+export const getPublicTemplates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await fetchActiveTemplates();
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    console.error("Error fetching public templates:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching templates",

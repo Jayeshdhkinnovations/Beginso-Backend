@@ -3,6 +3,7 @@ import Template from "../models/Template";
 import { FormService } from "../services/form.service";
 import Workspace from "../models/Workspace";
 import mongoose from "mongoose";
+import { getTemplateDescription, getTemplateSettings } from "../utils/templateDefaults";
 
 const formService = new FormService();
 
@@ -21,6 +22,8 @@ const fetchActiveTemplates = async () => {
     _id: t._id.toString(),
     id: t._id.toString(),
     name: t.name,
+    description: t.description?.trim() || getTemplateDescription(t.name),
+    settings: { ...getTemplateSettings(), ...t.toObject().settings },
     category: t.category,
     fields: t.fields,
     theme: t.theme,

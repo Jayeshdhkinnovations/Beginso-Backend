@@ -104,6 +104,49 @@ describe("Templates API Integration Tests", () => {
 
   // --- Public gallery endpoint tests ---
 
+  it("returns complete, matching metadata for legacy and configured templates on both lists", async () => {
+    const legacyId = new mongoose.Types.ObjectId();
+    const nullId = new mongoose.Types.ObjectId();
+    const configuredId = new mongoose.Types.ObjectId();
+    try {
+      // Bypass schema defaults to reproduce records already stored in production.
+      await Template.collection.insertMany([
+        { _id: legacyId, name: "Job Application", category: "HR", theme: "classic-light", fields: [], isActive: true },
+        { _id: nullId, name: "Legacy Custom", description: null, settings: null, category: "Test", theme: "classic-light", fields: [], isActive: true },
+      ]);
+      await Template.create({
+        _id: configuredId, name: "Configured", description: "Custom description",
+        category: "Test", theme: "classic-light", fields: [], isActive: true,
+        settings: { layout: "two_column", successMessage: "All done!", responseLimitEnabled: true, responseLimit: 25, closeDate: "2027-01-01T00:00:00.000Z" },
+      });
+
+      const publicRes = await request(app).get("/api/templates/public");
+      const privateRes = await request(app).get("/api/templates").set("Authorization", `Bearer ${authToken}`);
+      expect(publicRes.status).toBe(200);
+      expect(privateRes.status).toBe(200);
+      expect(publicRes.body.data).toEqual(privateRes.body.data);
+      for (const id of [legacyId, nullId]) {
+        const item = publicRes.body.data.find((t: any) => t._id === id.toString());
+        expect(item.description).toEqual(expect.any(String));
+        expect(item.description.length).toBeGreaterThan(0);
+        expect(item.settings).toEqual({
+          layout: "single_column", successMessage: "Thank you! Your response has been submitted.",
+          responseLimitEnabled: false, honeypotEnabled: false,
+        });
+        expect(item).not.toHaveProperty("createdAt");
+        expect(item).not.toHaveProperty("__v");
+      }
+      const configured = publicRes.body.data.find((t: any) => t._id === configuredId.toString());
+      expect(configured.description).toBe("Custom description");
+      expect(configured.settings).toEqual({
+        layout: "two_column", successMessage: "All done!", responseLimitEnabled: true,
+        responseLimit: 25, closeDate: "2027-01-01T00:00:00.000Z", honeypotEnabled: false,
+      });
+    } finally {
+      await Template.deleteMany({ _id: { $in: [legacyId, nullId, configuredId] } });
+    }
+  });
+
   it("should return active templates from /api/templates/public with NO auth", async () => {
     const res = await request(app)
       .get("/api/templates/public");

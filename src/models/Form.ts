@@ -171,7 +171,7 @@ const BrandingSchema = new Schema<IBranding>(
   { _id: false }
 );
 
-const FormSettingsSchema = new Schema<IFormSettings>(
+export const FormSettingsSchema = new Schema<IFormSettings>(
   {
     successMessage: { type: String },
     responseLimitEnabled: { type: Boolean, default: false },

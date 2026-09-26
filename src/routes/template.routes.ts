@@ -13,7 +13,12 @@ router.get("/public", publicTemplatesRateLimiter, getPublicTemplates);
 router.get("/", protect as any, blockSuspended as any, requirePermission("templates:read") as any, getTemplates);
 
 // POST /api/templates/:id/use - Create a form from a template
-router.post("/:id/use", protect as any, blockSuspended as any, requirePermission("forms:create") as any, useTemplate);
+router.post("/:id/use", protect as any, blockSuspended as any, (req, res, next) => {
+  // useTemplate checks permission on explicit destinations. Ambient headers or
+  // default-workspace roles must not override the requested destination.
+  if (req.body?.destinationWorkspaceId !== undefined) return next();
+  return requirePermission("forms:create")(req, res, next);
+}, useTemplate);
 
 export default router;
 

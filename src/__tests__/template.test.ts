@@ -6,6 +6,7 @@ import User from "../models/User";
 import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import Template from "../models/Template";
+import Membership from "../models/Membership";
 import { generateToken } from "../utils/generateToken";
 
 let mongoServer: MongoMemoryServer;
@@ -190,6 +191,66 @@ describe("Templates API Integration Tests", () => {
     const dbForm = await Form.findById(res.body.data._id);
     expect(dbForm).not.toBeNull();
     expect(dbForm!.title).toBe("Active Test Template");
+  });
+
+  it("creates a personal form owned by the caller despite an ambient workspace header", async () => {
+    const res = await request(app).post(`/api/templates/${activeTemplateId}/use`)
+      .set("Authorization", `Bearer ${authToken}`).set("x-workspace-id", mockWorkspaceId)
+      .send({ destinationWorkspaceId: null, createdBy: new mongoose.Types.ObjectId().toString() });
+    expect(res.status).toBe(201);
+    expect(res.body.data.workspaceId).toBeNull();
+    expect(res.body.data.createdBy).toBe(mockUserId);
+    const form = await Form.findById(res.body.data._id);
+    expect(form!.workspaceId).toBeNull();
+    expect(form!.createdBy!.toString()).toBe(mockUserId);
+  });
+
+  it.each(["owner", "editor"])("creates directly in an explicit workspace as %s", async (role) => {
+    const ws = await Workspace.create({ name: `Destination ${role}`, owner: role === "owner" ? mockUserId : new mongoose.Types.ObjectId() });
+    if (role === "editor") await Membership.create({ userId: mockUserId, workspaceId: ws._id, role });
+    const res = await request(app).post(`/api/templates/${activeTemplateId}/use`)
+      .set("Authorization", `Bearer ${authToken}`).set("x-workspace-id", "personal")
+      .send({ destinationWorkspaceId: ws._id.toString() });
+    expect(res.status).toBe(201);
+    expect(res.body.data.workspaceId).toBe(ws._id.toString());
+    expect(res.body.data.createdBy).toBe(mockUserId);
+    expect((await Form.findById(res.body.data._id))!.workspaceId!.toString()).toBe(ws._id.toString());
+  });
+
+  it.each(["viewer", "reviewer", "outsider", "suspended", "deleted"])("rejects %s destinations without creating a form", async (kind) => {
+    const ws = await Workspace.create({ name: `Denied ${kind}`, owner: new mongoose.Types.ObjectId(),
+      status: kind === "suspended" || kind === "deleted" ? kind : "active" });
+    if (kind !== "outsider") await Membership.create({ userId: mockUserId, workspaceId: ws._id,
+      role: kind === "viewer" || kind === "reviewer" ? kind : "editor" });
+    const count = await Form.countDocuments();
+    const res = await request(app).post(`/api/templates/${activeTemplateId}/use`)
+      .set("Authorization", `Bearer ${authToken}`).set("x-workspace-id", "personal")
+      .send({ destinationWorkspaceId: ws._id.toString() });
+    expect(res.status).toBe(kind === "deleted" ? 404 : 403);
+    expect(await Form.countDocuments()).toBe(count);
+  });
+
+  it.each(["bad-id", "", 42, {}, [], "personal"])("rejects malformed destination %p", async (destinationWorkspaceId) => {
+    const count = await Form.countDocuments();
+    const res = await request(app).post(`/api/templates/${activeTemplateId}/use`)
+      .set("Authorization", `Bearer ${authToken}`).send({ destinationWorkspaceId });
+    expect(res.status).toBe(400);
+    expect(await Form.countDocuments()).toBe(count);
+  });
+
+  it("rejects a missing workspace without creating a form", async () => {
+    const count = await Form.countDocuments();
+    const res = await request(app).post(`/api/templates/${activeTemplateId}/use`)
+      .set("Authorization", `Bearer ${authToken}`).send({ destinationWorkspaceId: new mongoose.Types.ObjectId().toString() });
+    expect(res.status).toBe(404);
+    expect(await Form.countDocuments()).toBe(count);
+  });
+
+  it("requires authentication for explicit personal creation", async () => {
+    const count = await Form.countDocuments();
+    const res = await request(app).post(`/api/templates/${activeTemplateId}/use`).send({ destinationWorkspaceId: null });
+    expect(res.status).toBe(401);
+    expect(await Form.countDocuments()).toBe(count);
   });
 
   it("should reject use request on non-existent template ID with 404", async () => {

@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import Template from "../models/Template";
 import { FormService } from "../services/form.service";
 import Workspace from "../models/Workspace";
+import Membership from "../models/Membership";
+import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { getTemplateDescription, getTemplateSettings } from "../utils/templateDefaults";
 
@@ -93,14 +95,47 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Scope the new form to the caller's workspace (from the JWT)
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
-    if (!workspaceId) {
-      res.status(400).json({
-        success: false,
-        message: "No active workspace found for this user",
-      });
-      return;
+    // Explicit body destinations are authorized here, against the actual target.
+    // The route retains legacy permission middleware when no destination is given.
+    let workspaceId: string | null;
+    const destination = req.body?.destinationWorkspaceId;
+    if (destination !== undefined) {
+      if (destination === null) {
+        workspaceId = null;
+      } else {
+        if (typeof destination !== "string" || !mongoose.Types.ObjectId.isValid(destination.trim())) {
+          res.status(400).json({ success: false, message: "Invalid destinationWorkspaceId format" });
+          return;
+        }
+        const target = await Workspace.findById(destination.trim());
+        if (!target || target.status === "deleted") {
+          res.status(404).json({ success: false, message: "Workspace not found" });
+          return;
+        }
+        if (target.status === "suspended") {
+          res.status(403).json({ success: false, message: "Workspace is suspended" });
+          return;
+        }
+        if (authReq.user.role !== "super_admin") {
+          const membership = await Membership.findOne({ userId: authReq.user._id, workspaceId: target._id });
+          const role = membership?.role || (target.owner.toString() === authReq.user._id.toString() ? "owner" : null);
+          if (!role || !hasPermission(role, "forms:create")) {
+            res.status(403).json({
+              success: false,
+              message: "Forbidden: Cannot create forms in this workspace",
+              error: { code: role ? "FORBIDDEN_INSUFFICIENT_PERMISSIONS" : "FORBIDDEN_WORKSPACE_ACCESS" },
+            });
+            return;
+          }
+        }
+        workspaceId = target._id.toString();
+      }
+    } else {
+      workspaceId = await getWorkspaceIdFromUser(authReq.user);
+      if (!workspaceId) {
+        res.status(400).json({ success: false, message: "No active workspace found for this user" });
+        return;
+      }
     }
 
     // 1. Build field ID mapping (old fieldId/_id -> new fieldId)
@@ -167,6 +202,7 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
     });
 
     const formDetails = {
+      createdBy: authReq.user._id,
       title: template.name,
       description: `Created from template: ${template.name}`,
       fields: formFields,

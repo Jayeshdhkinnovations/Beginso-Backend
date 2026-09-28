@@ -45,6 +45,7 @@ afterEach(() => {
   delete process.env.RATE_LIMIT_WINDOW_MS;
   delete process.env.PROXY_SHARED_SECRET;
   delete process.env.AUTH_RATE_LIMIT_MAX;
+  delete process.env.RATE_LIMIT_ALLOWLIST;
 });
 
 afterAll(async () => {
@@ -153,5 +154,23 @@ describe("signed-in actions", () => {
     delete process.env.USER_RATE_LIMIT_MAX;
     expect(codes[2]).toBe(429);
     expect(codes.slice(0, 2)).not.toContain(429);
+  });
+});
+
+describe("RATE_LIMIT_ALLOWLIST", () => {
+  it("an allowlisted IP is never limited, and a forged header cannot claim to be that IP", async () => {
+    process.env.PROXY_SHARED_SECRET = "allow-secret";
+    process.env.RATE_LIMIT_ALLOWLIST = "203.0.113.77";
+    const viaProxy = (ip: string) => submit({ "x-proxy-secret": "allow-secret", "x-client-ip": ip });
+    for (let i = 0; i < 6; i++) expect((await viaProxy("203.0.113.77")).status).not.toBe(429);
+    const other = [];
+    for (let i = 0; i < 4; i++) other.push((await viaProxy("203.0.113.78")).status);
+    expect(other.slice(2)).toEqual([429, 429]);
+    // no secret: x-client-ip is ignored, so naming the allowlisted IP changes nothing
+    await clearRateLimitStore();
+    const forged = [];
+    for (let i = 0; i < 4; i++) forged.push((await submit({ "x-client-ip": "203.0.113.77" })).status);
+    delete process.env.RATE_LIMIT_ALLOWLIST;
+    expect(forged.slice(2)).toEqual([429, 429]);
   });
 });

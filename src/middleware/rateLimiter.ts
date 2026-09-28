@@ -24,6 +24,13 @@ const intEnv = (name: string, fallback: number): number => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
+// IPs that are never rate limited (an office or test machine): RATE_LIMIT_ALLOWLIST=1.2.3.4,5.6.7.8
+// The address is the one getRealClientIp trusts, so it cannot be claimed with a forged header.
+const isAllowlisted = (ip: string): boolean => {
+  const list = (process.env.RATE_LIMIT_ALLOWLIST ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return list.length > 0 && list.includes(ip.replace(/^::ffff:/, ""));
+};
+
 const hit = async (key: string, windowMs: number): Promise<number> => {
   const windowStart = Math.floor(Date.now() / windowMs);
   const bucketKey = `${key}:${windowStart}`;
@@ -49,6 +56,7 @@ export const createRateLimiter = (options: LimiterOptions) =>
       if (max === 0) return next();
 
       const ip = getRealClientIp(req);
+      if (isAllowlisted(ip)) return next();
       const subject = options.by(req, ip);
       if (!subject) return next();
 

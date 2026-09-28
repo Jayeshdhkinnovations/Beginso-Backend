@@ -9,6 +9,9 @@ import { MailLog } from "../models/MailLog";
 import SessionModel from "../models/Session";
 import { auth, revokeFirebaseUserTokens } from "../config/firebase";
 import fs from "fs";
+import crypto from "crypto";
+import { mailService } from "./mail.service";
+import { escapeRegex } from "../utils/safeInput";
 import path from "path";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
 
@@ -207,11 +210,11 @@ export class SuperAdminService {
     }
 
     if (filters.route) {
-      query.route = { $regex: filters.route, $options: "i" };
+      query.route = { $regex: escapeRegex(String(filters.route)), $options: "i" };
     }
 
     if (filters.search) {
-      query.message = { $regex: filters.search, $options: "i" };
+      query.message = { $regex: escapeRegex(String(filters.search)), $options: "i" };
     }
 
     if (filters.from || filters.to) {
@@ -285,7 +288,7 @@ export class SuperAdminService {
     }
 
     if (filters.search && filters.search.trim() !== "") {
-      query.requestId = { $regex: filters.search.trim(), $options: "i" };
+      query.requestId = { $regex: escapeRegex(String(filters.search.trim())), $options: "i" };
     }
 
     if (filters.from || filters.to) {
@@ -342,8 +345,8 @@ export class SuperAdminService {
     }
     if (filters.search) {
       query.$or = [
-        { fullName: { $regex: filters.search, $options: "i" } },
-        { email: { $regex: filters.search, $options: "i" } },
+        { fullName: { $regex: escapeRegex(String(filters.search)), $options: "i" } },
+        { email: { $regex: escapeRegex(String(filters.search)), $options: "i" } },
       ];
     }
 
@@ -476,21 +479,23 @@ export class SuperAdminService {
       throw new Error("User with this email already exists");
     }
 
-    let firebaseUid = `admin-uid-${Buffer.from(data.email).toString("hex").substring(0, 15)}`;
+    // The account gets a random password nobody knows (it is never stored or returned); the new
+    // admin sets their own through the password-reset link mailed below. A Firebase failure stops
+    // the creation: continuing with an invented uid would leave a user nobody can sign in as.
+    let firebaseUid: string;
     try {
       const fbUser = await auth.createUser({
         email: data.email,
         displayName: data.name,
-        password: "TempPassword123!",
+        password: crypto.randomBytes(24).toString("base64url") + "aA1!",
       });
       firebaseUid = fbUser.uid;
     } catch (fbErr: any) {
       if (fbErr.code === "auth/email-already-exists") {
-        const fbUser = await auth.getUserByEmail(data.email);
-        firebaseUid = fbUser.uid;
-      } else {
-        console.warn("⚠️ Firebase Admin SDK error during admin creation:", fbErr.message);
+        throw new Error("A login for this email already exists. Ask them to sign up normally, or use another email.");
       }
+      console.error("Firebase Admin SDK error during admin creation:", fbErr.message);
+      throw new Error("Could not create the login for this admin. Nothing was created; try again.");
     }
 
     const newAdmin = await User.create({
@@ -522,6 +527,24 @@ export class SuperAdminService {
         workspaceName: workspace.name,
       },
     });
+
+    // Let the new admin choose their own password. Best effort: if the mail fails the account still
+    // exists and "forgot password" on the login page does the same thing.
+    try {
+      const appUrl = process.env.APP_URL || "https://beginso.com";
+      const link = await auth.generatePasswordResetLink(data.email, { url: `${appUrl}/reset-password` });
+      if (typeof link === "string") {
+        const oobCode = new URL(link).searchParams.get("oobCode");
+        await mailService.sendMail({
+          to: data.email,
+          template: "reset_password",
+          actionUrl: oobCode ? `${appUrl}/reset-password?mode=resetPassword&oobCode=${encodeURIComponent(oobCode)}` : link,
+          firebaseUid,
+        });
+      }
+    } catch (mailErr) {
+      console.error("Could not send the new admin their password link:", mailErr);
+    }
 
     return {
       admin: {
@@ -722,8 +745,8 @@ export class SuperAdminService {
 
     if (filters.actor) {
       query.$or = [
-        { actorEmail: { $regex: filters.actor, $options: "i" } },
-        { actorName: { $regex: filters.actor, $options: "i" } },
+        { actorEmail: { $regex: escapeRegex(String(filters.actor)), $options: "i" } },
+        { actorName: { $regex: escapeRegex(String(filters.actor)), $options: "i" } },
       ];
     }
 

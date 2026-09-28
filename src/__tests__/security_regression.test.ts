@@ -585,13 +585,13 @@ describe("B4 invitation lifecycle", () => {
 });
 
 describe("S-10 signup must not hand out a session", () => {
-  it("POST /auth/signup returns no token and sets no cookie", async () => {
+  it("the server-side signup route no longer exists, so it cannot issue a session or claim an invitation", async () => {
     const res = await request(app)
       .post("/api/auth/signup")
       .send({ fullName: "New Person", email: "fresh-signup@sec.test", password: "Str0ng!Pass" });
-    expect(res.status).toBe(201);
-    expect(res.body.token).toBeUndefined();
+    expect(res.status).toBe(404);
     expect(res.headers["set-cookie"]).toBeUndefined();
+    expect(await User.countDocuments({ email: "fresh-signup@sec.test" })).toBe(0);
   });
 });
 

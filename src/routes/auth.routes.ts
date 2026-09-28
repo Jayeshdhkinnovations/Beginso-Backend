@@ -1,6 +1,5 @@
 import { Router } from "express";
 import {
-  signup,
   getMe,
   session,
   logout,
@@ -13,19 +12,19 @@ import {
 } from "../controllers/auth.controller";
 import { getSessions, revokeSession } from "../controllers/session.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
+import { authRateLimiter, emailTargetRateLimiter } from "../middleware/rateLimiter";
 import { requirePermission } from "../middleware/permission.middleware";
 
 const router = Router();
 
-router.post("/signup", signup);
-router.post("/session", session);
-router.post("/email-verification", requestEmailVerification);
-router.post("/email-verification/reveal", revealEmailCode);
-router.post("/email-verification/verify", verifyEmailCode);
-router.post("/forgot-password", requestForgotPassword);
-router.post("/confirm-password-reset", confirmPasswordReset);
-router.post("/password-changed", notifyPasswordChanged);
-router.post("/notify-password-changed", notifyPasswordChanged);
+router.post("/session", authRateLimiter, session);
+router.post("/email-verification", authRateLimiter, requestEmailVerification);
+router.post("/email-verification/reveal", authRateLimiter, revealEmailCode);
+router.post("/email-verification/verify", authRateLimiter, verifyEmailCode);
+router.post("/forgot-password", authRateLimiter, emailTargetRateLimiter, requestForgotPassword);
+router.post("/confirm-password-reset", authRateLimiter, emailTargetRateLimiter, confirmPasswordReset);
+router.post("/password-changed", authRateLimiter, emailTargetRateLimiter, notifyPasswordChanged);
+router.post("/notify-password-changed", authRateLimiter, emailTargetRateLimiter, notifyPasswordChanged);
 router.post("/logout", protect as any, blockSuspended as any, logout);
 router.get("/me", protect as any, getMe);
 router.get("/sessions", protect as any, blockSuspended as any, requirePermission("sessions:read") as any, getSessions);

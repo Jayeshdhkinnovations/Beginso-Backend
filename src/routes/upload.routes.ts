@@ -5,6 +5,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
+import { userActionRateLimiter } from "../middleware/rateLimiter";
 import { uploadFile, getFile, getUploadDir, cleanEmptyDirs } from "../controllers/upload.controller";
 
 const router = Router();
@@ -49,7 +50,7 @@ const uploadAny = multer({
   },
 }).any();
 
-router.post("/", protect as any, blockSuspended as any, requirePermission("uploads:create") as any, (req: any, res: any, next: any) => {
+router.post("/", protect as any, blockSuspended as any, userActionRateLimiter("upload", 120) as any, requirePermission("uploads:create") as any, (req: any, res: any, next: any) => {
   uploadAny(req, res, async (err: any) => {
     if (err) {
       // Clean up whatever staging directory this request created before failing.

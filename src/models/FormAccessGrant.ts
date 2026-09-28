@@ -25,7 +25,7 @@ const FormAccessGrantSchema = new Schema<IFormAccessGrant>(
     },
     role: {
       type: String,
-      enum: ["owner", "admin", "member", "editor", "viewer", "reviewer"],
+      enum: ["admin", "member", "editor", "viewer", "reviewer"],
       default: "reviewer",
       required: true,
     },

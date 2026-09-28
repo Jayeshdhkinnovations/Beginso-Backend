@@ -223,29 +223,6 @@ describe("Sprint 7 — Phase 0 Backend Contracts [BE]", () => {
       ).rejects.toThrow();
     });
 
-    it("guarantees C1.3 lazy model: no workspace row is created when a user signs up", async () => {
-      const newUserEmail = "lazy_signup@test.com";
-
-      const res = await request(app)
-        .post("/api/auth/signup")
-        .send({
-          fullName: "Lazy User",
-          email: newUserEmail,
-          password: "Password123!",
-        });
-
-      expect(res.status).toBe(201);
-      expect(res.body.success).toBe(true);
-
-      const createdUser = await User.findOne({ email: newUserEmail });
-      expect(createdUser).toBeDefined();
-
-      // Crucial C1.3 guarantee: no workspace created
-      const userWorkspaces = await Workspace.find({ owner: createdUser!._id });
-      expect(userWorkspaces.length).toBe(0);
-      expect(createdUser!.workspaceId).toBeFalsy();
-    });
-
     it("creates workspace and owner membership upon explicit POST /api/workspaces", async () => {
       // Create user without workspace
       const standaloneUser = await User.create({

@@ -10,6 +10,10 @@ import {
 } from "../controllers/invitation.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
+import { userActionRateLimiter } from "../middleware/rateLimiter";
+
+// Each invitation sends an email: cap per signed-in user.
+const inviteLimit = userActionRateLimiter("invite", 60);
 
 const router = Router({ mergeParams: true });
 
@@ -36,6 +40,7 @@ router.post(
   "/",
   protect as any,
   blockSuspended as any,
+  inviteLimit,
   requirePermission("team:manage", { resourceType: "workspace" }) as any,
   sendInvitation
 );
@@ -44,6 +49,7 @@ router.post(
   "/:invitationId/resend",
   protect as any,
   blockSuspended as any,
+  inviteLimit,
   requirePermission("team:manage", { resourceType: "workspace" }) as any,
   resendInvitation
 );
@@ -51,6 +57,7 @@ router.post(
   "/:id/resend",
   protect as any,
   blockSuspended as any,
+  inviteLimit,
   requirePermission("team:manage", { resourceType: "workspace" }) as any,
   resendInvitation
 );
@@ -58,6 +65,7 @@ router.post(
   "/:token/resend",
   protect as any,
   blockSuspended as any,
+  inviteLimit,
   requirePermission("team:manage", { resourceType: "workspace" }) as any,
   resendInvitation
 );

@@ -4,7 +4,8 @@ import path from "path";
 import fs from "fs";
 import { getPublicFormBySlug, submitPublicForm } from "../controllers/form.controller";
 import { getUploadDir } from "../controllers/upload.controller";
-import { submitRateLimiter } from "../middleware/rateLimiter";
+import { submitRateLimiter, publicFormReadLimiter } from "../middleware/rateLimiter";
+import { MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
 import { prepareUploadContext } from "../middleware/uploadContext.middleware";
 
 const router = Router();
@@ -26,14 +27,21 @@ const storage = multer.diskStorage({
   },
 });
 
-const uploadAny = multer({
-  storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // Enforce 100MB per-file limit server-side via Multer
-  },
-}).any();
+// Limits are read when a request arrives so MAX_UPLOAD_* can be tuned without a rebuild. They apply
+// before anything is stored: an oversized or over-numerous submission is refused by Multer (400).
+const uploadAny = (req: any, res: any, next: any) =>
+  multer({
+    storage,
+    limits: {
+      fileSize: MAX_UPLOAD_MB() * 1024 * 1024,
+      files: MAX_UPLOAD_FILES(),
+      fields: 200,
+      fieldSize: MAX_ANSWERS_BYTES(),
+      parts: MAX_UPLOAD_FILES() + 200,
+    },
+  }).any()(req, res, next);
 
-router.get("/:slug", getPublicFormBySlug);
+router.get("/:slug", publicFormReadLimiter, getPublicFormBySlug);
 router.post("/:slug/submit", submitRateLimiter, prepareUploadContext as any, uploadAny, submitPublicForm);
 
 export default router;

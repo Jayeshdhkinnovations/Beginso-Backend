@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSafePattern } from "../utils/uploadLimits";
 import { IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
@@ -59,7 +60,12 @@ const emailObj = baseFieldSchema.extend({
 
 const phoneObj = baseFieldSchema.extend({
   type: z.literal("phone"),
-  pattern: z.string().trim().optional(),
+  // A pattern is run against visitor input on the server: refuse ones that can hang it (ReDoS).
+  pattern: z
+    .string()
+    .trim()
+    .refine((p) => p === "" || isSafePattern(p), "pattern is too complex or invalid")
+    .optional(),
 });
 
 const numberObj = baseFieldSchema.extend({

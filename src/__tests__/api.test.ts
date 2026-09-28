@@ -87,84 +87,12 @@ describe("Onboarding Platform Integration Tests", () => {
   // ==========================================
   
   describe("Signup API", () => {
-    it("Successful signup, C1.3 lazy workspace provisioning, and no session token", async () => {
-      const signupData = {
-        fullName: "Jayesh Chaudhary",
-        email: "jayesh@test.com",
-        password: "Password123!",
-      };
-      
+    it("the old server-side signup route is gone (signup is Firebase on the client + /api/auth/session)", async () => {
       const res = await request(app)
         .post("/api/auth/signup")
-        .send(signupData);
-        
-      expect(res.status).toBe(201);
-      expect(res.body.success).toBe(true);
-      // The email is unverified, so signup must not hand out a session (S-10).
-      expect(res.headers["set-cookie"]).toBeUndefined();
-      expect(res.body.token).toBeUndefined();
-      expect(res.body.user).toBeDefined();
-      expect(res.body.user.email).toBe(signupData.email);
-      // Under C1.3 lazy workspace model, no workspace row is created at signup
-      expect(res.body.user.workspaceId).toBeFalsy();
-      const count = await Workspace.countDocuments({ owner: res.body.user._id });
-      expect(count).toBe(0);
-
-      // Workspace is only created when user explicitly creates one (after a real, verified sign-in)
-      const sessionToken = jwt.sign(
-        { id: res.body.user._id, email: res.body.user.email, role: res.body.user.role },
-        process.env.JWT_SECRET!
-      );
-      const wsRes = await request(app)
-        .post("/api/workspaces")
-        .set("Authorization", `Bearer ${sessionToken}`)
-        .send({ name: "Jayesh's Workspace", slug: "jayesh-workspace" });
-      expect(wsRes.status).toBe(201);
-      expect(wsRes.body.workspace).toBeDefined();
-      expect(wsRes.body.workspace._id).toBeDefined();
-
-      // Validate workspace exists and points to user
-      const workspace = await Workspace.findById(wsRes.body.workspace._id);
-      expect(workspace).toBeDefined();
-      expect(workspace!.owner.toString()).toBe(res.body.user._id);
-    });
-
-    it("Catch malformed passwords (Zod checks)", async () => {
-      const signupData = {
-        fullName: "Jayesh Chaudhary",
-        email: "jayesh@test.com",
-        password: "weak",
-      };
-      
-      const res = await request(app)
-        .post("/api/auth/signup")
-        .send(signupData);
-        
-      expect(res.status).toBe(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.errors).toBeDefined();
-    });
-
-    it("Catch email duplicates", async () => {
-      await User.create({
-        firebaseUid: "firebase-existing-123",
-        fullName: "Existing User",
-        email: "existing@test.com",
-      });
-
-      const signupData = {
-        fullName: "Another User",
-        email: "existing@test.com",
-        password: "Password123!",
-      };
-      
-      const res = await request(app)
-        .post("/api/auth/signup")
-        .send(signupData);
-        
-      expect(res.status).toBe(409);
-      expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain("already exists");
+        .send({ fullName: "Jayesh Chaudhary", email: "jayesh@test.com", password: "Password123!" });
+      expect(res.status).toBe(404);
+      expect(await User.countDocuments({ email: "jayesh@test.com" })).toBe(0);
     });
   });
 

@@ -19,11 +19,15 @@ import notificationRoutes from "./routes/notification.routes";
 import invitationRoutes from "./routes/invitation.routes";
 import sharedWithMeRoutes from "./routes/shared_with_me.routes";
 import { errorHandler } from "./middleware/error.middleware";
+import { normalizeErrorShape } from "./middleware/errorShape.middleware";
 import { buildInfo, describeBuild } from "./utils/buildInfo";
 
 // Continuous Deployment Test Comment
 const app = express();
-app.set("trust proxy", true);
+// Number of reverse proxies in front of this process (nginx = 1, Cloudflare + nginx = 2, none = 0).
+// With `true` any caller could choose their own IP by sending X-Forwarded-For.
+const proxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? "1", 10);
+app.set("trust proxy", Number.isFinite(proxyHops) && proxyHops >= 0 ? proxyHops : 1);
 
 // Browsers only call this API directly from these origins: the public form (beginso.com,
 // beginso.vercel.app) and the admin console. The main app goes through its own same-origin proxy, which sends no Origin header.
@@ -63,6 +67,7 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "unsafe-none" }
 }));
 app.use(express.json());
+app.use(normalizeErrorShape);
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }

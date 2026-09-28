@@ -313,3 +313,56 @@ describe("legacy workspace fallback (V1 users without a Membership row)", () => 
     expect((await as(request(app).get(`/api/forms/${form._id}`), editor)).status).toBe(403);
   });
 });
+
+describe("S-21 provisioned admins and S-22 regex input", () => {
+  const actor = () => ({ id: String(owner._id), email: "boss@med.test", fullName: "boss" });
+
+  it("a new admin gets a random password, never the old fixed one", async () => {
+    const { auth } = require("../config/firebase");
+    const spy = jest.spyOn(auth, "createUser").mockResolvedValue({ uid: "uid-new-admin" } as never);
+    await superAdminService.createAdmin(actor(), { name: "New Admin", email: "newadmin@med.test", workspaceName: "Fresh" });
+    const password = (spy.mock.calls[0][0] as any).password as string;
+    spy.mockRestore();
+    expect(password).not.toBe("TempPassword123!");
+    expect(password.length).toBeGreaterThanOrEqual(24);
+    expect(await User.findOne({ email: "newadmin@med.test" })).toBeTruthy();
+  });
+
+  it("an email that already has a login, or a Firebase failure, creates nothing", async () => {
+    const { auth } = require("../config/firebase");
+    const exists = jest.spyOn(auth, "createUser").mockRejectedValue(Object.assign(new Error("exists"), { code: "auth/email-already-exists" }) as never);
+    await expect(superAdminService.createAdmin(actor(), { name: "A", email: "dupe@med.test", workspaceName: "W" })).rejects.toThrow(/already exists/);
+    exists.mockRestore();
+    const broken = jest.spyOn(auth, "createUser").mockRejectedValue(new Error("network") as never);
+    await expect(superAdminService.createAdmin(actor(), { name: "B", email: "broken@med.test", workspaceName: "W" })).rejects.toThrow(/Nothing was created/);
+    broken.mockRestore();
+    expect(await User.countDocuments({ email: { $in: ["dupe@med.test", "broken@med.test"] } })).toBe(0);
+  });
+
+  it("super-admin search boxes treat regex characters literally", async () => {
+    await expect(superAdminService.getAdmins({ search: "(unclosed[" } as any)).resolves.toBeDefined();
+  });
+});
+
+describe("clean-up: one error envelope, totalPages, no owner invitations", () => {
+  it("every failed response carries error.message, even from handlers that only set message", async () => {
+    const noAuth = await request(app).get("/api/forms");
+    expect(noAuth.status).toBe(401);
+    expect(typeof noAuth.body.error?.message).toBe("string");
+    const missing = await as(request(app).get(`/api/forms/${new mongoose.Types.ObjectId()}`), owner);
+    expect(missing.status).toBeGreaterThanOrEqual(400);
+    expect(typeof missing.body.error?.message).toBe("string");
+  });
+
+  it("GET /api/forms returns totalPages as well as pages", async () => {
+    await mkForm(wsMain._id, owner._id);
+    const res = await as(request(app).get("/api/forms"), owner);
+    expect(res.body.totalPages).toBe(res.body.pages);
+  });
+
+  it("an invitation or a form share can no longer be created with the owner role", async () => {
+    const res = await as(request(app).post(`/api/workspaces/${wsMain._id}/invitations`), owner).send({ email: "o@med.test", role: "owner" });
+    expect(res.status).toBe(400);
+    await expect(Invitation.create({ workspaceId: wsMain._id, email: "x@med.test", role: "owner", status: "pending", token: "tk-owner", expiresAt: new Date(Date.now() + 1e6), invitedBy: owner._id } as any)).rejects.toThrow();
+  });
+});

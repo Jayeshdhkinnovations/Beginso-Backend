@@ -1,112 +1,135 @@
 import { Request, Response, NextFunction } from "express";
 import { SystemLog } from "../models/SystemLog";
+import { RateLimitBucket } from "../models/RateLimitBucket";
 import { getRealClientIp, hashIp } from "../utils/ip";
+import { keyedHash } from "../utils/pepper";
 
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+// Fixed-window limiter backed by MongoDB (see RateLimitBucket), keyed by a hash so no address or
+// email is stored. `max: 0` (or a non-numeric env value) disables a limiter, for tests and local work.
+type Limit = { max: number; windowMs: number };
 
-export const submitRateLimiter = (req: Request, res: Response, next: NextFunction): void => {
-  const maxLimit = process.env.RATE_LIMIT_MAX ? parseInt(process.env.RATE_LIMIT_MAX, 10) : 10;
-  const windowMs = process.env.RATE_LIMIT_WINDOW_MS ? parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) : 60000; // 1 minute
+interface LimiterOptions {
+  name: string;
+  limit: () => Limit;
+  // What the limit is counted per. Return null to skip limiting (nothing to key on).
+  by: (req: Request, ip: string) => string | null;
+  message?: string;
+  log?: boolean;
+}
 
-  if (maxLimit === 0) {
-    return next();
-  }
-
-  const slug = req.params.slug;
-  if (!slug) {
-    return next();
-  }
-
-  const clientIp = getRealClientIp(req);
-  const hashedIp = hashIp(clientIp);
-  const key = `${hashedIp}:${slug}`;
-
-  const now = Date.now();
-  const record = rateLimitStore.get(key);
-
-  if (!record || now > record.resetTime) {
-    rateLimitStore.set(key, {
-      count: 1,
-      resetTime: now + windowMs,
-    });
-    return next();
-  }
-
-  record.count += 1;
-  if (record.count > maxLimit) {
-    SystemLog.create({
-      level: "warn",
-      message: "Rate limit exceeded",
-      route: req.originalUrl,
-      statusCode: 429,
-      meta: {
-        type: "rate_limit",
-        ipHash: hashedIp,
-        slug: slug
-      }
-    }).catch(err => console.error("Error logging rate limit to SystemLog:", err));
-
-    res.status(429).json({
-      success: false,
-      message: "Too many requests. Please try again later.",
-    });
-    return;
-  }
-
-  next();
+const intEnv = (name: string, fallback: number): number => {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-// Rate limiter for unauthenticated public endpoints (e.g. GET /api/templates/public).
-// Per-IP only (no session/slug), defaults to 30 req/min.
-const publicRateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-export const publicTemplatesRateLimiter = (req: Request, res: Response, next: NextFunction): void => {
-  const maxLimit = process.env.PUBLIC_RATE_LIMIT_MAX ? parseInt(process.env.PUBLIC_RATE_LIMIT_MAX, 10) : 30;
-  const windowMs = process.env.PUBLIC_RATE_LIMIT_WINDOW_MS ? parseInt(process.env.PUBLIC_RATE_LIMIT_WINDOW_MS, 10) : 60000;
-
-  if (maxLimit === 0) {
-    return next();
+const hit = async (key: string, windowMs: number): Promise<number> => {
+  const windowStart = Math.floor(Date.now() / windowMs);
+  const bucketKey = `${key}:${windowStart}`;
+  const expiresAt = new Date((windowStart + 2) * windowMs);
+  const attempt = () =>
+    RateLimitBucket.findOneAndUpdate(
+      { key: bucketKey },
+      { $inc: { count: 1 }, $setOnInsert: { expiresAt } },
+      { upsert: true, new: true }
+    ).lean();
+  try {
+    return (await attempt())!.count;
+  } catch (err: any) {
+    if (err?.code !== 11000) throw err; // two first hits raced on the upsert: count again
+    return (await attempt())!.count;
   }
-
-  const clientIp = getRealClientIp(req);
-  const hashedIp = hashIp(clientIp);
-  const key = `public-templates:${hashedIp}`;
-
-  const now = Date.now();
-  const record = publicRateLimitStore.get(key);
-
-  if (!record || now > record.resetTime) {
-    publicRateLimitStore.set(key, {
-      count: 1,
-      resetTime: now + windowMs,
-    });
-    return next();
-  }
-
-  record.count += 1;
-  if (record.count > maxLimit) {
-    SystemLog.create({
-      level: "warn",
-      message: "Rate limit exceeded",
-      route: req.originalUrl,
-      statusCode: 429,
-      meta: {
-        type: "rate_limit",
-        ipHash: hashedIp,
-      }
-    }).catch(err => console.error("Error logging rate limit to SystemLog:", err));
-
-    res.status(429).json({
-      success: false,
-      message: "Too many requests. Please try again later.",
-    });
-    return;
-  }
-
-  next();
 };
 
-export const clearRateLimitStore = (): void => {
-  rateLimitStore.clear();
-  publicRateLimitStore.clear();
+export const createRateLimiter = (options: LimiterOptions) =>
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { max, windowMs } = options.limit();
+      if (max === 0) return next();
+
+      const ip = getRealClientIp(req);
+      const subject = options.by(req, ip);
+      if (!subject) return next();
+
+      const count = await hit(`${options.name}:${keyedHash(subject)}`, windowMs);
+      if (count <= max) return next();
+
+      if (options.log) {
+        SystemLog.create({
+          level: "warn",
+          message: "Rate limit exceeded",
+          route: req.originalUrl,
+          statusCode: 429,
+          meta: { type: "rate_limit", ipHash: hashIp(ip), slug: req.params?.slug },
+        }).catch((err) => console.error("Error logging rate limit to SystemLog:", err));
+      }
+      res.setHeader("Retry-After", String(Math.ceil(windowMs / 1000)));
+      res.status(429).json({
+        success: false,
+        message: options.message ?? "Too many requests. Please try again later.",
+        error: { code: "RATE_LIMITED", message: options.message ?? "Too many requests. Please try again later." },
+      });
+    } catch (err) {
+      // A limiter must never take the endpoint down with it: if the counter store is unavailable, let the request through.
+      console.error(`Rate limiter "${options.name}" failed open:`, err);
+      next();
+    }
+  };
+
+// ---- Limiters ---------------------------------------------------------------------------------
+
+// POST /api/public/:slug/submit: per IP and form. RATE_LIMIT_MAX / RATE_LIMIT_WINDOW_MS, default 10/min.
+export const submitRateLimiter = createRateLimiter({
+  name: "public-submit",
+  limit: () => ({ max: intEnv("RATE_LIMIT_MAX", 10), windowMs: intEnv("RATE_LIMIT_WINDOW_MS", 60000) || 60000 }),
+  by: (req, ip) => (req.params.slug ? `${ip}:${req.params.slug}` : null),
+  log: true,
+});
+
+// GET /api/public/:slug (form schema): per IP, generous because every page view calls it.
+export const publicFormReadLimiter = createRateLimiter({
+  name: "public-read",
+  limit: () => ({ max: intEnv("PUBLIC_READ_RATE_LIMIT_MAX", 120), windowMs: 60000 }),
+  by: (_req, ip) => ip,
+});
+
+// GET /api/templates/public: per IP. PUBLIC_RATE_LIMIT_MAX / PUBLIC_RATE_LIMIT_WINDOW_MS, default 30/min.
+export const publicTemplatesRateLimiter = createRateLimiter({
+  name: "public-templates",
+  limit: () => ({ max: intEnv("PUBLIC_RATE_LIMIT_MAX", 30), windowMs: intEnv("PUBLIC_RATE_LIMIT_WINDOW_MS", 60000) || 60000 }),
+  by: (_req, ip) => ip,
+  log: true,
+});
+
+// Unauthenticated auth endpoints (session, OTP, reset, password-changed): per IP.
+export const authRateLimiter = createRateLimiter({
+  name: "auth",
+  limit: () => ({ max: intEnv("AUTH_RATE_LIMIT_MAX", 30), windowMs: 60000 }),
+  by: (_req, ip) => ip,
+  log: true,
+});
+
+// Endpoints that send an email to an address taken from the request body: also per target address,
+// so one caller cannot flood somebody's inbox from many IPs, or a spoofed one.
+export const emailTargetRateLimiter = createRateLimiter({
+  name: "email-target",
+  limit: () => ({ max: intEnv("EMAIL_TARGET_RATE_LIMIT_MAX", 5), windowMs: 60 * 60 * 1000 }),
+  by: (req) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    return email || null;
+  },
+  message: "Too many emails were requested for this address. Please try again later.",
+});
+
+// Signed-in actions that are expensive or send mail: per user.
+export const userActionRateLimiter = (name: string, max: number, windowMs = 60 * 60 * 1000) =>
+  createRateLimiter({
+    name: `user-${name}`,
+    limit: () => ({ max: intEnv("USER_RATE_LIMIT_MAX", max), windowMs }),
+    by: (req, ip) => (req as any).user?._id?.toString() ?? ip,
+  });
+
+export const clearRateLimitStore = async (): Promise<void> => {
+  await RateLimitBucket.deleteMany({});
 };

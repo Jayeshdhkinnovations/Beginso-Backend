@@ -49,7 +49,7 @@ describe("Public Submit Security & Rate Limiting Integration Tests", () => {
   beforeEach(async () => {
     // Clear responses and rate limits
     await ResponseModel.deleteMany({});
-    clearRateLimitStore();
+    await clearRateLimitStore();
 
     // Reset env limits to avoid conflicting other tests
     delete process.env.RATE_LIMIT_MAX;

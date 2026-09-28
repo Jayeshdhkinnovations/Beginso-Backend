@@ -109,14 +109,29 @@ describe("IP Geolocation Resolution & Super Admin Integration", () => {
     expect(privateEntry.location).toBeNull();
   });
 
-  it("should extract client IP from first hop of x-forwarded-for even if x-real-ip contains proxy IP", () => {
+  it("uses the socket IP and ignores every client-supplied IP header and body field", () => {
     const { getRealClientIp } = require("../utils/ip");
+    delete process.env.PROXY_SHARED_SECRET;
     const mockReq: any = {
+      ip: "198.51.100.7",
+      body: { clientIp: "1.2.3.4", ip: "5.6.7.8" },
       headers: {
-        "x-real-ip": "34.205.78.180", // Proxy IP set by Nginx
-        "x-forwarded-for": "103.42.193.24, 34.205.78.180", // Real client IP first, proxy IP second
+        "x-client-ip": "9.9.9.9",
+        "x-real-ip": "34.205.78.180",
+        "x-forwarded-for": "103.42.193.24, 34.205.78.180",
+        "cf-connecting-ip": "8.8.8.8",
       },
     };
-    expect(getRealClientIp(mockReq)).toBe("103.42.193.24");
+    expect(getRealClientIp(mockReq)).toBe("198.51.100.7");
+  });
+
+  it("believes x-client-ip only together with the shared proxy secret", () => {
+    const { getRealClientIp } = require("../utils/ip");
+    process.env.PROXY_SHARED_SECRET = "s3cret-value";
+    const base: any = { ip: "198.51.100.7", headers: { "x-client-ip": "103.42.193.24" } };
+    expect(getRealClientIp({ ...base, headers: { ...base.headers, "x-proxy-secret": "s3cret-value" } })).toBe("103.42.193.24");
+    expect(getRealClientIp({ ...base, headers: { ...base.headers, "x-proxy-secret": "wrong" } })).toBe("198.51.100.7");
+    expect(getRealClientIp(base)).toBe("198.51.100.7");
+    delete process.env.PROXY_SHARED_SECRET;
   });
 });

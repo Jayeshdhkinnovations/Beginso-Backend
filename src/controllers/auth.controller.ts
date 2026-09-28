@@ -10,7 +10,6 @@ import AuthOtp from "../models/AuthOtp";
 import AuthTicket from "../models/AuthTicket";
 import Notification from "../models/Notification";
 
-import { signupSchema } from "../validations/auth.validator";
 import { generateToken } from "../utils/generateToken";
 import { mailService } from "../services/mail.service";
 import { checkVerificationRateLimit, checkResetRateLimit, hashKey } from "../utils/rateLimiter";
@@ -18,72 +17,6 @@ import { resolveIpLocation } from "../services/geolocation.service";
 import { recordMailLog } from "../models/MailLog";
 import { getRealClientIp } from "../utils/ip";
 import SessionModel, { hashIpAddress } from "../models/Session";
-
-export const signup = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  try {
-    // Step 1: Validate Request
-    const validatedData = signupSchema.parse(req.body);
-
-    // Step 2: Check Existing User
-    const existingUser = await User.findOne({
-      email: validatedData.email,
-    });
-
-    if (existingUser) {
-      res.status(409).json({
-        success: false,
-        message: "User already exists.",
-      });
-      return;
-    }
-
-    // Step 3: Create User in Firebase Authentication
-    const firebaseUser = await getAuth().createUser({
-      displayName: validatedData.fullName,
-      email: validatedData.email,
-      password: validatedData.password,
-    });
-
-    // Step 4: Save User in MongoDB (lazy model C1.3: no workspace created at signup)
-    const user = await User.create({
-      fullName: validatedData.fullName,
-      email: validatedData.email,
-      firebaseUid: firebaseUser.uid,
-      role: "admin",
-      theme: "system",
-    });
-
-    // No session is issued here: the email is unverified. The client signs in through Firebase and
-    // POST /api/auth/session, which enforces email verification and creates a revocable session.
-    res.status(201).json({
-      success: true,
-      message: "Signup successful. Verify your email to sign in.",
-      user,
-    });
-
-  } catch (error: any) {
-    if (error instanceof ZodError) {
-      res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: error.issues.map((e) => ({
-          field: e.path.join("."),
-          message: e.message,
-        })),
-        error: { message: "Validation failed" }
-      });
-      return;
-    }
-    console.error("Signup error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
-  }
-};
 
 export const getMe = async (
   req: Request,

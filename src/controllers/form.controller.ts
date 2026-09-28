@@ -18,6 +18,7 @@ import path from "path";
 import fs from "fs";
 import { getUploadDir } from "./upload.controller";
 import { getRealClientIp, hashIp } from "../utils/ip";
+import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
 import { logWorkspaceEvent } from "../services/event.service";
 
 const formService = new FormService();
@@ -995,24 +996,35 @@ export const getPublicFormBySlug = async (
   }
 };
 
+// Removes everything a failed or discarded public submission left on disk and in the Upload
+// collection. Files live at <uploads>/<owner>/<form>/responses/<responseId>/<name>, so the whole
+// response folder goes (nothing in it is kept unless the submission succeeded).
 const cleanupUploadedFiles = async (files: Express.Multer.File[], deleteFromDb = false) => {
   if (!files || files.length === 0) return;
-  const uploadDir = getUploadDir();
+  const uploadRoot = path.resolve(getUploadDir());
+  const dirs = new Set<string>();
   for (const file of files) {
-    const filePath = path.resolve(uploadDir, file.filename);
-    if (fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (e) {
-        console.error("Failed to delete physical file during cleanup:", e);
-      }
+    const filePath = path.resolve(file.path || path.join(uploadRoot, file.filename));
+    if (!filePath.startsWith(uploadRoot + path.sep)) continue;
+    dirs.add(path.dirname(filePath));
+    try {
+      fs.rmSync(filePath, { force: true });
+    } catch (e) {
+      console.error("Failed to delete physical file during cleanup:", e);
     }
     if (deleteFromDb) {
       try {
-        await Upload.deleteOne({ path: file.filename });
+        await Upload.deleteOne({ path: path.relative(uploadRoot, filePath) });
       } catch (e) {
         console.error("Failed to delete Upload document during cleanup:", e);
       }
+    }
+  }
+  for (const dir of dirs) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (e) {
+      console.error("Failed to remove upload folder during cleanup:", e);
     }
   }
 };
@@ -1155,13 +1167,13 @@ export const submitPublicForm = async (
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files as Express.Multer.File[]) {
         const fileSizeMB = file.size / (1024 * 1024);
-        if (fileSizeMB > 100) {
+        if (fileSizeMB > MAX_UPLOAD_MB()) {
           res.status(422).json({
             success: false,
             message: "Validation failed",
             errors: [{
               field: file.fieldname,
-              message: `File size exceeds the absolute limit of 100 MB.`
+              message: `File size exceeds the absolute limit of ${MAX_UPLOAD_MB()} MB.`
             }],
             error: { message: "Validation failed" }
           });
@@ -1256,9 +1268,19 @@ export const submitPublicForm = async (
     const fieldIdKeys = new Set(form.fields.map((f: any) => f.fieldId).filter(Boolean));
     const idPattern = /^[0-9a-fA-F]{24}$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     for (const key of Object.keys(answers)) {
-      if (!labelKeys.has(key) && (idPattern.test(key) || fieldIdKeys.has(key))) {
+      // Only answers to questions that exist on this form are stored: an unknown key (including
+      // ones starting with "$") is dropped instead of being written into the database verbatim.
+      if (!labelKeys.has(key)) {
         delete answers[key];
       }
+    }
+    if (Buffer.byteLength(JSON.stringify(answers)) > MAX_ANSWERS_BYTES()) {
+      res.status(413).json({
+        success: false,
+        message: "Submission is too large",
+        error: { code: "PAYLOAD_TOO_LARGE", message: "Submission is too large" },
+      });
+      return;
     }
 
     // Calculate client IP hash (SHA-256, never raw IP)

@@ -30,7 +30,7 @@ const InvitationSchema = new Schema<IInvitation>(
     },
     role: {
       type: String,
-      enum: ["owner", "admin", "member", "editor", "viewer", "reviewer"],
+      enum: ["admin", "member", "editor", "viewer", "reviewer"],
       default: "member",
       required: true,
     },

@@ -10,6 +10,7 @@ import path from "path";
 import mongoose from "mongoose";
 import { nanoid } from "nanoid";
 import { validateFieldsIntegrity, getHiddenFieldIds } from "../validations/form.validator";
+import { isSafePattern, MAX_PATTERN_INPUT } from "../utils/uploadLimits";
 import { buildSearchText } from "../utils/responseSearch";
 import { asString, clampInt, escapeRegex } from "../utils/safeInput";
 
@@ -209,6 +210,7 @@ export class FormService {
       page,
       limit,
       pages,
+      totalPages: pages, // same value as `pages`, under the name every other list endpoint uses
     };
   }
 
@@ -446,8 +448,10 @@ export class FormService {
             continue;
           }
           if (field.pattern) {
-            const regex = new RegExp(field.pattern);
-            if (!regex.test(value)) {
+            // Only a vetted pattern is ever run, and only on a bounded input (ReDoS guard).
+            // A pattern that was stored before it was vetted is not run at all.
+            const tooLong = value.length > MAX_PATTERN_INPUT;
+            if (tooLong || (isSafePattern(field.pattern) && !new RegExp(field.pattern).test(value))) {
               validationErrors.push({ field: field.label, message: `Field "${field.label}" must match format pattern: ${field.pattern}.` });
             }
           }

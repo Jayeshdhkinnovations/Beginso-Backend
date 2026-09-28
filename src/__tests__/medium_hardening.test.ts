@@ -264,3 +264,23 @@ describe("S-31 suspension ends sessions", () => {
     expect((await SessionModel.findById(s._id))?.revokedAt).toBeTruthy();
   });
 });
+
+describe("S-29 CORS allows only exact origins", () => {
+  const acao = async (origin: string) => (await request(app).get("/").set("Origin", origin)).headers["access-control-allow-origin"];
+
+  it("allows the real frontends and refuses look-alikes and wildcard hosts", async () => {
+    expect(await acao("https://beginso.com")).toBe("https://beginso.com");
+    expect(await acao("https://admin.beginso.com")).toBe("https://admin.beginso.com");
+    expect(await acao("https://beginso.vercel.app")).toBe("https://beginso.vercel.app");
+    expect(await acao("https://evil.vercel.app")).toBeUndefined();
+    expect(await acao("https://www.beginso.com")).toBeUndefined();
+    expect(await acao("https://app.beginso.com")).toBeUndefined();
+    expect(await acao("https://anything.dhkinnovations.com")).toBeUndefined();
+    expect(await acao("https://random.beginso.com")).toBeUndefined();
+    expect(await acao("https://beginso.com.evil.com")).toBeUndefined();
+  });
+
+  it("still answers requests that carry no Origin (the frontend proxy, curl)", async () => {
+    expect((await request(app).get("/")).status).toBe(200);
+  });
+});

@@ -25,45 +25,34 @@ import { buildInfo, describeBuild } from "./utils/buildInfo";
 const app = express();
 app.set("trust proxy", true);
 
-const defaultAllowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "http://localhost:5000",
-  "https://beginso.com",
-  "https://app.beginso.com",
-  "https://admin.beginso.com",
-  "https://www.beginso.com",
+// Browsers only call this API directly from these origins: the public form (beginso.com,
+// beginso.vercel.app) and the admin console. The main app goes through its own same-origin proxy, which sends no Origin header.
+// Exact origins only: no wildcard subdomains, so no other vercel.app or dhkinnovations.com
+// site can never make credentialed requests. Extra origins (staging) go in CORS_ORIGINS.
+const productionOrigins = [
+  "https://beginso.com", // the real frontend and the public form
+  "https://admin.beginso.com", // super-admin console
+  "https://beginso.vercel.app", // Vercel deployment of the frontend
 ];
+const developmentOrigins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5000"];
 
 const envAllowedOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
+  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
 
-const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
+const allowedOrigins = new Set([
+  ...productionOrigins,
+  ...(process.env.NODE_ENV === "production" ? [] : developmentOrigins),
+  ...envAllowedOrigins,
+]);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (server-to-server, curl, mobile, same-origin)
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      // Dynamically allow any *.beginso.com, *.dhkinnovations.com, or *.vercel.app domain
-      if (
-        /^https:\/\/([a-zA-Z0-9-]+\.)*beginso\.com$/.test(origin) ||
-        /^https:\/\/([a-zA-Z0-9-]+\.)*dhkinnovations\.com$/.test(origin) ||
-        /^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(origin)
-      ) {
-        return callback(null, true);
-      }
-
-      // Return false so CORS rejects origin cleanly without 500 error
-      callback(null, false);
+      // No Origin header: server-to-server (the frontend proxy), curl, health checks.
+      if (!origin) return callback(null, true);
+      // false makes CORS reject the origin cleanly, without a 500.
+      callback(null, allowedOrigins.has(origin));
     },
     credentials: true,
   })

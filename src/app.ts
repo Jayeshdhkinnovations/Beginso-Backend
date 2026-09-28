@@ -72,7 +72,9 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "unsafe-none" }
 }));
 app.use(express.json());
-app.use(morgan("dev"));
+if (process.env.NODE_ENV !== "test") {
+  app.use(morgan("dev"));
+}
 
 // Test comment to trigger CD self-hosted deployment verification
 app.get("/", (req, res) => {

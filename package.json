@@ -1,5 +1,5 @@
 {
-  "name": "onboard_backend",
+  "name": "beginso-backend",
   "version": "1.0.0",
   "private": true,
   "main": "dist/server.js",

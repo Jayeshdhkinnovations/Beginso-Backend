@@ -26,4 +26,3 @@ if (fs.existsSync(assetsSrcDir)) {
   }
   console.log('✅ Assets copied to dist directory');
 }
-

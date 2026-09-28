@@ -2,8 +2,6 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import User from "../models/User";
 
-dotenv.config();
-
 export const migrateUserTheme = async (): Promise<number> => {
   const result = await User.updateMany(
     {
@@ -21,6 +19,7 @@ export const migrateUserTheme = async (): Promise<number> => {
 };
 
 if (require.main === module) {
+  dotenv.config();
   const run = async () => {
     const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017/beginso";
     console.log("Connecting to MongoDB for User Theme migration...");

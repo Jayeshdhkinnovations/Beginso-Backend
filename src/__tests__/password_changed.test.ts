@@ -1,6 +1,7 @@
 import request from "supertest";
 import app from "../app";
 import { mailService } from "../services/mail.service";
+import User from "../models/User";
 
 jest.mock("../services/mail.service", () => ({
   mailService: {
@@ -20,6 +21,10 @@ const mockGetUserByEmail = getAuth().getUserByEmail;
 describe("Password Changed Success Email Endpoints", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // resetMocks (jest.config) strips the factory's mockResolvedValue before every test.
+    (mailService.sendMail as jest.Mock).mockResolvedValue({ messageId: "test-msg-id" });
+    // No database in this suite: without this the handler waits 10s for a mongoose connection.
+    jest.spyOn(User, "findOne").mockResolvedValue(null as any);
   });
 
   it("must never set a password on /api/auth/confirm-password-reset", async () => {

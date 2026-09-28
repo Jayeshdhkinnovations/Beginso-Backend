@@ -3,7 +3,6 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import healthRoutes from "./routes/health.routes";
-import testRoutes from "./routes/test.routes";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import workspaceRoutes from "./routes/workspace.routes";
@@ -81,7 +80,6 @@ app.get("/", (req, res) => {
         message: "Backend Running Successfully"
     });
 });
-app.use("/api/test", testRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/workspaces", workspaceRoutes);

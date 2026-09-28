@@ -1,12 +1,15 @@
-import dotenv from "dotenv";
+import "dotenv/config";
 import app from "./app";
 import connectDB from "./config/database";
 
-dotenv.config();
-
 if (!process.env.JWT_SECRET) {
-    console.warn("⚠️ JWT_SECRET environment variable is missing. Using default development secret key.");
-    process.env.JWT_SECRET = "default_development_secret_key_1234567890";
+    console.error("❌ JWT_SECRET environment variable is missing. Refusing to start.");
+    process.exit(1);
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.MONGODB_URI) {
+    console.error("❌ MONGODB_URI environment variable is missing in production. Refusing to start.");
+    process.exit(1);
 }
 
 const PORT = process.env.PORT || 5000;
@@ -19,7 +22,8 @@ const startServer = async () => {
             console.log(`🚀 Server running on port ${PORT}`);
         });
     } catch (error) {
-        console.error("Server failed to start");
+        console.error("Server failed to start", error);
+        process.exit(1);
     }
 };
 

@@ -8,9 +8,32 @@ jest.mock("../services/mail.service", () => ({
   },
 }));
 
+jest.mock("firebase-admin/auth", () => {
+  const authMock = { updateUser: jest.fn(), getUserByEmail: jest.fn() };
+  return { getAuth: () => authMock };
+});
+
+const { getAuth } = jest.requireMock("firebase-admin/auth");
+const mockUpdateUser = getAuth().updateUser;
+const mockGetUserByEmail = getAuth().getUserByEmail;
+
 describe("Password Changed Success Email Endpoints", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it("must never set a password on /api/auth/confirm-password-reset", async () => {
+    await request(app)
+      .post("/api/auth/confirm-password-reset")
+      .send({ email: "victim@beginso.com", newPassword: "attacker-chosen-1" });
+
+    expect(mockGetUserByEmail).not.toHaveBeenCalled();
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("does not expose /api/test routes", async () => {
+    const res = await request(app).post("/api/test/create-user");
+    expect(res.status).toBe(404);
   });
 
   it("should return 400 on /api/auth/confirm-password-reset when missing oobCode or newPassword", async () => {

@@ -693,7 +693,7 @@ export const requestForgotPassword = async (
 
 /**
  * POST /api/auth/confirm-password-reset
- * Updates user password in Firebase Admin SDK and dispatches password_changed_success email.
+ * Dispatches the password_changed_success email after a client-side Firebase password reset.
  */
 export const confirmPasswordReset = async (
   req: Request,
@@ -701,7 +701,7 @@ export const confirmPasswordReset = async (
 ): Promise<void> => {
   res.setHeader("Cache-Control", "no-store");
   try {
-    const { email: rawEmail, newPassword, oobCode } = req.body || {};
+    const { email: rawEmail, oobCode } = req.body || {};
 
     let targetEmail: string | undefined = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : undefined;
 
@@ -713,24 +713,8 @@ export const confirmPasswordReset = async (
       return;
     }
 
-    if (newPassword && typeof newPassword === "string") {
-      if (newPassword.length < 6) {
-        res.status(400).json({
-          success: false,
-          message: "Password must be at least 6 characters.",
-        });
-        return;
-      }
-
-      if (targetEmail) {
-        try {
-          const fbUser = await getAuth().getUserByEmail(targetEmail);
-          await getAuth().updateUser(fbUser.uid, { password: newPassword });
-        } catch (e: any) {
-          // Fallback if user lookup fails
-        }
-      }
-    }
+    // The password itself is changed client-side via Firebase confirmPasswordReset(oobCode).
+    // This endpoint must never set a password: it is public and has no proof of ownership.
 
     if (targetEmail) {
       const appUrl = process.env.APP_URL || "https://beginso.com";

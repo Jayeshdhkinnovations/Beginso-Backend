@@ -222,6 +222,10 @@ export const requirePermission = (
       // back to their default workspace below — otherwise a member of any workspace could
       // never actually see/create in their personal space, and personal forms silently
       // resolve into the wrong context on list/stat/create endpoints.
+      //
+      // SECURITY INVARIANT: the signal only selects the caller's own personal space. It never skips
+      // a check on a workspace-owned resource, and it never overrides the workspace named by the URL
+      // or resource. That decision is made further down, after the resource has been resolved.
       const isPersonalSignal = (val: unknown): boolean => {
         if (val === null) return true;
         const raw = Array.isArray(val) ? val[0] : val;
@@ -247,16 +251,6 @@ export const requirePermission = (
           (req.body.workspaceId !== undefined && isPersonalSignal(req.body.workspaceId))
         ));
 
-      if (hasExplicitPersonalSignal) {
-        authReq.workspaceId = null;
-        authReq.explicitPersonalContext = true;
-        authReq.membership = null;
-        authReq.membershipId = null;
-        authReq.workspaceRole = null;
-        next();
-        return;
-      }
-
       // 1. Resolve target workspace ID
       let targetWorkspaceId: string | null = null;
 
@@ -264,28 +258,9 @@ export const requirePermission = (
         targetWorkspaceId = await options.extractWorkspaceId(req);
       }
 
-      // Header scoping: x-workspace-id
-      if (!targetWorkspaceId && req.headers["x-workspace-id"]) {
-        const headerVal = req.headers["x-workspace-id"];
-        const rawId = Array.isArray(headerVal) ? headerVal[0] : headerVal;
-        if (rawId && typeof rawId === "string" && mongoose.Types.ObjectId.isValid(rawId.trim())) {
-          targetWorkspaceId = rawId.trim();
-        }
-      }
-
-      // Header scoping: x-workspace-slug
-      if (!targetWorkspaceId && req.headers["x-workspace-slug"]) {
-        const slugHeader = req.headers["x-workspace-slug"];
-        const rawSlug = Array.isArray(slugHeader) ? slugHeader[0] : slugHeader;
-        if (rawSlug && typeof rawSlug === "string") {
-          const ws = await Workspace.findOne({ slug: rawSlug.trim().toLowerCase() }).select("_id").lean();
-          if (ws) {
-            targetWorkspaceId = ws._id.toString();
-          }
-        }
-      }
-
-      // Resource-based workspace resolution
+      // Resource-based workspace resolution. The workspace that owns the URL/resource is
+      // authoritative: headers, query and body below can only choose a workspace when the
+      // request does not already name one.
       if (!targetWorkspaceId && options?.resourceType) {
         const rawParam =
           req.params.workspaceId ||
@@ -341,6 +316,41 @@ export const requirePermission = (
                 targetWorkspaceId = report.workspaceId.toString();
               }
             }
+          }
+        }
+      }
+
+      // Personal space: honoured only when no workspace owns this request, and never for
+      // permissions that are inherently workspace-level (team management, workspace settings,
+      // export, audit, delete). For those the signal is ignored and the normal role check runs.
+      const workspaceLevelPermission = !!permission && /^(workspace|team):/.test(permission);
+      if (!targetWorkspaceId && hasExplicitPersonalSignal && !workspaceLevelPermission) {
+        authReq.workspaceId = null;
+        authReq.explicitPersonalContext = true;
+        authReq.membership = null;
+        authReq.membershipId = null;
+        authReq.workspaceRole = null;
+        next();
+        return;
+      }
+
+      // Header scoping: x-workspace-id
+      if (!targetWorkspaceId && req.headers["x-workspace-id"]) {
+        const headerVal = req.headers["x-workspace-id"];
+        const rawId = Array.isArray(headerVal) ? headerVal[0] : headerVal;
+        if (rawId && typeof rawId === "string" && mongoose.Types.ObjectId.isValid(rawId.trim())) {
+          targetWorkspaceId = rawId.trim();
+        }
+      }
+
+      // Header scoping: x-workspace-slug
+      if (!targetWorkspaceId && req.headers["x-workspace-slug"]) {
+        const slugHeader = req.headers["x-workspace-slug"];
+        const rawSlug = Array.isArray(slugHeader) ? slugHeader[0] : slugHeader;
+        if (rawSlug && typeof rawSlug === "string") {
+          const ws = await Workspace.findOne({ slug: rawSlug.trim().toLowerCase() }).select("_id").lean();
+          if (ws) {
+            targetWorkspaceId = ws._id.toString();
           }
         }
       }

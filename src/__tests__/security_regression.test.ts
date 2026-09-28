@@ -176,17 +176,17 @@ describe("Sanity: the fixtures behave as a legitimate tenant would expect", () =
 });
 
 describe("S-01 personal-signal bypass of requirePermission", () => {
-  openHole("non-member must not list B members with x-workspace-id: personal", async () => {
+  it("non-member must not list B members with x-workspace-id: personal", async () => {
     const res = await auth(request(app).get(`/api/workspaces/${wsB._id}/members`).set("x-workspace-id", "personal"), outsider);
     expect(res.status).toBe(403);
   });
 
-  openHole("non-member must not read B audit log with ?workspaceId=personal", async () => {
+  it("non-member must not read B audit log with ?workspaceId=personal", async () => {
     const res = await auth(request(app).get(`/api/workspaces/${wsB._id}/audit?workspaceId=personal`), outsider);
     expect(res.status).toBe(403);
   });
 
-  openHole("non-member must not invite themselves as admin into B", async () => {
+  it("non-member must not invite themselves as admin into B", async () => {
     const res = await auth(
       request(app)
         .post(`/api/workspaces/${wsB._id}/invitations`)
@@ -198,14 +198,14 @@ describe("S-01 personal-signal bypass of requirePermission", () => {
     expect(await Invitation.countDocuments({ workspaceId: wsB._id, email: outsider.email })).toBe(0);
   });
 
-  openHole("reviewer must not delete a form by sending ?workspaceId=personal", async () => {
+  it("reviewer must not delete a form by sending ?workspaceId=personal", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     const res = await auth(request(app).delete(`/api/forms/${form._id}?workspaceId=personal`), reviewerB);
     expect(res.status).toBe(403);
     expect(await Form.findById(form._id)).not.toBeNull();
   });
 
-  openHole("reviewer must not promote themselves to admin with a personal signal", async () => {
+  it("reviewer must not promote themselves to admin with a personal signal", async () => {
     const res = await auth(
       request(app)
         .patch(`/api/workspaces/${wsB._id}/members/${reviewerB._id}`)
@@ -219,8 +219,42 @@ describe("S-01 personal-signal bypass of requirePermission", () => {
   });
 });
 
+describe("The personal signal still works for the caller's own personal space", () => {
+  it("lists only the caller's personal forms, never another workspace's forms", async () => {
+    const mine = await mkForm(null, outsider._id);
+    await mkForm(wsB._id, ownerB._id);
+    const res = await auth(request(app).get("/api/forms").set("x-workspace-id", "personal"), outsider);
+    expect(res.status).toBe(200);
+    const ids = (res.body.forms ?? []).map((f: any) => f._id);
+    expect(ids).toContain(mine._id.toString());
+    const workspaceIds = (res.body.forms ?? []).map((f: any) => f.workspaceId ?? null);
+    expect(workspaceIds.every((w: any) => w === null)).toBe(true);
+  });
+
+  it("lets the creator read their own personal form", async () => {
+    const mine = await mkForm(null, outsider._id);
+    const res = await auth(request(app).get(`/api/forms/${mine._id}?workspaceId=personal`), outsider);
+    expect(res.status).toBe(200);
+  });
+
+  it("does not let another user read someone's personal form", async () => {
+    const theirs = await mkForm(null, ownerB._id);
+    const res = await auth(request(app).get(`/api/forms/${theirs._id}?workspaceId=personal`), outsider);
+    expect([403, 404]).toContain(res.status);
+  });
+
+  it("lets a user with no workspace create a personal form", async () => {
+    const res = await auth(
+      request(app).post("/api/forms").set("x-workspace-id", "personal").send({ title: "Mine", fields: [{ label: "Q", type: "short_text", required: false }] }),
+      outsider
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.form?.workspaceId ?? null).toBeNull();
+  });
+});
+
 describe("S-02 the workspace header must not override the workspace in the URL", () => {
-  openHole("owner of A must not change a B member's role by sending x-workspace-id: A", async () => {
+  it("owner of A must not change a B member's role by sending x-workspace-id: A", async () => {
     const res = await auth(
       request(app).patch(`/api/workspaces/${wsB._id}/members/${editorB._id}`).set("x-workspace-id", wsA._id.toString()).send({ role: "viewer" }),
       ownerA
@@ -230,19 +264,19 @@ describe("S-02 the workspace header must not override the workspace in the URL",
     expect(m?.role).toBe("editor");
   });
 
-  openHole("owner of A must not read B's audit log by sending x-workspace-id: A", async () => {
+  it("owner of A must not read B's audit log by sending x-workspace-id: A", async () => {
     const res = await auth(request(app).get(`/api/workspaces/${wsB._id}/audit`).set("x-workspace-id", wsA._id.toString()), ownerA);
     expect(res.status).toBe(403);
   });
 
-  openHole("owner of A must not revoke B's invitation by sending x-workspace-id: A", async () => {
+  it("owner of A must not revoke B's invitation by sending x-workspace-id: A", async () => {
     const inv = await mkInvite(wsB._id, "target@sec.test");
     const res = await auth(request(app).delete(`/api/invitations/${inv.token}`).set("x-workspace-id", wsA._id.toString()), ownerA);
     expect([403, 404]).toContain(res.status);
     expect((await Invitation.findById(inv._id))?.status).toBe("pending");
   });
 
-  openHole("owner of A must not resend B's invitation by sending x-workspace-id: A", async () => {
+  it("owner of A must not resend B's invitation by sending x-workspace-id: A", async () => {
     const inv = await mkInvite(wsB._id, "resend-target@sec.test");
     const res = await auth(request(app).post(`/api/invitations/${inv._id}/resend`).set("x-workspace-id", wsA._id.toString()), ownerA);
     expect([403, 404]).toContain(res.status);
@@ -250,7 +284,7 @@ describe("S-02 the workspace header must not override the workspace in the URL",
 });
 
 describe("S-13 role checked in one workspace, data changed in another", () => {
-  openHole("a reviewer in B who owns A must not delete a B response via x-workspace-id: A", async () => {
+  it("a reviewer in B who owns A must not delete a B response via x-workspace-id: A", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     const resp = await ResponseModel.create({ formId: form._id, answers: {} });
     const res = await auth(request(app).delete(`/api/responses/${resp._id}`).set("x-workspace-id", wsA._id.toString()), dual);
@@ -287,7 +321,7 @@ describe("S-11 form write path", () => {
 });
 
 describe("S-06 form access grants", () => {
-  openHole("a non-member must not grant themselves admin on a B form", async () => {
+  it("a non-member must not grant themselves admin on a B form", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     const res = await auth(
       request(app).post(`/api/forms/${form._id}/grants?workspaceId=personal`).send({ userId: outsider._id.toString(), role: "admin" }),
@@ -297,7 +331,7 @@ describe("S-06 form access grants", () => {
     expect(await FormAccessGrant.countDocuments({ formId: form._id, userId: outsider._id })).toBe(0);
   });
 
-  openHole("owner of A must not grant access on a B form via x-workspace-id: A", async () => {
+  it("owner of A must not grant access on a B form via x-workspace-id: A", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     const res = await auth(
       request(app).post(`/api/forms/${form._id}/grants`).set("x-workspace-id", wsA._id.toString()).send({ userId: outsider._id.toString(), role: "admin" }),
@@ -309,13 +343,13 @@ describe("S-06 form access grants", () => {
 });
 
 describe("S-18 form events and anonymous-ish submissions", () => {
-  openHole("a non-member must not read a B form's events with ?workspaceId=personal", async () => {
+  it("a non-member must not read a B form's events with ?workspaceId=personal", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     const res = await auth(request(app).get(`/api/forms/${form._id}/events?workspaceId=personal`), outsider);
     expect(res.status).toBe(403);
   });
 
-  openHole("a non-member must not inject a response into a draft B form", async () => {
+  it("a non-member must not inject a response into a draft B form", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     const res = await auth(request(app).post(`/api/forms/${form._id}/submissions?workspaceId=personal`).send({ answers: { a: 1 } }), outsider);
     expect(res.status).toBeGreaterThanOrEqual(400);

@@ -6,7 +6,30 @@ on:
       - main
 
 jobs:
+  # Tests run on a GitHub-hosted runner, not on the production server: each suite boots its
+  # own in-memory mongod and the full run OOM-killed the self-hosted runner (run #127).
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test
+
   deploy:
+    needs: test
     runs-on: self-hosted
 
     steps:
@@ -20,9 +43,6 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
-
-      - name: Run Tests
-        run: npm test
 
       - name: Build Code
         run: npm run build

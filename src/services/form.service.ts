@@ -2,6 +2,7 @@ import { FormRepository } from "../repositories/form.repository";
 import Form, { IForm, IFormField } from "../models/Form";
 import ResponseModel from "../models/Response";
 import Upload from "../models/Upload";
+import FormAccessGrant from "../models/FormAccessGrant";
 import { getUploadDir } from "../controllers/upload.controller";
 import fs from "fs";
 import path from "path";
@@ -126,6 +127,10 @@ export class FormService {
       formDetails.slug = `${base}-${randomSuffix}`.replace(/-+/g, "-");
     }
     formDetails.schemaVersion = 1;
+    if (formDetails.status === "published") {
+      formDetails.publishedSlug = await this.generateUniqueSlug();
+      formDetails.publishedAt = new Date();
+    }
     return await this.formRepository.create(workspaceId, formDetails);
   }
 
@@ -417,6 +422,7 @@ export class FormService {
 
     // 4. Delete all associated responses from MongoDB
     await ResponseModel.deleteMany({ formId });
+    await FormAccessGrant.deleteMany({ formId });
 
     // 5. Delete the form from MongoDB
     await this.formRepository.delete(formId, workspaceId);

@@ -345,29 +345,118 @@ describe("S-13 role checked in one workspace, data changed in another", () => {
 });
 
 describe("S-11 form write path", () => {
-  openHole("an editor must not publish through PATCH status (forms:publish is required)", async () => {
+  it("an editor must not publish through PATCH status (forms:publish is required)", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     const res = await auth(request(app).patch(`/api/forms/${form._id}`).send({ status: "published" }), editorB);
     expect(res.status).toBe(403);
     expect((await Form.findById(form._id))?.status).toBe("draft");
   });
 
-  openHole("an editor must not set publishedSlug through PUT", async () => {
+  it("an editor must not set publishedSlug through PUT", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     await auth(request(app).put(`/api/forms/${form._id}`).send({ title: "t", publishedSlug: "hijacked-slug" }), editorB);
     expect((await Form.findById(form._id))?.publishedSlug).not.toBe("hijacked-slug");
   });
 
-  openHole("PUT must not be able to move a form out of its workspace with workspaceId: null", async () => {
+  it("PUT must not be able to move a form out of its workspace with workspaceId: null", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     await auth(request(app).put(`/api/forms/${form._id}`).send({ title: "t", workspaceId: null }), editorB);
     expect((await Form.findById(form._id))?.workspaceId?.toString()).toBe(wsB._id.toString());
   });
 
-  openHole("PUT must not honour Mongo operators in the body", async () => {
+  it("PUT must not honour Mongo operators in the body", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     await auth(request(app).put(`/api/forms/${form._id}`).send({ title: "t", $set: { workspaceId: wsA._id.toString() } }), editorB);
     expect((await Form.findById(form._id))?.workspaceId?.toString()).toBe(wsB._id.toString());
+  });
+});
+
+describe("B5 form write path", () => {
+  it("an editor can still autosave a form with PATCH (title, fields)", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    const res = await auth(
+      request(app).patch(`/api/forms/${form._id}`).send({ title: "Edited by editor", fields: [{ label: "Q", type: "short_text", required: false }] }),
+      editorB
+    );
+    expect(res.status).toBe(200);
+    expect((await Form.findById(form._id))?.title).toBe("Edited by editor");
+  });
+
+  it("re-sending the current status is not a status change", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    const res = await auth(request(app).patch(`/api/forms/${form._id}`).send({ status: "draft", title: "Same status" }), editorB);
+    expect(res.status).toBe(200);
+  });
+
+  it("an editor must not create a form that is already published", async () => {
+    const res = await auth(
+      request(app).post("/api/forms").set("x-workspace-id", wsB._id.toString()).send({
+        title: "Sneaky published",
+        status: "published",
+        fields: [{ label: "Q", type: "short_text", required: false }],
+      }),
+      editorB
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("an owner creating a published form cannot choose the public slug", async () => {
+    const res = await auth(
+      request(app).post("/api/forms").set("x-workspace-id", wsB._id.toString()).send({
+        title: "Owner published",
+        status: "published",
+        publishedSlug: "squatted-slug",
+        fields: [{ label: "Q", type: "short_text", required: false }],
+      }),
+      ownerB
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.form.publishedSlug).toBeTruthy();
+    expect(res.body.form.publishedSlug).not.toBe("squatted-slug");
+  });
+
+  it("an owner can still publish and close through the dedicated routes", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    expect((await auth(request(app).post(`/api/forms/${form._id}/publish`), ownerB)).status).toBe(200);
+    expect((await auth(request(app).post(`/api/forms/${form._id}/close`), ownerB)).status).toBe(200);
+  });
+});
+
+describe("B5 form access grants are an owner/admin decision", () => {
+  it("an editor cannot list, create or revoke grants", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    expect((await auth(request(app).get(`/api/forms/${form._id}/grants`), editorB)).status).toBe(403);
+    expect((await auth(request(app).post(`/api/forms/${form._id}/grants`).send({ userId: outsider._id.toString(), role: "viewer" }), editorB)).status).toBe(403);
+    expect((await auth(request(app).delete(`/api/forms/${form._id}/grants/${outsider._id}`), editorB)).status).toBe(403);
+    expect(await FormAccessGrant.countDocuments({ formId: form._id })).toBe(0);
+  });
+
+  it("the workspace owner can share a form, and the grantee can then read it", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    const created = await auth(request(app).post(`/api/forms/${form._id}/grants`).send({ userId: outsider._id.toString(), role: "viewer" }), ownerB);
+    expect(created.status).toBe(201);
+    const read = await auth(request(app).get(`/api/forms/${form._id}`), outsider);
+    expect(read.status).toBe(200);
+  });
+
+  it("a grantee cannot re-share the form, even with an admin grant", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    await FormAccessGrant.create({ formId: form._id, userId: outsider._id, role: "admin", grantedBy: ownerB._id });
+    const res = await auth(request(app).post(`/api/forms/${form._id}/grants`).send({ userId: reviewerB._id.toString(), role: "viewer" }), outsider);
+    expect(res.status).toBe(403);
+  });
+
+  it("sharing with a user that does not exist is rejected", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    const res = await auth(request(app).post(`/api/forms/${form._id}/grants`).send({ userId: new mongoose.Types.ObjectId().toString(), role: "viewer" }), ownerB);
+    expect(res.status).toBe(404);
+  });
+
+  it("deleting a form removes its access grants", async () => {
+    const form = await mkForm(wsB._id, ownerB._id);
+    await FormAccessGrant.create({ formId: form._id, userId: outsider._id, role: "viewer", grantedBy: ownerB._id });
+    expect((await auth(request(app).delete(`/api/forms/${form._id}`), ownerB)).status).toBe(204);
+    expect(await FormAccessGrant.countDocuments({ formId: form._id })).toBe(0);
   });
 });
 

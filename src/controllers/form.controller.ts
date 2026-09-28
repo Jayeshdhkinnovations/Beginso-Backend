@@ -75,6 +75,50 @@ const resolveFormAccess = async (
   return { formDoc, workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : "", isAuthorized: false };
 };
 
+// Changing a form's status (publish / close / unpublish) needs forms:publish. Personal forms and
+// super admins have no workspace role, so they are not restricted.
+const canChangeStatus = (authReq: any): boolean => {
+  const role = authReq.workspaceRole;
+  return !role || hasPermission(role, "forms:publish");
+};
+
+const canPublishIn = async (user: any, workspaceId: string | null): Promise<boolean> => {
+  if (!workspaceId || user.role === "super_admin") return true;
+  const membership = await Membership.findOne({ userId: user._id, workspaceId }).select("role").lean();
+  if (membership) return hasPermission(membership.role, "forms:publish");
+  const ws = await Workspace.findById(workspaceId).select("owner").lean();
+  return ws?.owner?.toString() === user._id.toString();
+};
+
+// Sharing a form is an owner/admin decision. A grantee must not be able to re-share it, and an
+// editor (forms:write) must not be able to hand out admin access.
+const assertCanManageGrants = async (req: Request, res: Response): Promise<boolean> => {
+  const authReq = req as any;
+  if (authReq.user.role === "super_admin") return true;
+  const formId = String(req.params.formId || req.params.id);
+  const form = mongoose.Types.ObjectId.isValid(formId)
+    ? await Form.findById(formId).select("workspaceId createdBy").lean()
+    : null;
+  if (!form) {
+    res.status(404).json({ success: false, message: "Form not found", error: { message: "Form not found" } });
+    return false;
+  }
+  const allowed = form.workspaceId
+    ? !authReq.formAccessGrant &&
+      authReq.workspaceId === form.workspaceId.toString() &&
+      hasPermission(authReq.workspaceRole, "team:manage")
+    : form.createdBy?.toString() === authReq.user._id.toString();
+  if (!allowed) {
+    res.status(403).json({
+      success: false,
+      message: "Forbidden: only the workspace owner or an admin can manage form access",
+      error: { code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS", message: "Forbidden: only the workspace owner or an admin can manage form access" },
+    });
+    return false;
+  }
+  return true;
+};
+
 export const createForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
@@ -250,6 +294,19 @@ export const createForm = async (req: Request, res: Response, next: NextFunction
       }
     }
 
+    // A non-draft status at creation needs the same permission as publishing.
+    if (validatedData.status !== "draft" && !(await canPublishIn(authReq.user, resolvedWorkspaceId))) {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: Insufficient permissions to publish forms in this workspace",
+        error: {
+          code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
+          message: "Forbidden: Insufficient permissions to publish forms in this workspace",
+        },
+      });
+      return;
+    }
+
     // Step 3: Clean helper fields and set createdBy
     delete (validatedData as any).workspaceId;
     delete (validatedData as any).destinationWorkspaceId;
@@ -417,80 +474,6 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
-export const updateForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const authReq = req as any;
-    if (!authReq.user) {
-      res.status(401).json({
-        success: false,
-        message: "Not authorized",
-        error: { message: "Not authorized" }
-      });
-      return;
-    }
-
-    if (req.body?.workspaceId || req.params?.workspaceId) {
-      res.status(400).json({
-        success: false,
-        message: "workspaceId must not be provided in body or params",
-        error: { message: "workspaceId must not be provided in body or params" }
-      });
-      return;
-    }
-
-    const formId = req.params.formId || req.params.id;
-    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
-      formId as string,
-      authReq.user,
-      authReq.formAccessGrant
-    );
-
-    if (!formDoc) {
-      res.status(404).json({
-        success: false,
-        message: "Form not found",
-        error: { message: "Form not found" }
-      });
-      return;
-    }
-
-    if (!isAuthorized) {
-      res.status(403).json({
-        success: false,
-        message: "Forbidden: You do not have permission to update this form",
-        error: { message: "Forbidden: You do not have permission to update this form" }
-      });
-      return;
-    }
-
-    const form = await formService.updateForm(formId as string, workspaceId, req.body);
-
-    res.status(200).json({
-      _id: form._id,
-      title: form.title,
-      description: form.description,
-      workspaceId: form.workspaceId,
-      status: form.status,
-      fields: form.fields,
-      pages: form.pages,
-      branding: form.branding,
-      settings: form.settings,
-      slug: form.status === "published" ? (form.publishedSlug || form.slug) : form.slug,
-      publishedSlug: form.publishedSlug,
-      publishedAt: form.publishedAt,
-      schemaVersion: form.schemaVersion,
-      createdAt: form.createdAt,
-      updatedAt: form.updatedAt,
-      // For compatibility
-      success: true,
-      message: "Form updated successfully",
-      form,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const patchForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
@@ -540,19 +523,23 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
     // Validate payload using Zod patch schema
     const validatedData = patchFormSchema.parse(req.body);
 
-    if (validatedData.status === "published") {
-      const form = await formService.publishForm(formId as string, workspaceId, validatedData);
-      res.status(200).json({
-        _id: form._id,
-        status: form.status,
-        slug: form.publishedSlug,
-        publishedAt: form.publishedAt,
-        success: true,
+    if (validatedData.status !== undefined && validatedData.status !== formDoc.status && !canChangeStatus(authReq)) {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: Insufficient permissions to change the form status",
+        error: {
+          code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
+          message: "Forbidden: Insufficient permissions to change the form status",
+        },
       });
       return;
     }
 
-    const form = await formService.patchForm(formId as string, workspaceId, validatedData);
+    // Publishing through PATCH/PUT returns the same full form payload as any other update.
+    const form =
+      validatedData.status === "published"
+        ? await formService.publishForm(formId as string, workspaceId, validatedData)
+        : await formService.patchForm(formId as string, workspaceId, validatedData);
 
     res.status(200).json({
       _id: form._id,
@@ -579,6 +566,9 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
     next(error);
   }
 };
+
+// PUT and PATCH share one validated path: the body is never passed to Mongo as-is.
+export const updateForm = patchForm;
 
 export const publishForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -1473,6 +1463,7 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
 
 export const listFormGrants = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    if (!(await assertCanManageGrants(req, res))) return;
     const rawId = req.params.formId || req.params.id;
     const grants = await FormAccessGrant.find({ formId: rawId })
       .populate("userId", "fullName email avatarUrl")
@@ -1527,6 +1518,7 @@ export const listFormGrants = async (req: Request, res: Response, next: NextFunc
 
 export const createFormGrant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    if (!(await assertCanManageGrants(req, res))) return;
     const authReq = req as any;
     const rawId = req.params.formId || req.params.id;
     const { email, userId, role, accessLevel, permission } = req.body;
@@ -1552,6 +1544,11 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
         message: "email or userId is required",
         error: { message: "email or userId is required" },
       });
+      return;
+    }
+
+    if (typeof targetUserId !== "string" || !mongoose.Types.ObjectId.isValid(targetUserId) || !(await User.exists({ _id: targetUserId }))) {
+      res.status(404).json({ success: false, message: "User not found", error: { message: "User not found" } });
       return;
     }
 
@@ -1621,6 +1618,7 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
 
 export const revokeFormGrant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    if (!(await assertCanManageGrants(req, res))) return;
     const rawId = req.params.formId || req.params.id;
     const rawUser = req.params.userId;
     const userIdStr = String(Array.isArray(rawUser) ? rawUser[0] : rawUser || "").trim();

@@ -273,7 +273,7 @@ describe("S-29 CORS allows only exact origins", () => {
     expect(await acao("https://admin.beginso.com")).toBe("https://admin.beginso.com");
     expect(await acao("https://beginso.vercel.app")).toBe("https://beginso.vercel.app");
     expect(await acao("https://evil.vercel.app")).toBeUndefined();
-    expect(await acao("https://www.beginso.com")).toBeUndefined();
+    expect(await acao("https://www.beginso.com")).toBe("https://www.beginso.com");
     expect(await acao("https://app.beginso.com")).toBeUndefined();
     expect(await acao("https://anything.dhkinnovations.com")).toBeUndefined();
     expect(await acao("https://random.beginso.com")).toBeUndefined();

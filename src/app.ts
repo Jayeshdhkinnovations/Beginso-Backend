@@ -31,6 +31,7 @@ app.set("trust proxy", true);
 // site can never make credentialed requests. Extra origins (staging) go in CORS_ORIGINS.
 const productionOrigins = [
   "https://beginso.com", // the real frontend and the public form
+  "https://www.beginso.com",
   "https://admin.beginso.com", // super-admin console
   "https://beginso.vercel.app", // Vercel deployment of the frontend
 ];

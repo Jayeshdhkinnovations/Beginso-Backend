@@ -5,7 +5,7 @@ import fs from "fs";
 import { z } from "zod";
 import ReportModel from "../models/Report";
 import Form from "../models/Form";
-import Workspace from "../models/Workspace";
+import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { generateReportAsync } from "../services/report.service";
 
 const reportCreateSchema = z.object({
@@ -17,28 +17,9 @@ const reportCreateSchema = z.object({
   to: z.string().optional(),
 });
 
-/**
- * Helper to resolve workspaceId from req.user
- */
 const getWorkspaceId = async (req: Request): Promise<string | null> => {
-  const authReq = req as any;
-  if (!authReq.user) return null;
-
-  let wsId = authReq.user.workspaceId;
-  if (wsId && typeof wsId === "object" && wsId._id) {
-    wsId = wsId._id.toString();
-  } else if (wsId) {
-    wsId = wsId.toString();
-  }
-
-  if (!wsId) {
-    const workspace = await Workspace.findOne({ owner: authReq.user._id });
-    if (workspace) {
-      wsId = workspace._id.toString();
-    }
-  }
-
-  return wsId ? wsId.toString() : null;
+  const workspaceId = await getVerifiedWorkspaceId(req);
+  return workspaceId || null;
 };
 
 /**

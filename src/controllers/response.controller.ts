@@ -3,24 +3,11 @@ import { ZodError } from "zod";
 import { ResponseService } from "../services/response.service";
 import { updateResponseStatusSchema } from "../validations/response.validator";
 import mongoose from "mongoose";
-import Workspace from "../models/Workspace";
-import Membership from "../models/Membership";
+import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import FormAccessGrant from "../models/FormAccessGrant";
 import ResponseModel from "../models/Response";
 
 const responseService = new ResponseService();
-
-const getWorkspaceIdFromUser = async (user: any): Promise<string> => {
-  if (user.workspaceId) {
-    return user.workspaceId._id ? user.workspaceId._id.toString() : user.workspaceId.toString();
-  }
-  const membership = await Membership.findOne({ userId: user._id }).select("workspaceId").lean();
-  if (membership && membership.workspaceId) {
-    return membership.workspaceId.toString();
-  }
-  const workspace = await Workspace.findOne({ owner: user._id });
-  return workspace ? workspace._id.toString() : "";
-};
 
 export const getResponses = async (
   req: Request,
@@ -38,7 +25,7 @@ export const getResponses = async (
       return;
     }
 
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
+    const workspaceId = await getVerifiedWorkspaceId(req);
     if (!workspaceId) {
       res.status(200).json({
         success: true,
@@ -97,7 +84,7 @@ export const getResponseStats = async (
 
     const { formId } = req.query;
     let isGrant = false;
-    let workspaceId = authReq.workspaceId || (await getWorkspaceIdFromUser(authReq.user));
+    let workspaceId = await getVerifiedWorkspaceId(req);
     if (formId && mongoose.Types.ObjectId.isValid(String(formId))) {
       const grant = await FormAccessGrant.findOne({ formId: String(formId), userId: authReq.user._id });
       if (grant) {
@@ -163,7 +150,7 @@ export const getResponseDetail = async (
         if (grant) isGrant = true;
       }
     }
-    const workspaceId = authReq.workspaceId || (await getWorkspaceIdFromUser(authReq.user));
+    const workspaceId = await getVerifiedWorkspaceId(req);
 
     const host = req.get("host") || "localhost";
     const protocol = req.protocol || "http";
@@ -209,7 +196,7 @@ export const updateResponseStatus = async (
       return;
     }
 
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
+    const workspaceId = await getVerifiedWorkspaceId(req);
     const { id } = req.params;
 
     const parsed = updateResponseStatusSchema.parse({
@@ -269,7 +256,7 @@ export const deleteResponse = async (
       return;
     }
 
-    const workspaceId = await getWorkspaceIdFromUser(authReq.user);
+    const workspaceId = await getVerifiedWorkspaceId(req);
     const { id } = req.params;
 
     await responseService.deleteResponse(workspaceId, String(id));
@@ -314,7 +301,7 @@ export const getResponseFileUrl = async (
         if (grant) isGrant = true;
       }
     }
-    const workspaceId = authReq.workspaceId || (await getWorkspaceIdFromUser(authReq.user));
+    const workspaceId = await getVerifiedWorkspaceId(req);
 
     const host = req.get("host") || "localhost";
     const protocol = req.protocol || "http";

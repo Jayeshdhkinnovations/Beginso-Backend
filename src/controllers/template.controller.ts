@@ -3,19 +3,12 @@ import Template from "../models/Template";
 import { FormService } from "../services/form.service";
 import Workspace from "../models/Workspace";
 import Membership from "../models/Membership";
+import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { getTemplateDescription, getTemplateSettings } from "../utils/templateDefaults";
 
 const formService = new FormService();
-
-const getWorkspaceIdFromUser = async (user: any): Promise<string> => {
-  if (user.workspaceId) {
-    return user.workspaceId._id ? user.workspaceId._id.toString() : user.workspaceId.toString();
-  }
-  const workspace = await Workspace.findOne({ owner: user._id });
-  return workspace ? workspace._id.toString() : "";
-};
 
 // Shared helper — single source of truth for "fetch active templates + serialize"
 const fetchActiveTemplates = async () => {
@@ -131,7 +124,7 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
         workspaceId = target._id.toString();
       }
     } else {
-      workspaceId = await getWorkspaceIdFromUser(authReq.user);
+      workspaceId = await getVerifiedWorkspaceId(req);
       if (!workspaceId) {
         res.status(400).json({ success: false, message: "No active workspace found for this user" });
         return;

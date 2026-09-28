@@ -5,6 +5,7 @@ import Workspace from "../models/Workspace";
 import User from "../models/User";
 import SessionModel from "../models/Session";
 import { logWorkspaceEvent } from "../services/event.service";
+import { assertVerifiedWorkspace } from "../utils/requestContext";
 
 // Helper to resolve workspace from param (ObjectId or slug)
 const resolveWorkspace = async (paramId: any) => {
@@ -51,6 +52,8 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
       });
       return;
     }
+
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
 
     const memberships = await Membership.find({ workspaceId: workspace._id })
       .populate("userId", "fullName email avatarUrl")
@@ -148,6 +151,8 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
       });
       return;
     }
+
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
 
     const rawMember = req.params.memberId;
     const memberId = String(Array.isArray(rawMember) ? rawMember[0] : rawMember || "").trim();
@@ -260,6 +265,8 @@ export const removeMember = async (req: Request, res: Response, next: NextFuncti
       });
       return;
     }
+
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
 
     const rawMember = req.params.memberId;
     const memberId = String(Array.isArray(rawMember) ? rawMember[0] : rawMember || "").trim();

@@ -44,6 +44,7 @@ import Invitation from "../models/Invitation";
 import FormAccessGrant from "../models/FormAccessGrant";
 import SessionModel from "../models/Session";
 import Upload from "../models/Upload";
+import Template from "../models/Template";
 import { generateToken } from "../utils/generateToken";
 
 const openHole = process.env.SEC_SHOW_OPEN ? it : it.failing;
@@ -280,6 +281,56 @@ describe("S-02 the workspace header must not override the workspace in the URL",
     const inv = await mkInvite(wsB._id, "resend-target@sec.test");
     const res = await auth(request(app).post(`/api/invitations/${inv._id}/resend`).set("x-workspace-id", wsA._id.toString()), ownerA);
     expect([403, 404]).toContain(res.status);
+  });
+});
+
+describe("B3 handlers act on the workspace the middleware verified", () => {
+  // `dual` owns A but their sticky default workspace is B (where they are only a reviewer).
+  it("responses list follows x-workspace-id, not the user's default workspace", async () => {
+    const formA = await mkForm(wsA._id, ownerA._id);
+    const withHeader = await auth(request(app).get(`/api/responses?formId=${formA._id}`).set("x-workspace-id", wsA._id.toString()), dual);
+    expect(withHeader.status).toBe(200);
+    const withoutHeader = await auth(request(app).get(`/api/responses?formId=${formA._id}`), dual);
+    expect(withoutHeader.status).toBe(403);
+  });
+
+  it("analytics follows x-workspace-id, not the user's default workspace", async () => {
+    const formA = await mkForm(wsA._id, ownerA._id);
+    const res = await auth(request(app).get(`/api/analytics/overview?formId=${formA._id}`).set("x-workspace-id", wsA._id.toString()), dual);
+    expect(res.status).toBe(200);
+  });
+
+  it("GET /workspaces/current returns the header workspace, not the default one", async () => {
+    const res = await auth(request(app).get("/api/workspaces/current").set("x-workspace-id", wsA._id.toString()), dual);
+    expect(res.status).toBe(200);
+    const body = JSON.stringify(res.body);
+    expect(body).toContain("WS A");
+    expect(body).not.toContain("WS B");
+  });
+
+  it("POST /invitations acts on the verified workspace even if the body names another", async () => {
+    const email = "body-target@sec.test";
+    await auth(
+      request(app).post("/api/invitations").set("x-workspace-id", wsA._id.toString()).send({ email, role: "viewer", workspaceId: wsB._id.toString() }),
+      ownerA
+    );
+    expect(await Invitation.countDocuments({ workspaceId: wsB._id, email })).toBe(0);
+  });
+
+  it("form events of someone else's personal form are not readable, the creator can read them", async () => {
+    const theirs = await mkForm(null, ownerB._id);
+    const denied = await auth(request(app).get(`/api/forms/${theirs._id}/events?workspaceId=personal`), outsider);
+    expect(denied.status).toBe(403);
+    const allowed = await auth(request(app).get(`/api/forms/${theirs._id}/events?workspaceId=personal`), ownerB);
+    expect(allowed.status).toBe(200);
+  });
+
+  it("using a template with a personal signal must not create a form in the default workspace", async () => {
+    const template = await Template.create({ name: "T", category: "G", theme: "light", isActive: true, fields: [] });
+    const before = await Form.countDocuments({ createdBy: reviewerB._id });
+    const res = await auth(request(app).post(`/api/templates/${template._id}/use`).set("x-workspace-id", "personal"), reviewerB);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(await Form.countDocuments({ createdBy: reviewerB._id })).toBe(before);
   });
 });
 

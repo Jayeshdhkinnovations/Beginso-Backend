@@ -19,6 +19,7 @@ import notificationRoutes from "./routes/notification.routes";
 import invitationRoutes from "./routes/invitation.routes";
 import sharedWithMeRoutes from "./routes/shared_with_me.routes";
 import { errorHandler } from "./middleware/error.middleware";
+import { buildInfo, describeBuild } from "./utils/buildInfo";
 
 // Continuous Deployment Test Comment
 const app = express();
@@ -79,7 +80,8 @@ if (process.env.NODE_ENV !== "test") {
 // Test comment to trigger CD self-hosted deployment verification
 app.get("/", (req, res) => {
     res.json({
-        message: "Backend Running Successfully"
+        message: `Backend Running Successfully (${describeBuild(buildInfo)})`,
+        ...buildInfo
     });
 });
 app.use("/api/auth", authRoutes);

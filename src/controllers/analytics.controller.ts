@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import Form from "../models/Form";
-import Workspace from "../models/Workspace";
+import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import ResponseModel from "../models/Response";
 import {
   AnalyticsOverviewResponse,
@@ -10,28 +10,9 @@ import {
   AnalyticsFormsSummaryResponse,
 } from "../types/analytics.types";
 
-/**
- * Helper to resolve workspaceId from req.user
- */
 const getWorkspaceId = async (req: Request): Promise<string | null> => {
-  const authReq = req as any;
-  if (!authReq.user) return null;
-
-  let wsId = authReq.user.workspaceId;
-  if (wsId && typeof wsId === "object" && wsId._id) {
-    wsId = wsId._id.toString();
-  } else if (wsId) {
-    wsId = wsId.toString();
-  }
-
-  if (!wsId) {
-    const workspace = await Workspace.findOne({ owner: authReq.user._id });
-    if (workspace) {
-      wsId = workspace._id.toString();
-    }
-  }
-
-  return wsId ? wsId.toString() : null;
+  const workspaceId = await getVerifiedWorkspaceId(req);
+  return workspaceId || null;
 };
 
 /**

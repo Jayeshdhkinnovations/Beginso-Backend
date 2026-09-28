@@ -2,7 +2,9 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { Event } from "../models/Event";
 import Workspace from "../models/Workspace";
+import Form from "../models/Form";
 import { Logger } from "../utils/logger";
+import { assertVerifiedWorkspace } from "../utils/requestContext";
 
 async function resolveWorkspaceObjectId(rawId: string): Promise<string | null> {
   if (!rawId) return null;
@@ -45,6 +47,7 @@ export const listWorkspaceActivity = async (req: Request, res: Response) => {
     if (!workspaceId) {
       return res.status(404).json({ success: false, message: "Workspace not found" });
     }
+    if (!assertVerifiedWorkspace(req, res, workspaceId)) return;
 
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
@@ -82,6 +85,7 @@ export const listWorkspaceAudit = async (req: Request, res: Response) => {
     if (!workspaceId) {
       return res.status(404).json({ success: false, message: "Workspace not found" });
     }
+    if (!assertVerifiedWorkspace(req, res, workspaceId)) return;
 
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
@@ -92,7 +96,7 @@ export const listWorkspaceAudit = async (req: Request, res: Response) => {
     if (req.query.actorId) {
       query.actorId = req.query.actorId;
     } else if (req.query.actorEmail) {
-      query.actorEmail = { $regex: req.query.actorEmail as string, $options: "i" };
+      query.actorEmail = { $regex: String(req.query.actorEmail).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     }
 
     if (req.query.action) {
@@ -132,9 +136,24 @@ export const listWorkspaceAudit = async (req: Request, res: Response) => {
 
 export const listFormEvents = async (req: Request, res: Response) => {
   try {
+    const authReq = req as any;
     const { formId } = req.params;
-    if (!formId) {
+    if (!formId || !mongoose.Types.ObjectId.isValid(String(formId))) {
       return res.status(400).json({ success: false, message: "Form ID is required" });
+    }
+
+    const form = await Form.findById(String(formId)).select("workspaceId createdBy").lean();
+    if (!form) {
+      return res.status(404).json({ success: false, message: "Form not found" });
+    }
+    if (form.workspaceId) {
+      if (!assertVerifiedWorkspace(req, res, form.workspaceId)) return;
+    } else if (
+      authReq.user?.role !== "super_admin" &&
+      !authReq.formAccessGrant &&
+      form.createdBy?.toString() !== authReq.user?._id?.toString()
+    ) {
+      return res.status(403).json({ success: false, message: "Forbidden: You do not have access to this form" });
     }
 
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);

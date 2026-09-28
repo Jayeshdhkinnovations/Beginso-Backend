@@ -11,6 +11,7 @@ import Upload from "../models/Upload";
 import SessionModel from "../models/Session";
 import User from "../models/User";
 import Notification from "../models/Notification";
+import { getVerifiedWorkspaceId } from "../utils/requestContext";
 
 const UPLOADS_EXPORTS_DIR = path.join(process.cwd(), "uploads", "exports");
 
@@ -34,26 +35,12 @@ const workspacePatchSchema = z.object({
 });
 
 /**
- * Helper to resolve workspace for req.user
+ * Resolves "the current workspace" as the one requirePermission verified for this request
+ * (x-workspace-id header when the caller is a member, otherwise their default workspace).
  */
 const getCallerWorkspace = async (req: Request): Promise<any | null> => {
-  const authReq = req as any;
-  if (!authReq.user) return null;
-
-  let wsId = authReq.user.workspaceId;
-  if (wsId && typeof wsId === "object" && wsId._id) {
-    wsId = wsId._id.toString();
-  } else if (wsId) {
-    wsId = wsId.toString();
-  }
-
-  if (!wsId) {
-    const ws = await Workspace.findOne({ owner: authReq.user._id });
-    if (ws) return ws;
-    return null;
-  }
-
-  return Workspace.findById(wsId);
+  const workspaceId = await getVerifiedWorkspaceId(req);
+  return workspaceId ? Workspace.findById(workspaceId) : null;
 };
 
 /**

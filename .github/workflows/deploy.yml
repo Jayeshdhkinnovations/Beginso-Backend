@@ -50,6 +50,13 @@ jobs:
       - name: Copy Firebase Assets
         run: node copyAssets.js
 
+      - name: Write Version File
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          node -e "const fs=require('fs');const sha=process.env.COMMIT_SHA||'';fs.writeFileSync('dist/version.json',JSON.stringify({commit:sha.slice(0,7),commitMessage:(process.env.COMMIT_MESSAGE||'').split('\n')[0],deployedAt:new Date().toISOString()}))"
+
       - name: Restart PM2 Service
         run: |
           pm2 restart onboarding-backend || pm2 start dist/server.js --name "onboarding-backend"

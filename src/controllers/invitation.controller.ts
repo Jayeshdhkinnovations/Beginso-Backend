@@ -7,6 +7,7 @@ import Workspace from "../models/Workspace";
 import Membership from "../models/Membership";
 import User from "../models/User";
 import { mailService } from "../services/mail.service";
+import { assertVerifiedWorkspace } from "../utils/requestContext";
 
 // Helper to resolve workspace
 const resolveWorkspace = async (paramId: any) => {
@@ -23,7 +24,7 @@ const resolveWorkspace = async (paramId: any) => {
 export const listInvitations = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
-    const rawWsId = req.params.id || req.params.workspaceId || req.query.workspaceId || authReq.workspaceId;
+    const rawWsId = req.params.id || req.params.workspaceId || authReq.workspaceId;
     const workspace = await resolveWorkspace(rawWsId);
 
     if (!workspace) {
@@ -34,6 +35,8 @@ export const listInvitations = async (req: Request, res: Response, next: NextFun
       });
       return;
     }
+
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
 
     const statusFilter = req.query.status as string | undefined;
     const filterQuery: any = { workspaceId: workspace._id };
@@ -90,7 +93,7 @@ export const listInvitations = async (req: Request, res: Response, next: NextFun
 export const sendInvitation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
-    const rawWsId = req.params.id || req.params.workspaceId || req.body.workspaceId || authReq.workspaceId;
+    const rawWsId = req.params.id || req.params.workspaceId || authReq.workspaceId;
     const workspace = await resolveWorkspace(rawWsId);
 
     if (!workspace) {
@@ -101,6 +104,8 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
       });
       return;
     }
+
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
 
     const { email, role } = req.body;
     if (!email || typeof email !== "string") {

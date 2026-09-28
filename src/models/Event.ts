@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IEvent extends Document {
   workspaceId: mongoose.Types.ObjectId;
-  actorId: mongoose.Types.ObjectId;
+  actorId?: mongoose.Types.ObjectId | null;
   actorEmail: string;
   actorName: string;
   action: string;
@@ -10,13 +10,13 @@ export interface IEvent extends Document {
   targetType: string;
   targetLabel: string;
   metadata?: Record<string, any>;
-  ip?: string;
+  ip?: string; // hashed, never the raw address
   createdAt: Date;
 }
 
 const EventSchema = new Schema<IEvent>({
   workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
-  actorId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  actorId: { type: Schema.Types.ObjectId, ref: "User", index: true }, // null: unauthenticated actor (e.g. invitee declining)
   actorEmail: { type: String, required: true },
   actorName: { type: String, required: true },
   action: { type: String, required: true, index: true },
@@ -27,6 +27,10 @@ const EventSchema = new Schema<IEvent>({
   ip: { type: String },
   createdAt: { type: Date, default: Date.now, required: true, index: true }
 });
+
+// Feeds: workspace activity/audit (newest first) and per-form activity.
+EventSchema.index({ workspaceId: 1, createdAt: -1 });
+EventSchema.index({ targetId: 1, createdAt: -1 });
 
 // Enforce append-only / immutability on Mongoose level
 EventSchema.pre("save", function () {

@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { recordEvent } from "../services/event.service";
 import Template from "../models/Template";
 import { FormService } from "../services/form.service";
 import Workspace from "../models/Workspace";
@@ -205,6 +206,7 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
 
     // Create the new form
     const newForm = await formService.createForm(workspaceId, formDetails as any);
+    await recordEvent(req, newForm.workspaceId, "form.create", { id: newForm._id, type: "form", label: newForm.title }, { templateId: id });
 
     res.status(201).json({
       success: true,

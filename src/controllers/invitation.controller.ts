@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { recordEvent } from "../services/event.service";
 import mongoose from "mongoose";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -191,6 +192,8 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
         })
         .catch(() => {});
 
+      await recordEvent(req, workspace._id, "invitation.send", { id: existingInv._id, type: "invitation", label: normalizedEmail }, { role: assignedRole, updated: true });
+
       res.status(200).json({
         success: true,
         message: "Invitation updated successfully",
@@ -226,6 +229,8 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
         role: assignedRole,
       })
       .catch(() => {});
+
+    await recordEvent(req, workspace._id, "invitation.send", { id: invitation._id, type: "invitation", label: normalizedEmail }, { role: assignedRole });
 
     res.status(201).json({
       success: true,
@@ -290,6 +295,8 @@ export const resendInvitation = async (req: Request, res: Response, next: NextFu
       })
       .catch(() => {});
 
+    await recordEvent(req, invitation.workspaceId, "invitation.resend", { id: invitation._id, type: "invitation", label: invitation.email });
+
     res.status(200).json({
       success: true,
       message: "Invitation resent successfully",
@@ -333,6 +340,8 @@ export const revokeInvitation = async (req: Request, res: Response, next: NextFu
     // BE 0.3: Revoke sets status: 'revoked' rather than deleting the row
     invitation.status = "revoked";
     await invitation.save();
+
+    await recordEvent(req, invitation.workspaceId, "invitation.revoke", { id: invitation._id, type: "invitation", label: invitation.email });
 
     res.status(200).json({
       success: true,
@@ -544,6 +553,8 @@ export const acceptInvitation = async (req: Request, res: Response, next: NextFu
       throw err;
     }
 
+    await recordEvent(req, invitation.workspaceId, "invitation.accept", { id: invitation._id, type: "invitation", label: invitation.email }, { role: invitation.role });
+
     res.status(200).json({
       success: true,
       message: "Invitation accepted successfully",
@@ -596,6 +607,8 @@ export const declineInvitation = async (req: Request, res: Response, next: NextF
 
     invitation.status = "declined";
     await invitation.save();
+
+    await recordEvent(req, invitation.workspaceId, "invitation.decline", { id: invitation._id, type: "invitation", label: invitation.email }, undefined, { email: invitation.email });
 
     res.status(200).json({
       success: true,

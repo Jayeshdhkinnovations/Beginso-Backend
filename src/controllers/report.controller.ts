@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { recordEvent } from "../services/event.service";
 import mongoose from "mongoose";
 import path from "path";
 import fs from "fs";
@@ -86,6 +87,8 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       createdAt: report.createdAt,
       updatedAt: report.updatedAt,
     };
+
+    await recordEvent(req, userWorkspaceId, "report.create", { id: report._id, type: "report", label: `${format} report` }, { format, formId: formId ?? null });
 
     res.status(202).json({
       success: true,

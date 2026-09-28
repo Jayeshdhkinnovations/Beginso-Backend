@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { recordEvent } from "../services/event.service";
 import { getAuth } from "firebase-admin/auth";
 import mongoose from "mongoose";
 import path from "path";
@@ -169,6 +170,7 @@ export const patchCurrentWorkspace = async (req: Request, res: Response, next: N
     }
 
     await workspace.save();
+    await recordEvent(req, workspace._id, "workspace.update", { id: workspace._id, type: "workspace", label: workspace.name }, { fields: Object.keys(req.body || {}) });
 
     res.status(200).json({
       success: true,
@@ -233,6 +235,8 @@ export const createWorkspaceExport = async (req: Request, res: Response, next: N
         console.error("Workspace export generation error:", err);
       }
     });
+
+    await recordEvent(req, workspace._id, "workspace.export", { id: exportId, type: "workspace", label: workspace.name });
 
     res.status(202).json({
       success: true,
@@ -345,6 +349,7 @@ export const deleteCurrentWorkspace = async (req: Request, res: Response, next: 
 
     const wsId = workspace._id;
     const ownerId = workspace.owner;
+    await recordEvent(req, wsId, "workspace.delete", { id: wsId, type: "workspace", label: workspace.name });
 
     // 1. Find all forms in workspace
     const forms = await Form.find({ workspaceId: wsId });

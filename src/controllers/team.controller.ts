@@ -5,6 +5,7 @@ import Workspace from "../models/Workspace";
 import User from "../models/User";
 import SessionModel from "../models/Session";
 import { logWorkspaceEvent } from "../services/event.service";
+import { hashIp } from "../utils/ip";
 import { assertVerifiedWorkspace } from "../utils/requestContext";
 
 // Helper to resolve workspace from param (ObjectId or slug)
@@ -218,7 +219,8 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
     const authReq = req as any;
     if (authReq.user) {
       const targetUserDoc = await User.findById(membership.userId).select("email fullName").lean();
-      logWorkspaceEvent({
+      await logWorkspaceEvent({
+        ip: req.ip ? hashIp(req.ip) : undefined,
         workspaceId: workspace._id,
         actor: { id: authReq.user._id, email: authReq.user.email, name: authReq.user.fullName || authReq.user.name },
         action: "member.role_change",
@@ -325,7 +327,8 @@ export const removeMember = async (req: Request, res: Response, next: NextFuncti
     const authReq = req as any;
     if (authReq.user) {
       const targetUserDoc = await User.findById(membership.userId).select("email fullName").lean();
-      logWorkspaceEvent({
+      await logWorkspaceEvent({
+        ip: req.ip ? hashIp(req.ip) : undefined,
         workspaceId: workspace._id,
         actor: { id: authReq.user._id, email: authReq.user.email, name: authReq.user.fullName || authReq.user.name },
         action: "member.remove",

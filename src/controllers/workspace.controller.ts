@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { recordEvent } from "../services/event.service";
 import mongoose from "mongoose";
 import Workspace from "../models/Workspace";
 import User from "../models/User";
@@ -60,6 +61,8 @@ export const createWorkspace = async (req: Request, res: Response, next: NextFun
       user.workspaceId = workspace._id as any;
       await user.save();
     }
+
+    await recordEvent(req, workspace._id, "workspace.create", { id: workspace._id, type: "workspace", label: workspace.name });
 
     res.status(201).json({
       success: true,
@@ -282,6 +285,8 @@ export const updateWorkspace = async (req: Request, res: Response, next: NextFun
 
     await workspace.save();
 
+    await recordEvent(req, workspace._id, "workspace.update", { id: workspace._id, type: "workspace", label: workspace.name }, { fields: Object.keys(req.body || {}) });
+
     res.status(200).json({
       success: true,
       message: "Workspace updated successfully",
@@ -324,6 +329,7 @@ export const deleteWorkspace = async (req: Request, res: Response, next: NextFun
       return;
     }
 
+    await recordEvent(req, workspace._id, "workspace.delete", { id: workspace._id, type: "workspace", label: workspace.name });
     await Membership.deleteMany({ workspaceId: workspace._id });
     await Workspace.findByIdAndDelete(workspace._id);
 

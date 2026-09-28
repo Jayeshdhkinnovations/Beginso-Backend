@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { recordEvent } from "../services/event.service";
 import { ZodError } from "zod";
 import { ResponseService } from "../services/response.service";
 import { updateResponseStatusSchema } from "../validations/response.validator";
@@ -209,6 +210,8 @@ export const updateResponseStatus = async (
       parsed.status
     );
 
+    await recordEvent(req, workspaceId, "response.status_change", { id: String(id), type: "response", label: String(id) }, { status: parsed.status });
+
     res.status(200).json({
       success: true,
       message: "Response status updated successfully",
@@ -260,6 +263,7 @@ export const deleteResponse = async (
     const { id } = req.params;
 
     await responseService.deleteResponse(workspaceId, String(id));
+    await recordEvent(req, workspaceId, "response.delete", { id: String(id), type: "response", label: String(id) });
 
     // Return HTTP 204 No Content on successful deletion
     res.status(204).send();

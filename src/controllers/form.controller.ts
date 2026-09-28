@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { recordEvent } from "../services/event.service";
 import crypto from "crypto";
 import { FormService } from "../services/form.service";
 import { createFormSchema, patchFormSchema } from "../validations/form.validator";
@@ -315,6 +316,7 @@ export const createForm = async (req: Request, res: Response, next: NextFunction
 
     // Step 4: Delegate to FormService
     const form = await formService.createForm(resolvedWorkspaceId, validatedData as any);
+    await recordEvent(req, form.workspaceId, "form.create", { id: form._id, type: "form", label: form.title });
 
     res.status(201).json({
       _id: form._id,
@@ -541,6 +543,11 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
         ? await formService.publishForm(formId as string, workspaceId, validatedData)
         : await formService.patchForm(formId as string, workspaceId, validatedData);
 
+    if (validatedData.status !== undefined && validatedData.status !== formDoc.status) {
+      const action = validatedData.status === "published" ? "form.publish" : validatedData.status === "closed" ? "form.close" : "form.unpublish";
+      await recordEvent(req, form.workspaceId, action, { id: form._id, type: "form", label: form.title });
+    }
+
     res.status(200).json({
       _id: form._id,
       title: form.title,
@@ -617,6 +624,7 @@ export const publishForm = async (req: Request, res: Response, next: NextFunctio
     }
 
     const form = await formService.publishForm(formId as string, workspaceId);
+    await recordEvent(req, form.workspaceId, "form.publish", { id: form._id, type: "form", label: form.title });
 
     res.status(200).json({
       _id: form._id,
@@ -678,6 +686,7 @@ export const closeForm = async (req: Request, res: Response, next: NextFunction)
     }
 
     const form = await formService.closeForm(formId as string, workspaceId);
+    await recordEvent(req, form.workspaceId, "form.close", { id: form._id, type: "form", label: form.title });
 
     res.status(200).json({
       _id: form._id,
@@ -736,6 +745,7 @@ export const deleteForm = async (req: Request, res: Response, next: NextFunction
     }
 
     await formService.deleteForm(formId as string, workspaceId);
+    await recordEvent(req, formDoc.workspaceId, "form.delete", { id: formDoc._id, type: "form", label: formDoc.title });
 
     res.status(204).send();
   } catch (error) {
@@ -864,6 +874,7 @@ export const duplicateForm = async (req: Request, res: Response, next: NextFunct
     }
 
     const form = await formService.duplicateForm(formId as string, workspaceId);
+    await recordEvent(req, form.workspaceId, "form.duplicate", { id: form._id, type: "form", label: form.title }, { sourceFormId: String(formId) });
 
     res.status(201).json({
       _id: form._id,
@@ -1380,11 +1391,13 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
 
     // Personal space support: targetWorkspaceId: null or "personal" moves form to caller's personal space (C1.6)
     if (targetWsInput === null || targetWsInput === "personal" || targetWsInput === "null") {
+      const fromWs = form.workspaceId;
       form.workspaceId = null;
       if (!form.createdBy) {
         form.createdBy = userId;
       }
       await form.save();
+      await recordEvent(req, fromWs, "form.move", { id: form._id, type: "form", label: form.title }, { to: "personal" });
 
       res.status(200).json({
         success: true,
@@ -1448,8 +1461,10 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
     }
 
     // Integrity guarantee: Preserves all fields, submissions, responses, and published/draft slugs untouched — only workspaceId pointer changes
+    const fromWorkspace = form.workspaceId;
     form.workspaceId = targetWs._id;
     await form.save();
+    await recordEvent(req, fromWorkspace ?? targetWs._id, "form.move", { id: form._id, type: "form", label: form.title }, { to: targetWs._id.toString() });
 
     res.status(200).json({
       success: true,
@@ -1590,6 +1605,9 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
     const userEmail = targetUser?.email || email || "";
     const userFullName = targetUser?.fullName || "User";
 
+    const grantForm = await Form.findById(rawId).select("workspaceId title").lean();
+    await recordEvent(req, grantForm?.workspaceId, "access_grant.create", { id: targetUserId, type: "access_grant", label: userEmail }, { formId: String(rawId), formTitle: grantForm?.title, role: assignedRole });
+
     res.status(201).json({
       success: true,
       message: "Form access grant saved successfully",
@@ -1635,6 +1653,9 @@ export const revokeFormGrant = async (req: Request, res: Response, next: NextFun
         $or: orConditions,
       });
     }
+
+    const revokedForm = await Form.findById(rawId).select("workspaceId title").lean();
+    await recordEvent(req, revokedForm?.workspaceId, "access_grant.revoke", { id: userIdStr, type: "access_grant", label: userIdStr }, { formId: String(rawId), formTitle: revokedForm?.title });
 
     res.status(200).json({
       success: true,

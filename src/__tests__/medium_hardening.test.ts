@@ -284,3 +284,32 @@ describe("S-29 CORS allows only exact origins", () => {
     expect((await request(app).get("/")).status).toBe(200);
   });
 });
+
+describe("legacy workspace fallback (V1 users without a Membership row)", () => {
+  it("having a workspace as default no longer makes a non-member an admin", async () => {
+    const stranger = await mkUser("stranger");
+    await User.updateOne({ _id: stranger._id }, { $set: { workspaceId: wsMain._id } });
+    const members = await as(request(app).get(`/api/workspaces/${wsMain._id}/members`), stranger);
+    expect(members.status).toBe(403);
+    const invite = await as(request(app).post(`/api/workspaces/${wsMain._id}/invitations`), stranger).send({ email: "x@med.test", role: "admin" });
+    expect(invite.status).toBe(403);
+  });
+
+  it("a workspace owner without a Membership row keeps working and gets the row created", async () => {
+    const legacyOwner = await mkUser("legacyowner");
+    const ws = await Workspace.create({ name: "V1", slug: "v1-med", timezone: "UTC", owner: legacyOwner._id });
+    await User.updateOne({ _id: legacyOwner._id }, { $set: { workspaceId: ws._id } });
+    expect(await Membership.countDocuments({ workspaceId: ws._id })).toBe(0);
+    const res = await request(app).get(`/api/workspaces/${ws._id}/members`).set("Authorization", `Bearer ${tok(legacyOwner)}`);
+    expect(res.status).toBe(200);
+    const row: any = await Membership.findOne({ userId: legacyOwner._id, workspaceId: ws._id });
+    expect(row?.role).toBe("owner");
+  });
+
+  it("someone who created a workspace form and was then removed loses access to it", async () => {
+    const form = await mkForm(wsMain._id, editor._id);
+    expect((await as(request(app).get(`/api/forms/${form._id}`), editor)).status).toBe(200);
+    await Membership.deleteOne({ userId: editor._id, workspaceId: wsMain._id });
+    expect((await as(request(app).get(`/api/forms/${form._id}`), editor)).status).toBe(403);
+  });
+});

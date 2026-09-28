@@ -57,9 +57,10 @@ const resolveFormAccess = async (
     return { formDoc, workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : "", isAuthorized: true };
   }
 
-  // 3. Personal form or form created by the user
-  if (formDoc.createdBy?.toString() === user._id.toString()) {
-    return { formDoc, workspaceId: formDoc.workspaceId ? formDoc.workspaceId.toString() : "", isAuthorized: true };
+  // 3. Personal form created by the user. A workspace form's creator has no special access once
+  // they leave the workspace: they need a membership (step 4) like everyone else.
+  if (!formDoc.workspaceId && String(formDoc.createdBy) === String(user._id)) {
+    return { formDoc, workspaceId: "", isAuthorized: true };
   }
 
   // 4. Workspace membership / ownership check

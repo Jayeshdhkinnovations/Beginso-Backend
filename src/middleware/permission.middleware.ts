@@ -409,14 +409,17 @@ export const requirePermission = (
 
         let effectiveRole: WorkspaceRole | null = membership ? membership.role : null;
 
-        // Fallback for V1 legacy workspaces where membership row isn't migrated yet
-        if (!effectiveRole) {
-          const isOwner = workspaceDoc.owner.toString() === user._id.toString();
-          if (isOwner) {
-            effectiveRole = "owner";
-          } else if (user.workspaceId && user.workspaceId.toString() === targetWorkspaceId.toString()) {
-            effectiveRole = "admin";
-          }
+        // V1 workspaces created before Membership rows existed: the owner recorded on the workspace
+        // is the owner. Their missing row is created here, so this heals itself even if the
+        // migration script has not been run. Nobody else gets access without a Membership: having
+        // the workspace as a default (user.workspaceId) used to grant "admin" and no longer does.
+        if (!effectiveRole && workspaceDoc.owner.toString() === user._id.toString()) {
+          effectiveRole = "owner";
+          await Membership.updateOne(
+            { userId: user._id, workspaceId: targetWorkspaceId },
+            { $setOnInsert: { role: "owner", notificationPreference: "all" } },
+            { upsert: true }
+          ).catch(() => undefined);
         }
 
         // Cross-workspace violation: user has neither membership nor ownership in target workspace

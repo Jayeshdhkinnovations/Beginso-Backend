@@ -7,6 +7,7 @@ import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import { generateToken } from "../utils/generateToken";
+import { closeExpiredForms } from "../services/form.service";
 
 let mongoServer: MongoMemoryServer;
 let tokenA: string;
@@ -41,7 +42,7 @@ afterAll(async () => {
 });
 
 describe("Public Form closeDate & responseLimit Integration Tests", () => {
-  it("should return 404 on fetch and submit if closeDate has passed, and lazily flip status to closed", async () => {
+  it("should return 404 on fetch and submit if closeDate has passed, and the sweep closes it", async () => {
     // 1. Create a form with closeDate in the past
     const createRes = await request(app)
       .post("/api/forms")
@@ -71,7 +72,11 @@ describe("Public Form closeDate & responseLimit Integration Tests", () => {
     const fetchRes = await request(app).get(`/api/public/${slug}`);
     expect(fetchRes.status).toBe(404);
 
-    // Verify that the status transitioned to closed
+    // A public GET never writes: the stored status is still "published" ...
+    formInDb = await Form.findById(formId);
+    expect(formInDb?.status).toBe("published");
+    // ... until the sweep (or a submit attempt) brings it in line.
+    expect(await closeExpiredForms()).toBe(1);
     formInDb = await Form.findById(formId);
     expect(formInDb?.status).toBe("closed");
 
@@ -152,16 +157,18 @@ describe("Public Form closeDate & responseLimit Integration Tests", () => {
     const fetchRes = await request(app).get(`/api/public/${slug}`);
     expect(fetchRes.status).toBe(404);
 
-    // Verify that the status transitioned to closed
+    // A public GET never writes, so the form is still marked published ...
     formInDb = await Form.findById(formId);
-    expect(formInDb?.status).toBe("closed");
+    expect(formInDb?.status).toBe("published");
 
-    // 5. Try to submit -> should return 404
+    // 5. ... and a submit attempt is refused and flips it to closed
     const submitRes = await request(app)
       .post(`/api/public/${slug}/submit`)
       .send({
         answers: [{ fieldLabel: "Email", value: "second@example.com" }]
       });
     expect(submitRes.status).toBe(404);
+    formInDb = await Form.findById(formId);
+    expect(formInDb?.status).toBe("closed");
   });
 });

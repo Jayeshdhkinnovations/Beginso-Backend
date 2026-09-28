@@ -246,6 +246,10 @@ const FormSchema = new Schema<IForm>(
   }
 );
 
+// Form lists sort by newest first within one workspace, or within one creator's personal space.
+FormSchema.index({ workspaceId: 1, createdAt: -1 });
+FormSchema.index({ createdBy: 1, workspaceId: 1, createdAt: -1 });
+
 const Form = mongoose.model<IForm>("Form", FormSchema);
 export default Form;
 

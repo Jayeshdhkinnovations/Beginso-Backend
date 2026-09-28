@@ -85,7 +85,7 @@ export const getResponseStats = async (
 
     const { formId } = req.query;
     let isGrant = false;
-    let workspaceId = await getVerifiedWorkspaceId(req);
+    const workspaceId = await getVerifiedWorkspaceId(req);
     if (formId && mongoose.Types.ObjectId.isValid(String(formId))) {
       const grant = await FormAccessGrant.findOne({ formId: String(formId), userId: authReq.user._id });
       if (grant) {

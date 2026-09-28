@@ -17,7 +17,8 @@
     "seed:form": "ts-node src/scripts/seedFullForm.ts",
     "seed:superadmin": "ts-node src/scripts/seedSuperAdmin.ts",
     "seed:user-responses": "ts-node src/scripts/seedUserResponses.ts",
-    "seed:pitch-template": "ts-node src/scripts/seedPitchTemplate.ts"
+    "seed:pitch-template": "ts-node src/scripts/seedPitchTemplate.ts",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@types/pdfkit": "^0.17.6",
@@ -30,13 +31,14 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.3",
     "morgan": "^1.11.0",
-    "multer": "^1.4.5-lts.1",
-    "nanoid": "^3.3.8",
+    "multer": "^2.4.0",
+    "nanoid": "^3.3.19",
     "nodemailer": "^9.0.4",
     "pdfkit": "^0.19.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.12",
@@ -47,6 +49,7 @@
     "@types/nodemailer": "^8.0.1",
     "@types/supertest": "^6.0.2",
     "@usebruno/cli": "^3.5.1",
+    "eslint": "^9.39.5",
     "fast-check": "^4.8.0",
     "jest": "^29.7.0",
     "mongodb-memory-server": "^10.1.2",
@@ -54,6 +57,7 @@
     "supertest": "^6.3.4",
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.70.1"
   }
 }

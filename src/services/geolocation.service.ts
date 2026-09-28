@@ -54,7 +54,8 @@ export const resolveIpLocation = async (ipStr: string): Promise<ILoginLocation |
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5s strict timeout
 
-    const url = `http://ip-api.com/json/${encodeURIComponent(ipStr)}?fields=status,country,regionName,city,lat,lon`;
+    // HTTPS provider: the visitor's IP must not cross the internet in clear text.
+    const url = `https://ipwho.is/${encodeURIComponent(ipStr)}?fields=success,country,region,city,latitude,longitude`;
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
 
@@ -65,18 +66,18 @@ export const resolveIpLocation = async (ipStr: string): Promise<ILoginLocation |
     const data: any = await response.json();
     if (
       data &&
-      data.status === "success" &&
-      typeof data.lat === "number" &&
-      typeof data.lon === "number" &&
-      !isNaN(data.lat) &&
-      !isNaN(data.lon)
+      data.success === true &&
+      typeof data.latitude === "number" &&
+      typeof data.longitude === "number" &&
+      !isNaN(data.latitude) &&
+      !isNaN(data.longitude)
     ) {
       return {
         city: data.city || null,
-        region: data.regionName || null,
+        region: data.region || null,
         country: data.country || null,
-        latitude: data.lat,
-        longitude: data.lon,
+        latitude: data.latitude,
+        longitude: data.longitude,
       };
     }
 

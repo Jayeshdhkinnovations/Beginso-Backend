@@ -1,6 +1,8 @@
 import "dotenv/config";
 import app from "./app";
 import connectDB from "./config/database";
+import { closeExpiredForms } from "./services/form.service";
+import { recoverReportQueue } from "./services/reportQueue";
 
 if (!process.env.JWT_SECRET) {
     console.error("❌ JWT_SECRET environment variable is missing. Refusing to start.");
@@ -27,6 +29,12 @@ process.on("uncaughtException", (error) => {
 const startServer = async () => {
     try {
         await connectDB();
+
+        // Close forms whose close date has passed: once now, then every 5 minutes.
+        const sweep = () => closeExpiredForms().catch((e) => console.error("closeExpiredForms failed:", e));
+        sweep();
+        recoverReportQueue().catch((e) => console.error("recoverReportQueue failed:", e));
+        setInterval(sweep, 5 * 60 * 1000).unref();
 
         const server = app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

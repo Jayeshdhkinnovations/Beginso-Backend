@@ -68,6 +68,8 @@ const ReportSchema = new Schema<IReport>(
 );
 
 ReportSchema.index({ workspaceId: 1, createdAt: -1 });
+// The report queue claims the oldest queued job and recovers stale processing ones.
+ReportSchema.index({ status: 1, createdAt: 1 });
 
 const ReportModel = mongoose.model<IReport>("Report", ReportSchema);
 export default ReportModel;

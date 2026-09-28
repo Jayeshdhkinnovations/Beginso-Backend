@@ -7,7 +7,7 @@ import { z } from "zod";
 import ReportModel from "../models/Report";
 import Form from "../models/Form";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
-import { generateReportAsync } from "../services/report.service";
+import { kickReportQueue } from "../services/reportQueue";
 
 const reportCreateSchema = z.object({
   format: z.enum(["csv", "pdf"]),
@@ -98,11 +98,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
     }
 
     // Kick off asynchronous background report generation
-    setImmediate(() => {
-      generateReportAsync(report._id.toString()).catch((err) =>
-        console.error("Background report generation error:", err)
-      );
-    });
+    kickReportQueue();
 
     const reportObj = {
       _id: report._id.toString(),

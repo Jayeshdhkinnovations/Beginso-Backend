@@ -6,7 +6,8 @@ export interface IInvitation extends Document {
   email: string;
   role: WorkspaceRole;
   status: InvitationStatus;
-  token: string;
+  token?: string;
+  tokenHash?: string;
   expiresAt: Date;
   invitedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -41,11 +42,17 @@ const InvitationSchema = new Schema<IInvitation>(
       required: true,
       index: true,
     },
+    // Legacy: invitations created before hashing hold the plain token here. New ones never do.
     token: {
       type: String,
-      required: true,
       unique: true,
-      index: true,
+      sparse: true,
+    },
+    // SHA-256 of the token in the emailed link (see utils/invitationToken.ts).
+    tokenHash: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
     expiresAt: {
       type: Date,

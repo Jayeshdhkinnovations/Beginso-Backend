@@ -232,7 +232,7 @@ const seedKingsData = async () => {
         const city = cities[i % cities.length];
 
         // Status is 100% COMPLETED for all test submissions
-        const status: "completed" = "completed";
+        const status = "completed" as const;
 
         // Build answers based on form fields — keying under BOTH label and fieldId to guarantee zero empty fields
         const answers: Record<string, any> = {};

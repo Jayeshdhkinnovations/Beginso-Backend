@@ -818,11 +818,18 @@ export const getSubmissions = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    const submissions = await formService.getSubmissions(formId as string, workspaceId, !workspaceId || !!authReq.formAccessGrant);
+    const result = await formService.getSubmissions(formId as string, workspaceId, !workspaceId || !!authReq.formAccessGrant, {
+      page: req.query.page,
+      limit: req.query.limit,
+    });
 
     res.status(200).json({
       success: true,
-      submissions,
+      submissions: result.submissions,
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: result.totalPages,
     });
   } catch (error) {
     next(error);
@@ -911,7 +918,7 @@ export const getPublicFormBySlug = async (
 ): Promise<void> => {
   try {
     const slug = req.params.slug as string;
-    const formDoc = await formService.getPublicFormBySlug(slug);
+    const formDoc = await formService.getPublicFormBySlug(slug, { readOnly: true });
     const form = formDoc.toObject();
 
     // Set cache headers to prevent caching so updates are instantly reflected
@@ -1044,7 +1051,7 @@ export const submitPublicForm = async (
     const form = formDoc.toObject();
 
     // Parse answers JSON
-    let answers: Record<string, any> = {};
+    const answers: Record<string, any> = {};
     let parsed: any = null;
 
     if (data) {

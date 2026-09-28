@@ -80,8 +80,9 @@ export const session = async (
       return;
     }
 
-    // Verify Firebase ID Token
-    const decodedToken = await getAuth().verifyIdToken(token);
+    // Verify Firebase ID Token. checkRevoked=true also rejects a token whose refresh tokens were
+    // revoked (suspension, password change), which a plain signature check would still accept.
+    const decodedToken = await getAuth().verifyIdToken(token, true);
     const firebaseUid = decodedToken.uid;
     const email = decodedToken.email;
 
@@ -257,9 +258,12 @@ export const session = async (
     });
   } catch (error: any) {
     console.error("Session Error:", error);
+    const revoked = error?.code === "auth/id-token-revoked";
+    const message = revoked ? "Your session was revoked. Please sign in again." : "Invalid or expired Firebase token.";
     res.status(401).json({
       success: false,
-      error: { message: error.message || "Invalid or expired Firebase token." },
+      message,
+      error: { message, ...(revoked ? { code: "TOKEN_REVOKED" } : {}) },
     });
   }
 };
@@ -632,7 +636,7 @@ export const confirmPasswordReset = async (
   try {
     const { email: rawEmail, oobCode } = req.body || {};
 
-    let targetEmail: string | undefined = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : undefined;
+    const targetEmail: string | undefined = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : undefined;
 
     if (!targetEmail && (!oobCode || typeof oobCode !== "string")) {
       res.status(400).json({

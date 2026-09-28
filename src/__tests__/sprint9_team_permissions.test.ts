@@ -45,6 +45,12 @@ import FormAccessGrant from "../models/FormAccessGrant";
 import SessionModel from "../models/Session";
 import Upload from "../models/Upload";
 import { generateToken } from "../utils/generateToken";
+import { mailService } from "../services/mail.service";
+import { hashInvitationToken } from "../utils/invitationToken";
+
+// Invitation tokens are only stored hashed, so the raw token is read from the link in the email.
+const mailedLinks: string[] = [];
+const lastMailedToken = (): string => mailedLinks[mailedLinks.length - 1].split("/invite/")[1];
 
 let mongoServer: MongoMemoryServer;
 
@@ -74,6 +80,12 @@ const makeToken = (user: any, sessionId?: string) =>
     role: user.role,
     ...(sessionId ? { sessionId } : {}),
   });
+
+beforeEach(() => {
+  jest.spyOn(mailService, "sendMail").mockImplementation((async (o: any) => {
+    if (o?.actionUrl) mailedLinks.push(o.actionUrl);
+  }) as any);
+});
 
 beforeAll(async () => {
   await mongoose.disconnect();
@@ -375,8 +387,14 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
       expect(res.body.invitation.role).toBe("editor");
 
       inviteId = res.body.invitation.id || res.body.invitation._id;
-      inviteToken = res.body.invitation.token;
-      expect(inviteToken).toBeDefined();
+      // The API never returns the token; it is only in the emailed link, and only its hash is stored.
+      expect(res.body.invitation.token).toBeUndefined();
+      expect(res.body.invitation.tokenHash).toBeUndefined();
+      inviteToken = lastMailedToken();
+      expect(inviteToken).toHaveLength(64);
+      const stored: any = await Invitation.findById(inviteId);
+      expect(stored.token).toBeUndefined();
+      expect(stored.tokenHash).not.toBe(inviteToken);
     });
 
     it("POST duplicate pending email updates existing invitation instead of duplicating", async () => {
@@ -450,7 +468,8 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ email: "flat-test@example.com", role: "member" });
 
-      const flatToken = resCreate.body.invitation.token;
+      let flatToken = lastMailedToken();
+      expect(resCreate.body.invitation.token).toBeUndefined();
 
       // Resend via flat token route
       const resResend = await request(app)
@@ -458,6 +477,12 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
         .set("Authorization", `Bearer ${ownerToken}`);
       expect(resResend.status).toBe(200);
       expect(resResend.body.success).toBe(true);
+      // Resend issues a fresh link: the previous one no longer works, the new one does.
+      const previous = flatToken;
+      flatToken = lastMailedToken();
+      expect(flatToken).not.toBe(previous);
+      expect((await request(app).get(`/api/invitations/${previous}`)).status).toBe(404);
+      expect((await request(app).get(`/api/invitations/${flatToken}`)).status).toBe(200);
 
       // Revoke via flat token DELETE route
       const resRevoke = await request(app)
@@ -466,7 +491,7 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
       expect(resRevoke.status).toBe(200);
       expect(resRevoke.body.success).toBe(true);
 
-      const inDb = await Invitation.findOne({ token: flatToken });
+      const inDb = await Invitation.findOne({ _id: resCreate.body.invitation._id || resCreate.body.invitation.id });
       expect(inDb?.status).toBe("revoked");
     });
   });
@@ -486,7 +511,7 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
           email: outsiderUser.email,
           role: "editor",
         });
-      acceptInviteToken = res.body.invitation.token;
+      acceptInviteToken = lastMailedToken();
     });
 
     it("GET /api/invitations/:token works unauthenticated and returns exact preview shape", async () => {
@@ -538,7 +563,7 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
       expect(mem?.role).toBe("editor");
 
       // Verify invitation status updated
-      const inv = await Invitation.findOne({ token: acceptInviteToken });
+      const inv = await Invitation.findOne({ tokenHash: hashInvitationToken(acceptInviteToken) });
       expect(inv?.status).toBe("accepted");
     });
 

@@ -9,8 +9,6 @@ interface RateLimitRecord {
 const verificationLimits = new Map<string, RateLimitRecord>();
 const resetLimits = new Map<string, RateLimitRecord>();
 
-const PEPPER = process.env.AUTH_EMAIL_HASH_PEPPER || "beginso-auth-pepper-secret-key";
-
 export const hashKey = (key: string): string => {
   return keyedHash(key.toLowerCase().trim());
 };

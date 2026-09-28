@@ -342,7 +342,7 @@ describe("Super Admin Stats & Abuse Endpoints Integration Tests", () => {
 
   describe("Admin Management CRUD & Cascade Deletion", () => {
     let testAdminId: string;
-    let testAdminEmail = "john.cascade@example.com";
+    const testAdminEmail = "john.cascade@example.com";
 
     it("should create a new admin and verify workspace bootstrapping", async () => {
       const res = await request(app)

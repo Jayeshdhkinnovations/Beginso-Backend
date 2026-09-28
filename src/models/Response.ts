@@ -52,5 +52,8 @@ ResponseSchema.index({ formId: 1, submittedAt: -1, status: 1 });
 ResponseSchema.index({ formId: 1, submittedAt: -1 });
 ResponseSchema.index({ submittedAt: -1 });
 
+// Submissions listing sorts by createdAt within a form.
+ResponseSchema.index({ formId: 1, createdAt: -1 });
+
 const ResponseModel = mongoose.model<IResponse>("Response", ResponseSchema);
 export default ResponseModel;

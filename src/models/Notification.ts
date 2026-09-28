@@ -48,6 +48,9 @@ const NotificationSchema = new Schema<INotification>(
   }
 );
 
+// The bell lists a user's newest notifications.
+NotificationSchema.index({ userId: 1, createdAt: -1 });
+
 const Notification = mongoose.model<INotification>("Notification", NotificationSchema);
 
 export default Notification;

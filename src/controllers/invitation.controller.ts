@@ -3,6 +3,7 @@ import { recordEvent } from "../services/event.service";
 import mongoose from "mongoose";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import { newInvitationToken, findInvitationByToken, publicInvitation } from "../utils/invitationToken";
 import Invitation from "../models/Invitation";
 import Workspace from "../models/Workspace";
 import Membership from "../models/Membership";
@@ -77,7 +78,6 @@ export const listInvitations = async (req: Request, res: Response, next: NextFun
         email: inv.email,
         role: inv.role,
         status,
-        token: inv.token,
         expiresAt: inv.expiresAt,
         invitedBy: inv.invitedBy
           ? {
@@ -174,12 +174,16 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
     const appUrl = process.env.APP_URL || "https://beginso.com";
 
     if (existingInv) {
+      // Sending again issues a fresh link (the old one stops working); only its hash is stored.
+      const fresh = newInvitationToken();
       existingInv.role = assignedRole;
       existingInv.invitedBy = authReq.user._id;
+      existingInv.tokenHash = fresh.hash;
+      existingInv.token = undefined;
       await existingInv.save();
 
       // Send email asynchronously
-      const inviteUrl = `${appUrl}/invite/${existingInv.token}`;
+      const inviteUrl = `${appUrl}/invite/${fresh.raw}`;
       const inviterName = authReq.user?.fullName || authReq.user?.name || "A team member";
       mailService
         .sendMail({
@@ -198,13 +202,13 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
       res.status(200).json({
         success: true,
         message: "Invitation updated successfully",
-        invitation: existingInv,
+        invitation: publicInvitation(existingInv),
       });
       return;
     }
 
     // Create new invitation with unique token and 7-day expiry
-    const token = crypto.randomBytes(32).toString("hex");
+    const { raw: token, hash: tokenHash } = newInvitationToken();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const invitation = await Invitation.create({
@@ -212,7 +216,7 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
       email: normalizedEmail,
       role: assignedRole,
       status: "pending",
-      token,
+      tokenHash,
       expiresAt,
       invitedBy: authReq.user._id,
     });
@@ -236,7 +240,7 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
     res.status(201).json({
       success: true,
       message: "Invitation sent successfully",
-      invitation,
+      invitation: publicInvitation(invitation),
     });
   } catch (error: any) {
     // Two sends for the same email raced: the unique pending index kept only one.
@@ -263,7 +267,7 @@ export const resendInvitation = async (req: Request, res: Response, next: NextFu
       invitation = await Invitation.findById(rawId);
     }
     if (!invitation) {
-      invitation = await Invitation.findOne({ token: rawId });
+      invitation = await findInvitationByToken(rawId);
     }
 
     if (!invitation) {
@@ -284,7 +288,12 @@ export const resendInvitation = async (req: Request, res: Response, next: NextFu
 
     // BE 0.3: Resend does NOT change the existing expiry
     const appUrl = process.env.APP_URL || "https://beginso.com";
-    const inviteUrl = `${appUrl}/invite/${invitation.token}`;
+    // The stored token is a hash, so a resend issues a fresh link (the previous one stops working).
+    const fresh = newInvitationToken();
+    invitation.tokenHash = fresh.hash;
+    invitation.token = undefined;
+    await invitation.save();
+    const inviteUrl = `${appUrl}/invite/${fresh.raw}`;
     let workspaceName = "Workspace";
     if (invitation.workspaceId) {
       const ws = await Workspace.findById(invitation.workspaceId).select("name").lean();
@@ -310,7 +319,7 @@ export const resendInvitation = async (req: Request, res: Response, next: NextFu
     res.status(200).json({
       success: true,
       message: "Invitation resent successfully",
-      invitation,
+      invitation: publicInvitation(invitation),
     });
   } catch (error) {
     next(error);
@@ -328,7 +337,7 @@ export const revokeInvitation = async (req: Request, res: Response, next: NextFu
       invitation = await Invitation.findById(rawId);
     }
     if (!invitation) {
-      invitation = await Invitation.findOne({ token: rawId });
+      invitation = await findInvitationByToken(rawId);
     }
 
     if (!invitation) {
@@ -356,7 +365,7 @@ export const revokeInvitation = async (req: Request, res: Response, next: NextFu
     res.status(200).json({
       success: true,
       message: "Invitation revoked successfully",
-      invitation,
+      invitation: publicInvitation(invitation),
     });
   } catch (error) {
     next(error);
@@ -367,7 +376,7 @@ export const revokeInvitation = async (req: Request, res: Response, next: NextFu
 export const previewInvitation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { token } = req.params;
-    const invitation = await Invitation.findOne({ token });
+    const invitation = await findInvitationByToken(token as string);
 
     if (!invitation) {
       res.status(404).json({
@@ -459,7 +468,7 @@ export const acceptInvitation = async (req: Request, res: Response, next: NextFu
     }
 
     const { token } = req.params;
-    const invitation = await Invitation.findOne({ token });
+    const invitation = await findInvitationByToken(token as string);
 
     if (!invitation) {
       res.status(404).json({
@@ -582,7 +591,7 @@ export const declineInvitation = async (req: Request, res: Response, next: NextF
   try {
     const authReq = req as any;
     const { token } = req.params;
-    const invitation = await Invitation.findOne({ token });
+    const invitation = await findInvitationByToken(token as string);
 
     if (!invitation) {
       res.status(404).json({

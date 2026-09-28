@@ -28,6 +28,9 @@ jobs:
       - name: Type Check
         run: npm run type-check
 
+      - name: Lint (errors fail, warnings do not)
+        run: npm run lint
+
       - name: Run Tests
         run: npm test
 

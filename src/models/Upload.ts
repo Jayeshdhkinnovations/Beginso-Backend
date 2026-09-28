@@ -51,5 +51,8 @@ const UploadSchema = new Schema<IUpload>(
   }
 );
 
+// Files are looked up by their exact stored path on every download and delete.
+UploadSchema.index({ path: 1 });
+
 const Upload = mongoose.model<IUpload>("Upload", UploadSchema);
 export default Upload;

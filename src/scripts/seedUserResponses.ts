@@ -118,7 +118,7 @@ const seedUserResponses = async () => {
     }
 
     // Ensure form has at least one file_upload field if missing
-    let hasFileUpload = form.fields.some((f) => f.type === "file_upload" && !f.deleted);
+    const hasFileUpload = form.fields.some((f) => f.type === "file_upload" && !f.deleted);
     if (!hasFileUpload) {
       console.log("➕ Adding file_upload field to form...");
       form.fields.push({

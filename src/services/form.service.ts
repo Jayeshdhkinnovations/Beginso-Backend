@@ -28,6 +28,25 @@ export class FormValidationError extends Error {
   }
 }
 
+// Marks published forms whose close date has passed as closed. Run on a timer (server.ts) so the
+// Forms Manager shows the right status without a visitor having to trigger it.
+export const closeExpiredForms = async (): Promise<number> => {
+  // closeDate is stored as a string (ISO-8601, any UTC offset), so it is compared as a date here.
+  const candidates = await Form.find({ status: "published", "settings.closeDate": { $nin: [null, ""] } })
+    .select("settings.closeDate")
+    .lean();
+  const now = Date.now();
+  const expired = candidates
+    .filter((f: any) => {
+      const t = new Date(f.settings?.closeDate).getTime();
+      return !isNaN(t) && t < now;
+    })
+    .map((f) => f._id);
+  if (!expired.length) return 0;
+  const result = await Form.updateMany({ _id: { $in: expired }, status: "published" }, { $set: { status: "closed" } });
+  return result.modifiedCount;
+};
+
 export class FormService {
   private formRepository = new FormRepository();
 
@@ -590,10 +609,15 @@ export class FormService {
     return newResponse;
   }
 
-  async getSubmissions(formId: string, workspaceId: string, isGrant?: boolean) {
+  async getSubmissions(formId: string, workspaceId: string, isGrant?: boolean, options: { page?: unknown; limit?: unknown } = {}) {
     await this.getFormById(formId, workspaceId, isGrant);
-    // ponytail: hard cap instead of pagination; add page/limit params if a form passes 1000 responses.
-    return await ResponseModel.find({ formId }).sort({ createdAt: -1 }).limit(1000);
+    const page = clampInt(options.page, 1, 1, 100000);
+    const limit = clampInt(options.limit, 100, 1, 500);
+    const [submissions, total] = await Promise.all([
+      ResponseModel.find({ formId }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      ResponseModel.countDocuments({ formId }),
+    ]);
+    return { submissions, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async duplicateForm(formId: string, workspaceId: string, createdBy?: unknown): Promise<IForm> {
@@ -629,7 +653,7 @@ export class FormService {
     return await this.formRepository.create(workspaceId, duplicateData as any);
   }
 
-  private async checkFormAvailability(form: IForm, isPublicRoute: boolean = false): Promise<void> {
+  private async checkFormAvailability(form: IForm, isPublicRoute: boolean = false, allowWrite: boolean = true): Promise<void> {
     if (form.status === "closed") {
       const err = new Error("Form not found");
       (err as any).statusCode = 404;
@@ -661,8 +685,12 @@ export class FormService {
     }
 
     if (shouldClose) {
-      form.status = "closed";
-      await Form.updateOne({ _id: form._id }, { status: "closed" });
+      // A public GET (readOnly) must not write to the database: anyone can call it. The stored
+      // status is brought in line by closeExpiredForms() on a timer, and by a submit attempt.
+      if (allowWrite) {
+        form.status = "closed";
+        await Form.updateOne({ _id: form._id }, { status: "closed" });
+      }
 
       const err = new Error("Form not found");
       (err as any).statusCode = 404;
@@ -670,7 +698,7 @@ export class FormService {
     }
   }
 
-  async getPublicFormBySlug(slug: string): Promise<IForm> {
+  async getPublicFormBySlug(slug: string, options: { readOnly?: boolean } = {}): Promise<IForm> {
     if (!slug || typeof slug !== "string") {
       const err = new Error("Form not found");
       (err as any).statusCode = 404;
@@ -682,7 +710,7 @@ export class FormService {
       (err as any).statusCode = 404;
       throw err;
     }
-    await this.checkFormAvailability(form, true);
+    await this.checkFormAvailability(form, true, !options.readOnly);
     return form;
   }
 }

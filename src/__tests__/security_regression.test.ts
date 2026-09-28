@@ -409,29 +409,105 @@ describe("S-18 form events and anonymous-ish submissions", () => {
 });
 
 describe("S-12 invitation state", () => {
-  openHole("a declined invitation must not be acceptable", async () => {
+  it("a declined invitation must not be acceptable", async () => {
     const inv = await mkInvite(wsB._id, outsider.email, "declined");
     const res = await auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider);
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(await Membership.countDocuments({ userId: outsider._id, workspaceId: wsB._id })).toBe(0);
   });
 
-  openHole("an already-used invitation must not re-add a removed member", async () => {
+  it("an already-used invitation must not re-add a removed member", async () => {
     const inv = await mkInvite(wsB._id, outsider.email, "accepted");
     const res = await auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider);
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(await Membership.countDocuments({ userId: outsider._id, workspaceId: wsB._id })).toBe(0);
   });
 
-  openHole("an unauthenticated caller must not decline an accepted invitation", async () => {
+  it("an unauthenticated caller must not decline an accepted invitation", async () => {
     const inv = await mkInvite(wsB._id, "someone@sec.test", "accepted");
     await request(app).post(`/api/invitations/${inv.token}/decline`);
     expect((await Invitation.findById(inv._id))?.status).toBe("accepted");
   });
 });
 
+describe("B4 invitation lifecycle", () => {
+  it("accepting a pending invitation returns the workspace slug and creates one membership", async () => {
+    const inv = await mkInvite(wsB._id, outsider.email, "pending");
+    const res = await auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider);
+    expect(res.status).toBe(200);
+    expect(res.body.workspace).toEqual({ id: wsB._id.toString(), slug: "sec-ws-b", name: "WS B" });
+    expect(await Membership.countDocuments({ userId: outsider._id, workspaceId: wsB._id })).toBe(1);
+    expect((await Invitation.findById(inv._id))?.status).toBe("accepted");
+  });
+
+  it("accepting again while still a member stays idempotent (200)", async () => {
+    const inv = await mkInvite(wsB._id, outsider.email, "pending");
+    await auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider);
+    const again = await auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider);
+    expect(again.status).toBe(200);
+    expect(await Membership.countDocuments({ userId: outsider._id, workspaceId: wsB._id })).toBe(1);
+  });
+
+  it("two simultaneous accepts create exactly one membership and no server error", async () => {
+    const inv = await mkInvite(wsB._id, outsider.email, "pending");
+    const [a, b] = await Promise.all([
+      auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider),
+      auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider),
+    ]);
+    expect(a.status).toBeLessThan(500);
+    expect(b.status).toBeLessThan(500);
+    expect(await Membership.countDocuments({ userId: outsider._id, workspaceId: wsB._id })).toBe(1);
+  });
+
+  it("an expired pending invitation cannot be accepted", async () => {
+    const inv = await mkInvite(wsB._id, outsider.email, "pending");
+    await Invitation.updateOne({ _id: inv._id }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+    const res = await auth(request(app).post(`/api/invitations/${inv.token}/accept`), outsider);
+    expect(res.status).toBe(400);
+    expect(await Membership.countDocuments({ userId: outsider._id, workspaceId: wsB._id })).toBe(0);
+  });
+
+  it("only a pending invitation can be revoked", async () => {
+    const inv = await mkInvite(wsB._id, "used@sec.test", "accepted");
+    const res = await auth(request(app).delete(`/api/invitations/${inv.token}`), ownerB);
+    expect(res.status).toBe(400);
+    expect((await Invitation.findById(inv._id))?.status).toBe("accepted");
+  });
+
+  it("only a pending invitation can be resent", async () => {
+    const declined = await mkInvite(wsB._id, "declined@sec.test", "declined");
+    const res = await auth(request(app).post(`/api/invitations/${declined._id}/resend`), ownerB);
+    expect(res.status).toBe(400);
+  });
+
+  it("a pending invitation can still be revoked by an owner of its workspace", async () => {
+    const inv = await mkInvite(wsB._id, "pending-revoke@sec.test", "pending");
+    const res = await auth(request(app).delete(`/api/invitations/${inv.token}`), ownerB);
+    expect(res.status).toBe(200);
+    expect((await Invitation.findById(inv._id))?.status).toBe("revoked");
+  });
+
+  it("an unauthenticated caller can still decline a pending invitation", async () => {
+    const inv = await mkInvite(wsB._id, "decline-me@sec.test", "pending");
+    const res = await request(app).post(`/api/invitations/${inv.token}/decline`);
+    expect(res.status).toBe(200);
+    expect((await Invitation.findById(inv._id))?.status).toBe("declined");
+  });
+});
+
+describe("S-10 signup must not hand out a session", () => {
+  it("POST /auth/signup returns no token and sets no cookie", async () => {
+    const res = await request(app)
+      .post("/api/auth/signup")
+      .send({ fullName: "New Person", email: "fresh-signup@sec.test", password: "Str0ng!Pass" });
+    expect(res.status).toBe(201);
+    expect(res.body.token).toBeUndefined();
+    expect(res.headers["set-cookie"]).toBeUndefined();
+  });
+});
+
 describe("S-15 logout", () => {
-  openHole("a token must stop working after logout", async () => {
+  it("a token must stop working after logout", async () => {
     const session = await SessionModel.create({
       userId: outsider._id,
       deviceLabel: "jest",

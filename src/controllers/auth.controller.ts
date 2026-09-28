@@ -56,25 +56,11 @@ export const signup = async (
       theme: "system",
     });
 
-    // Step 5: Generate JWT
-    const token = generateToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    });
-
-    // Step 8: Send Response
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
-
+    // No session is issued here: the email is unverified. The client signs in through Firebase and
+    // POST /api/auth/session, which enforces email verification and creates a revocable session.
     res.status(201).json({
       success: true,
-      message: "Signup successful.",
-      token,
+      message: "Signup successful. Verify your email to sign in.",
       user,
     });
 
@@ -177,7 +163,7 @@ export const session = async (
       $or: [{ firebaseUid }, { email: email.toLowerCase() }],
     }).populate("workspaceId");
 
-    const isSuperAdmin = user?.role === "super_admin" || email.toLowerCase().includes("superadmin");
+    const isSuperAdmin = user?.role === "super_admin";
 
     // Session Enforcement: Block unverified password-provider accounts (except super_admin)
     const signInProvider = decodedToken.firebase?.sign_in_provider;
@@ -347,6 +333,14 @@ export const logout = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  // Revoke the server-side session too, otherwise a copied JWT keeps working after logout.
+  const authReq = req as any;
+  if (authReq.sessionId && authReq.user?._id) {
+    await SessionModel.updateOne(
+      { _id: authReq.sessionId, userId: authReq.user._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
+  }
   res.clearCookie("token", {
     httpOnly: true,
     secure: true,

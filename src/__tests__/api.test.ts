@@ -84,7 +84,7 @@ describe("Onboarding Platform Integration Tests", () => {
   // ==========================================
   
   describe("Signup API", () => {
-    it("Successful signup, C1.3 lazy workspace provisioning, and JWT return", async () => {
+    it("Successful signup, C1.3 lazy workspace provisioning, and no session token", async () => {
       const signupData = {
         fullName: "Jayesh Chaudhary",
         email: "jayesh@test.com",
@@ -97,9 +97,9 @@ describe("Onboarding Platform Integration Tests", () => {
         
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.headers["set-cookie"]).toBeDefined();
-      expect(res.headers["set-cookie"][0]).toContain("token=");
-      expect(res.body.token).toBeDefined();
+      // The email is unverified, so signup must not hand out a session (S-10).
+      expect(res.headers["set-cookie"]).toBeUndefined();
+      expect(res.body.token).toBeUndefined();
       expect(res.body.user).toBeDefined();
       expect(res.body.user.email).toBe(signupData.email);
       // Under C1.3 lazy workspace model, no workspace row is created at signup
@@ -107,10 +107,14 @@ describe("Onboarding Platform Integration Tests", () => {
       const count = await Workspace.countDocuments({ owner: res.body.user._id });
       expect(count).toBe(0);
 
-      // Workspace is only created when user explicitly creates one
+      // Workspace is only created when user explicitly creates one (after a real, verified sign-in)
+      const sessionToken = jwt.sign(
+        { id: res.body.user._id, email: res.body.user.email, role: res.body.user.role },
+        process.env.JWT_SECRET!
+      );
       const wsRes = await request(app)
         .post("/api/workspaces")
-        .set("Authorization", `Bearer ${res.body.token}`)
+        .set("Authorization", `Bearer ${sessionToken}`)
         .send({ name: "Jayesh's Workspace", slug: "jayesh-workspace" });
       expect(wsRes.status).toBe(201);
       expect(wsRes.body.workspace).toBeDefined();

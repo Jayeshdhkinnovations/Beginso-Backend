@@ -20,6 +20,17 @@ const resolveWorkspace = async (paramId: any) => {
   return await Workspace.findOne({ slug: idStr.toLowerCase() });
 };
 
+const isPastExpiry = (inv: any): boolean => !!inv.expiresAt && new Date(inv.expiresAt) < new Date();
+
+const notActionable = (res: Response, status: number, code: string, message: string) =>
+  res.status(status).json({ success: false, message, error: { code, message } });
+
+// Accept responses carry the workspace so the client can route without a second lookup.
+const workspaceSummary = async (workspaceId: any) => {
+  const ws = await Workspace.findById(workspaceId).select("name slug").lean();
+  return ws ? { id: ws._id.toString(), slug: ws.slug, name: ws.name } : null;
+};
+
 // GET /api/workspaces/:id/invitations or GET /api/invitations
 export const listInvitations = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -249,12 +260,10 @@ export const resendInvitation = async (req: Request, res: Response, next: NextFu
       return;
     }
 
-    if (invitation.status === "revoked") {
-      res.status(400).json({
-        success: false,
-        message: "Cannot resend a revoked invitation",
-        error: { message: "Cannot resend a revoked invitation" },
-      });
+    if (!assertVerifiedWorkspace(req, res, invitation.workspaceId)) return;
+
+    if (invitation.status !== "pending" || isPastExpiry(invitation)) {
+      notActionable(res, 400, "INVITATION_NOT_PENDING", `Cannot resend a ${invitation.status === "pending" ? "expired" : invitation.status} invitation`);
       return;
     }
 
@@ -311,6 +320,13 @@ export const revokeInvitation = async (req: Request, res: Response, next: NextFu
         message: "Invitation not found",
         error: { message: "Invitation not found" },
       });
+      return;
+    }
+
+    if (!assertVerifiedWorkspace(req, res, invitation.workspaceId)) return;
+
+    if (invitation.status !== "pending") {
+      notActionable(res, 400, "INVITATION_NOT_PENDING", `Cannot revoke a ${invitation.status} invitation`);
       return;
     }
 
@@ -451,68 +467,88 @@ export const acceptInvitation = async (req: Request, res: Response, next: NextFu
       return;
     }
 
-    if (invitation.status === "revoked") {
-      res.status(400).json({
-        success: false,
-        message: "This invitation has been revoked",
-        error: {
-          code: "INVITATION_REVOKED",
-          message: "This invitation has been revoked",
-        },
-      });
-      return;
-    }
-
-    const isExpired = invitation.expiresAt && new Date(invitation.expiresAt) < new Date();
-    if (invitation.status === "expired" || isExpired) {
-      invitation.status = "expired";
-      await invitation.save();
-      res.status(400).json({
-        success: false,
-        message: "This invitation has expired",
-        error: {
-          code: "INVITATION_EXPIRED",
-          message: "This invitation has expired",
-        },
-      });
-      return;
-    }
-
-    // BE 0.4 Guarantee: accept is idempotent (200, not 409) when caller is already a member
     const existingMembership = await Membership.findOne({
       workspaceId: invitation.workspaceId,
       userId: authReq.user._id,
     });
-
-    if (existingMembership) {
-      invitation.status = "accepted";
-      await invitation.save();
-
+    const alreadyMember = async () => {
+      const m = existingMembership || (await Membership.findOne({ workspaceId: invitation.workspaceId, userId: authReq.user._id }));
       res.status(200).json({
         success: true,
         message: "Invitation accepted",
         workspaceId: invitation.workspaceId.toString(),
-        membership: existingMembership,
+        workspace: await workspaceSummary(invitation.workspaceId),
+        membership: m,
       });
+    };
+
+    // BE 0.4 Guarantee: accept is idempotent (200, not 409) when the caller is already a member.
+    if (existingMembership && invitation.status !== "revoked") {
+      if (invitation.status === "pending") {
+        await Invitation.updateOne({ _id: invitation._id, status: "pending" }, { $set: { status: "accepted" } });
+      }
+      await alreadyMember();
       return;
     }
 
-    // Create membership
-    const membership = await Membership.create({
-      userId: authReq.user._id,
-      workspaceId: invitation.workspaceId,
-      role: invitation.role,
-      notificationPreference: "mine",
-      timezoneOverride: null,
-    });
+    // An invitation is single-use: only a pending one can create a membership. A used, declined
+    // or revoked link must not re-add someone who was removed from the workspace.
+    if (invitation.status === "revoked") {
+      notActionable(res, 400, "INVITATION_REVOKED", "This invitation has been revoked");
+      return;
+    }
+    if (invitation.status === "declined") {
+      notActionable(res, 400, "INVITATION_DECLINED", "This invitation was declined");
+      return;
+    }
+    if (invitation.status === "accepted") {
+      notActionable(res, 400, "INVITATION_ALREADY_USED", "This invitation has already been used");
+      return;
+    }
+    if (invitation.status === "expired" || isPastExpiry(invitation)) {
+      await Invitation.updateOne({ _id: invitation._id, status: "pending" }, { $set: { status: "expired" } });
+      notActionable(res, 400, "INVITATION_EXPIRED", "This invitation has expired");
+      return;
+    }
 
-    invitation.status = "accepted";
-    await invitation.save();
+    // Atomic claim: of several concurrent accepts, exactly one flips pending -> accepted.
+    const claimed = await Invitation.findOneAndUpdate(
+      { _id: invitation._id, status: "pending" },
+      { $set: { status: "accepted" } }
+    );
+    if (!claimed) {
+      const again = await Membership.findOne({ workspaceId: invitation.workspaceId, userId: authReq.user._id });
+      if (again) {
+        await alreadyMember();
+        return;
+      }
+      notActionable(res, 400, "INVITATION_ALREADY_USED", "This invitation has already been used");
+      return;
+    }
+
+    let membership;
+    try {
+      membership = await Membership.create({
+        userId: authReq.user._id,
+        workspaceId: invitation.workspaceId,
+        role: invitation.role,
+        notificationPreference: "mine",
+        timezoneOverride: null,
+      });
+    } catch (err: any) {
+      if (err?.code === 11000) {
+        await alreadyMember();
+        return;
+      }
+      await Invitation.updateOne({ _id: invitation._id }, { $set: { status: "pending" } });
+      throw err;
+    }
 
     res.status(200).json({
       success: true,
       message: "Invitation accepted successfully",
       workspaceId: invitation.workspaceId.toString(),
+      workspace: await workspaceSummary(invitation.workspaceId),
       membership,
     });
   } catch (error) {
@@ -551,6 +587,11 @@ export const declineInvitation = async (req: Request, res: Response, next: NextF
         });
         return;
       }
+    }
+
+    if (invitation.status !== "pending") {
+      notActionable(res, 400, "INVITATION_NOT_PENDING", `This invitation is already ${invitation.status}`);
+      return;
     }
 
     invitation.status = "declined";

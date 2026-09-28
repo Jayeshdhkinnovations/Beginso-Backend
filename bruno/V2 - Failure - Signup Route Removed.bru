@@ -1,0 +1,21 @@
+meta {
+  name: V2 - Failure - Signup Route Removed
+  type: http
+  seq: 134
+}
+
+post {
+  url: {{base_url}}/api/auth/signup
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "x@example.com"
+  }
+}
+
+assert {
+  res.status: eq 404
+}

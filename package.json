@@ -18,7 +18,8 @@
     "seed:superadmin": "ts-node src/scripts/seedSuperAdmin.ts",
     "seed:user-responses": "ts-node src/scripts/seedUserResponses.ts",
     "seed:pitch-template": "ts-node src/scripts/seedPitchTemplate.ts",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "bruno": "bru run bruno --env Development"
   },
   "dependencies": {
     "@types/pdfkit": "^0.17.6",

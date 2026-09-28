@@ -1,0 +1,20 @@
+meta {
+  name: V2 - Form Overview
+  type: http
+  seq: 124
+}
+
+get {
+  url: {{base_url}}/api/forms/{{formId}}/overview
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.overview.responseCount: isNumber
+}

@@ -1,0 +1,19 @@
+meta {
+  name: V2 - Revoke Invitation
+  type: http
+  seq: 113
+}
+
+post {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/invitations/{{invitationId}}/revoke
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+}

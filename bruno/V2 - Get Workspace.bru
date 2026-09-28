@@ -1,0 +1,16 @@
+meta {
+  name: V2 - Get Workspace
+  type: http
+  seq: 104
+}
+
+get {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.role: isString
+}

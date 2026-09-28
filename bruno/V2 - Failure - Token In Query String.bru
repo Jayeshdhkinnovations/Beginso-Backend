@@ -1,0 +1,19 @@
+meta {
+  name: V2 - Failure - Token In Query String
+  type: http
+  seq: 136
+}
+
+get {
+  url: {{base_url}}/api/forms?token={{token}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+}
+
+docs {
+  Query-string credentials are never accepted.
+}

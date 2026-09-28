@@ -8,6 +8,7 @@ export interface IInvitation extends Document {
   status: InvitationStatus;
   token?: string;
   tokenHash?: string;
+  purgeAt?: Date;
   expiresAt: Date;
   invitedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -64,11 +65,23 @@ const InvitationSchema = new Schema<IInvitation>(
       ref: "User",
       required: false,
     },
+    // When MongoDB deletes the row: 30 days after it expired (see the TTL index below).
+    purgeAt: { type: Date },
   },
   {
     timestamps: true,
   }
 );
+
+// Expired invitations are removed automatically 30 days after their expiry. A separate field is
+// used because `expiresAt` already carries a plain index, and MongoDB will not change an existing
+// index into a TTL one in place.
+InvitationSchema.pre("save", function () {
+  if (this.isNew || this.isModified("expiresAt")) {
+    this.purgeAt = new Date(new Date(this.expiresAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+  }
+});
+InvitationSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0 });
 
 // Composite index for finding pending invitations by workspace and email
 InvitationSchema.index({ workspaceId: 1, email: 1, status: 1 });

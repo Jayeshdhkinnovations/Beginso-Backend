@@ -1,0 +1,15 @@
+meta {
+  name: V2 - Decline Invitation
+  type: http
+  seq: 116
+}
+
+post {
+  url: {{base_url}}/api/invitations/{{invitationToken}}/decline
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}

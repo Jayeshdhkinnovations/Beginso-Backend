@@ -72,9 +72,20 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
     if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
 
     const memberships = await Membership.find({ workspaceId: workspace._id })
-      .populate("userId", "fullName email avatarUrl")
+      .populate("userId", "fullName email avatarUrl lastLogin")
       .limit(1000)
       .lean();
+
+    // Last activity = the member's most recent session activity (not when their role row last changed).
+    const memberUserIds = memberships.map((m: any) => m.userId?._id ?? m.userId).filter(Boolean);
+    const lastSeen = new Map<string, Date>(
+      (
+        await SessionModel.aggregate([
+          { $match: { userId: { $in: memberUserIds } } },
+          { $group: { _id: "$userId", last: { $max: "$lastActiveAt" } } },
+        ])
+      ).map((r: any) => [String(r._id), r.last as Date])
+    );
 
     // Map formatted members
     const membersList = memberships.map((m: any) => {
@@ -95,7 +106,7 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
         isOwner,
         role: m.role,
         joinedAt: m.createdAt,
-        lastActiveAt: m.updatedAt || m.createdAt,
+        lastActiveAt: lastSeen.get(uid) || userObj.lastLogin || null,
         user: {
           id: userObj._id ? userObj._id.toString() : "",
           fullName: fullName,

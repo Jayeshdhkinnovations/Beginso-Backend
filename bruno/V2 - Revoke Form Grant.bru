@@ -1,0 +1,19 @@
+meta {
+  name: V2 - Revoke Form Grant
+  type: http
+  seq: 119
+}
+
+delete {
+  url: {{base_url}}/api/forms/{{formId}}/grants/{{targetUserId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+}

@@ -1,0 +1,29 @@
+meta {
+  name: V2 - Transfer Ownership
+  type: http
+  seq: 130
+}
+
+post {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/transfer-ownership
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "userId": "{{targetUserId}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Owner only.
+}

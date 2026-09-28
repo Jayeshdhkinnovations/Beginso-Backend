@@ -1,0 +1,20 @@
+meta {
+  name: V2 - Accept Invitation
+  type: http
+  seq: 115
+}
+
+post {
+  url: {{base_url}}/api/invitations/{{invitationToken}}/accept
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.workspace.slug: isString
+}
+
+docs {
+  Caller's email must match the invitation.
+}

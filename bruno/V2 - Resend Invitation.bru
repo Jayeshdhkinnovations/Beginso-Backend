@@ -1,0 +1,23 @@
+meta {
+  name: V2 - Resend Invitation
+  type: http
+  seq: 112
+}
+
+post {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/invitations/{{invitationId}}/resend
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Issues a new link; the old one stops working.
+}

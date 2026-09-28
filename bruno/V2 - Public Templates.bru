@@ -1,0 +1,19 @@
+meta {
+  name: V2 - Public Templates
+  type: http
+  seq: 129
+}
+
+get {
+  url: {{base_url}}/api/templates/public
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Public, rate limited 30/min per IP.
+}

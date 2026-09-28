@@ -1,0 +1,20 @@
+meta {
+  name: V2 - List Invitations
+  type: http
+  seq: 111
+}
+
+get {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/invitations
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.invitations: isArray
+}

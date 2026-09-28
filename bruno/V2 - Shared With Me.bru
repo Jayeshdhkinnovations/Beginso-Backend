@@ -1,0 +1,16 @@
+meta {
+  name: V2 - Shared With Me
+  type: http
+  seq: 120
+}
+
+get {
+  url: {{base_url}}/api/shared-with-me
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.forms: isArray
+}

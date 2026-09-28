@@ -1,0 +1,24 @@
+meta {
+  name: V2 - Workspace Audit
+  type: http
+  seq: 122
+}
+
+get {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/audit?page=1&limit=20
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.events: isArray
+}
+
+docs {
+  Owner/admin only.
+}

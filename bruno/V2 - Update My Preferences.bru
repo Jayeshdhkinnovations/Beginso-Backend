@@ -1,0 +1,27 @@
+meta {
+  name: V2 - Update My Preferences
+  type: http
+  seq: 106
+}
+
+patch {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/preferences
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "notificationPreference": "mine",
+    "timezoneOverride": "Asia/Kolkata"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.preferences.notificationPreference: eq mine
+}

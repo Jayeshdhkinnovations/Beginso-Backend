@@ -1,0 +1,29 @@
+meta {
+  name: V2 - Update Workspace
+  type: http
+  seq: 105
+}
+
+put {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "name": "Renamed by Bruno"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Owner/admin only.
+}

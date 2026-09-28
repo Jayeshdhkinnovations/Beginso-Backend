@@ -7,6 +7,7 @@ import { SystemLog } from "../models/SystemLog";
 import { AuditLog } from "../models/AuditLog";
 import { MailLog } from "../models/MailLog";
 import SessionModel from "../models/Session";
+import Membership from "../models/Membership";
 import { auth, revokeFirebaseUserTokens } from "../config/firebase";
 import fs from "fs";
 import crypto from "crypto";
@@ -512,6 +513,8 @@ export class SuperAdminService {
     });
     newAdmin.workspaceId = workspace._id as any;
     await newAdmin.save();
+    // Every workspace has an owner Membership row (C1.8); without it the owner only works through a fallback.
+    await Membership.create({ userId: newAdmin._id, workspaceId: workspace._id, role: "owner", notificationPreference: "all" });
 
     await AuditLog.create({
       actorId: actor.id,

@@ -1,0 +1,23 @@
+meta {
+  name: V2 - Leave Workspace
+  type: http
+  seq: 131
+}
+
+post {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/leave
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  The only owner gets 400 LAST_OWNER.
+}

@@ -1,0 +1,24 @@
+meta {
+  name: V2 - Failure - Other Workspace Members
+  type: http
+  seq: 132
+}
+
+get {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/members
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{userBToken}}
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 403
+}
+
+docs {
+  User B is not a member: 403, whatever headers are sent.
+}

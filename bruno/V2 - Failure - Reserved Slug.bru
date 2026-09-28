@@ -1,0 +1,22 @@
+meta {
+  name: V2 - Failure - Reserved Slug
+  type: http
+  seq: 135
+}
+
+post {
+  url: {{base_url}}/api/workspaces
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Nope",
+    "slug": "current"
+  }
+}
+
+assert {
+  res.status: eq 400
+}

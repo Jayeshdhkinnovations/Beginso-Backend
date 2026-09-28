@@ -1,0 +1,24 @@
+meta {
+  name: V2 - Failure - Personal Signal Grants Nothing
+  type: http
+  seq: 133
+}
+
+get {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/members
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{userBToken}}
+  x-workspace-id: personal
+}
+
+assert {
+  res.status: eq 403
+}
+
+docs {
+  The personal signal never bypasses membership.
+}

@@ -1,0 +1,16 @@
+meta {
+  name: V2 - List Workspaces
+  type: http
+  seq: 102
+}
+
+get {
+  url: {{base_url}}/api/workspaces
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.workspaces: isArray
+}

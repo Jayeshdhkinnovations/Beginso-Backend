@@ -1,3 +1,4 @@
+import { createWorkspaceSchema, updateWorkspaceSchema, updatePreferencesSchema } from "../validations/workspace.validator";
 import { Request, Response, NextFunction } from "express";
 import { deleteWorkspaceData } from "../services/cleanup.service";
 import { assertVerifiedWorkspace } from "../utils/requestContext";
@@ -15,24 +16,8 @@ export const createWorkspace = async (req: Request, res: Response, next: NextFun
       return;
     }
 
-    const { name, slug, timezone, description, logo } = req.body;
-    if (!name) {
-      res.status(400).json({ success: false, message: "Workspace name is required" });
-      return;
-    }
-
-    if (timezone) {
-      try {
-        Intl.DateTimeFormat(undefined, { timeZone: timezone });
-      } catch {
-        res.status(400).json({
-          success: false,
-          message: "Invalid timezone: must be a valid IANA timezone string",
-          error: { message: "Invalid timezone: must be a valid IANA timezone string" },
-        });
-        return;
-      }
-    }
+    // Zod rejects a missing/oversized name, a bad or reserved slug and an invalid timezone (400).
+    const { name, slug, timezone, description, logo } = createWorkspaceSchema.parse(req.body ?? {});
 
     const workspaceData: any = {
       name,
@@ -86,6 +71,41 @@ export const createWorkspace = async (req: Request, res: Response, next: NextFun
       });
       return;
     }
+    next(error);
+  }
+};
+
+// PATCH /api/workspaces/:id/preferences: the caller's own notification preference and timezone
+// override for this workspace (P1, P2). Nobody can change someone else's through this route.
+export const updateMyPreferences = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    const rawId = String(req.params.id || "").trim();
+    const workspace = mongoose.Types.ObjectId.isValid(rawId)
+      ? await Workspace.findById(rawId)
+      : await Workspace.findOne({ slug: rawId.toLowerCase() });
+    if (!workspace) {
+      res.status(404).json({ success: false, message: "Workspace not found" });
+      return;
+    }
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
+
+    const body = updatePreferencesSchema.parse(req.body ?? {});
+    const membership = await Membership.findOne({ userId: authReq.user._id, workspaceId: workspace._id });
+    if (!membership) {
+      res.status(404).json({ success: false, message: "You are not a member of this workspace" });
+      return;
+    }
+    if (body.notificationPreference !== undefined) membership.notificationPreference = body.notificationPreference;
+    if (body.timezoneOverride !== undefined) membership.timezoneOverride = body.timezoneOverride;
+    await membership.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Preferences updated",
+      preferences: { notificationPreference: membership.notificationPreference, timezoneOverride: membership.timezoneOverride ?? null },
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -261,7 +281,7 @@ export const updateWorkspace = async (req: Request, res: Response, next: NextFun
 
     const rawId = req.params.id;
     const id = (Array.isArray(rawId) ? rawId[0] : rawId) || "";
-    const { name, description, logo, timezone } = req.body;
+    const { name, description, logo, timezone } = updateWorkspaceSchema.parse(req.body ?? {});
 
     let workspace: any = null;
     if (mongoose.Types.ObjectId.isValid(id)) {

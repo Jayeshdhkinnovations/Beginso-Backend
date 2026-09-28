@@ -1,0 +1,19 @@
+meta {
+  name: V2 - Remove Member
+  type: http
+  seq: 109
+}
+
+delete {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/members/{{memberId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+}

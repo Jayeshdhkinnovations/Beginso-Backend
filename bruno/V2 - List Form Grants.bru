@@ -1,0 +1,20 @@
+meta {
+  name: V2 - List Form Grants
+  type: http
+  seq: 117
+}
+
+get {
+  url: {{base_url}}/api/forms/{{formId}}/grants
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.grants: isArray
+}

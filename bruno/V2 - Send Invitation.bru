@@ -1,0 +1,31 @@
+meta {
+  name: V2 - Send Invitation
+  type: http
+  seq: 110
+}
+
+post {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/invitations
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "email": "invitee@example.com",
+    "role": "editor"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.invitation.token: isUndefined
+}
+
+docs {
+  The link token is only in the email; the API never returns it.
+}

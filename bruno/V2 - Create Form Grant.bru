@@ -1,0 +1,30 @@
+meta {
+  name: V2 - Create Form Grant
+  type: http
+  seq: 118
+}
+
+post {
+  url: {{base_url}}/api/forms/{{formId}}/grants
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "email": "invitee@example.com",
+    "role": "viewer"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  Owner/admin of the workspace only.
+}

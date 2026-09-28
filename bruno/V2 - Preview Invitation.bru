@@ -1,0 +1,20 @@
+meta {
+  name: V2 - Preview Invitation
+  type: http
+  seq: 114
+}
+
+get {
+  url: {{base_url}}/api/invitations/{{invitationToken}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.invitation.workspaceName: isString
+}
+
+docs {
+  Public. Token from the invitation email.
+}

@@ -1,0 +1,20 @@
+meta {
+  name: V2 - Form Submissions Paged
+  type: http
+  seq: 125
+}
+
+get {
+  url: {{base_url}}/api/forms/{{formId}}/submissions?page=1&limit=50
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.totalPages: isNumber
+}

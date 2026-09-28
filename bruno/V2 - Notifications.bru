@@ -1,0 +1,16 @@
+meta {
+  name: V2 - Notifications
+  type: http
+  seq: 127
+}
+
+get {
+  url: {{base_url}}/api/notifications
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.notifications: isArray
+}

@@ -1,0 +1,20 @@
+meta {
+  name: V2 - Dashboard Analytics
+  type: http
+  seq: 128
+}
+
+get {
+  url: {{base_url}}/api/dashboard/analytics
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.analytics.totalForms: isNumber
+}

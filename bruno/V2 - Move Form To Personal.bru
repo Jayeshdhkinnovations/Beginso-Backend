@@ -1,0 +1,29 @@
+meta {
+  name: V2 - Move Form To Personal
+  type: http
+  seq: 126
+}
+
+post {
+  url: {{base_url}}/api/forms/{{formId}}/move
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "targetWorkspaceId": "personal"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Owner/admin of the source workspace; the mover owns the personal form.
+}

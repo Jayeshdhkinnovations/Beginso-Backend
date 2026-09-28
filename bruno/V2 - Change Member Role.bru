@@ -1,0 +1,29 @@
+meta {
+  name: V2 - Change Member Role
+  type: http
+  seq: 108
+}
+
+patch {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/members/{{memberId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "role": "viewer"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  An admin cannot change another admin (403 ADMIN_REQUIRES_OWNER).
+}

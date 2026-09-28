@@ -1,0 +1,20 @@
+meta {
+  name: V2 - Form Events
+  type: http
+  seq: 123
+}
+
+get {
+  url: {{base_url}}/api/forms/{{formId}}/events
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.events: isArray
+}

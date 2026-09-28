@@ -5,17 +5,23 @@ const config: Config = {
   testEnvironment: 'node',
   testMatch: ['**/__tests__/**/*.test.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  globalSetup: '<rootDir>/src/__tests__/helpers/globalSetup.ts',
+  globalTeardown: '<rootDir>/src/__tests__/helpers/globalTeardown.ts',
+  moduleNameMapper: {
+    // Suites use a private database on one shared mongod instead of booting their own.
+    '^mongodb-memory-server$': '<rootDir>/src/__tests__/helpers/mongoMemoryServerShim.ts',
+  },
   verbose: true,
   forceExit: true,
-  // Also applies to beforeAll/afterAll: each suite boots its own in-memory mongod, which can
-  // take well over 30s on the shared self-hosted deploy runner.
+  // Also applies to beforeAll/afterAll; generous because CI runners can be slow.
   testTimeout: 120000,
   clearMocks: true,
   resetMocks: true,
   restoreMocks: true,
   transform: {
-    // 151002: hybrid Node16 module kind warning; tsc (npm run build) is the type-check gate.
-    '^.+\\.[tj]sx?$': ['ts-jest', { diagnostics: { ignoreCodes: [151002] } }],
+    // isolatedModules skips per-file type-checking (much faster). `npm run type-check` /
+    // `npm run build` (tsc, which includes the tests) is the type gate.
+    '^.+\\.[tj]sx?$': ['ts-jest', { isolatedModules: true }],
   },
   transformIgnorePatterns: [
     'node_modules/(?!(jose)/)',

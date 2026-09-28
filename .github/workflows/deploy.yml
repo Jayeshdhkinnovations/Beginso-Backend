@@ -25,6 +25,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Type Check
+        run: npm run type-check
+
       - name: Run Tests
         run: npm test
 
@@ -57,6 +60,38 @@ jobs:
         run: |
           node -e "const fs=require('fs');const sha=process.env.COMMIT_SHA||'';fs.writeFileSync('dist/version.json',JSON.stringify({commit:sha.slice(0,7),commitMessage:(process.env.COMMIT_MESSAGE||'').split('\n')[0],deployedAt:new Date().toISOString()}))"
 
-      - name: Restart PM2 Service
+      # PM2 runs the app from APP_DIR (script /root/Onboarding-backend/dist/server.js), NOT from
+      # this runner workspace, so the fresh build has to be copied there. Copy only (no delete):
+      # APP_DIR holds files that are not in git (.env, dist/config/firebase/serviceAccountKey.json).
+      - name: Publish Build To Live App Folder
+        env:
+          APP_DIR: /root/Onboarding-backend
         run: |
-          pm2 restart onboarding-backend || pm2 start dist/server.js --name "onboarding-backend"
+          set -e
+          test -f "$APP_DIR/dist/server.js"
+          rm -rf "$APP_DIR/dist.bak"
+          cp -a "$APP_DIR/dist" "$APP_DIR/dist.bak"
+          cp -a dist/. "$APP_DIR/dist/"
+          cp package.json package-lock.json "$APP_DIR/"
+          cd "$APP_DIR"
+          npm ci --omit=dev
+
+      - name: Restart PM2 Service
+        run: pm2 restart onboarding-backend
+
+      - name: Verify Live Version
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          SHORT="${COMMIT_SHA:0:7}"
+          URL="http://127.0.0.1:${PORT:-5000}/"
+          for i in 1 2 3 4 5 6 7 8; do
+            sleep 5
+            if curl -fsS "$URL" | grep -q "$SHORT"; then
+              echo "Live backend reports commit $SHORT"
+              exit 0
+            fi
+          done
+          echo "Live backend does NOT report commit $SHORT. It answered:"
+          curl -sS "$URL" || true
+          exit 1

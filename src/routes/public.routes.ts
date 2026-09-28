@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { getPublicFormBySlug, submitPublicForm } from "../controllers/form.controller";
+import { getPublicFormBySlug, submitPublicForm, recordFormView } from "../controllers/form.controller";
 import { getUploadDir } from "../controllers/upload.controller";
 import { submitRateLimiter, publicFormReadLimiter } from "../middleware/rateLimiter";
 import { MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
@@ -42,6 +42,7 @@ const uploadAny = (req: any, res: any, next: any) =>
   }).any()(req, res, next);
 
 router.get("/:slug", publicFormReadLimiter, getPublicFormBySlug);
+router.post("/:slug/view", publicFormReadLimiter, recordFormView);
 router.post("/:slug/submit", submitRateLimiter, prepareUploadContext as any, uploadAny, submitPublicForm);
 
 export default router;

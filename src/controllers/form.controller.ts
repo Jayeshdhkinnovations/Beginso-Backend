@@ -18,6 +18,8 @@ import path from "path";
 import fs from "fs";
 import { getUploadDir } from "./upload.controller";
 import { getRealClientIp, hashIp } from "../utils/ip";
+import { keyedHash } from "../utils/pepper";
+import { RateLimitBucket } from "../models/RateLimitBucket";
 import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
 import { logWorkspaceEvent } from "../services/event.service";
 
@@ -1036,6 +1038,28 @@ const cleanupUploadedFiles = async (files: Express.Multer.File[], deleteFromDb =
   }
 };
 
+// POST /api/public/:slug/view: called once when a visitor opens the public form. Counts a view for
+// the completion rate. One IP counts once per form per hour (refreshing does not inflate it), and
+// a form that is not open for responses counts nothing. Always 204: it must never disturb the page.
+export const recordFormView = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const slug = String(req.params.slug || "");
+    const form = await formService.getPublicFormBySlug(slug, { readOnly: true });
+    const hourWindow = Math.floor(Date.now() / 3_600_000);
+    const key = `view:${form._id}:${keyedHash(getRealClientIp(req))}:${hourWindow}`;
+    // new: false returns the document as it was before, so null means this IP is new for this hour.
+    const before = await RateLimitBucket.findOneAndUpdate(
+      { key },
+      { $setOnInsert: { count: 1, expiresAt: new Date((hourWindow + 2) * 3_600_000) } },
+      { upsert: true, new: false }
+    ).lean();
+    if (!before) await Form.updateOne({ _id: form._id }, { $inc: { viewsCount: 1 } });
+  } catch {
+    // unknown/closed form, duplicate-key race or a database hiccup: nothing to count, nothing to report
+  }
+  res.status(204).end();
+};
+
 export const submitPublicForm = async (
   req: Request,
   res: Response,
@@ -1749,7 +1773,7 @@ export const getFormOverview = async (req: Request, res: Response, next: NextFun
     const views = (formDoc as any).viewsCount || (formDoc as any).views || null;
     const completionRate =
       views && typeof views === "number" && views > 0
-        ? Number(((totalResponses / views) * 100).toFixed(2))
+        ? Math.min(100, Number(((totalResponses / views) * 100).toFixed(2))) // responses can predate view counting
         : null;
 
     res.status(200).json({

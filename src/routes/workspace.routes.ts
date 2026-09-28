@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createWorkspace, listWorkspaces, getWorkspace, updateWorkspace, deleteWorkspace } from "../controllers/workspace.controller";
+import { createWorkspace, listWorkspaces, getWorkspace, updateWorkspace, deleteWorkspace, transferOwnership, leaveWorkspace } from "../controllers/workspace.controller";
 import {
   getCurrentWorkspace,
   patchCurrentWorkspace,
@@ -42,5 +42,7 @@ router.post("/", protect as any, blockSuspended as any, createWorkspace);
 router.get("/:id", protect as any, blockSuspended as any, requirePermission("workspace:read", { resourceType: "workspace" }) as any, getWorkspace);
 router.put("/:id", protect as any, blockSuspended as any, requirePermission("workspace:settings", { resourceType: "workspace" }) as any, updateWorkspace);
 router.delete("/:id", protect as any, blockSuspended as any, requirePermission("workspace:delete", { resourceType: "workspace" }) as any, deleteWorkspace);
+router.post("/:id/transfer-ownership", protect as any, blockSuspended as any, requirePermission("workspace:delete", { resourceType: "workspace" }) as any, transferOwnership);
+router.post("/:id/leave", protect as any, blockSuspended as any, requirePermission("workspace:read", { resourceType: "workspace" }) as any, leaveWorkspace);
 
 export default router;

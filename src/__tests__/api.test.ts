@@ -10,6 +10,9 @@ jest.mock("firebase-admin/auth", () => {
           if (token === "invalid-token") {
             throw new Error("Invalid Firebase token.");
           }
+          if (typeof token === "string" && token.startsWith("reauth-")) {
+            return { uid: token.slice("reauth-".length), auth_time: Math.floor(Date.now() / 1000) };
+          }
           if (token === "google-token") {
             return {
               uid: "google-uid-123",
@@ -344,7 +347,8 @@ describe("Onboarding Platform Integration Tests", () => {
 
       const res = await request(app)
         .delete("/api/users/profile")
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${token}`)
+        .send({ reauthToken: `reauth-${user.firebaseUid}` });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);

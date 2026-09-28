@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from "express";
+import { deleteWorkspaceData } from "../services/cleanup.service";
+import { assertVerifiedWorkspace } from "../utils/requestContext";
 import { recordEvent } from "../services/event.service";
 import mongoose from "mongoose";
 import Workspace from "../models/Workspace";
@@ -330,13 +332,110 @@ export const deleteWorkspace = async (req: Request, res: Response, next: NextFun
     }
 
     await recordEvent(req, workspace._id, "workspace.delete", { id: workspace._id, type: "workspace", label: workspace.name });
-    await Membership.deleteMany({ workspaceId: workspace._id });
-    await Workspace.findByIdAndDelete(workspace._id);
+    await deleteWorkspaceData(workspace._id);
 
     res.status(200).json({
       success: true,
       message: "Workspace deleted successfully",
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/workspaces/:id/transfer-ownership  { userId }   (owner only)
+export const transferOwnership = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    const rawId = String(req.params.id || "").trim();
+    const workspace = mongoose.Types.ObjectId.isValid(rawId)
+      ? await Workspace.findById(rawId)
+      : await Workspace.findOne({ slug: rawId.toLowerCase() });
+    if (!workspace) {
+      res.status(404).json({ success: false, message: "Workspace not found" });
+      return;
+    }
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
+
+    const targetKey = String(req.body?.userId || "").trim();
+    const target = mongoose.Types.ObjectId.isValid(targetKey)
+      ? await Membership.findOne({ workspaceId: workspace._id, $or: [{ _id: targetKey }, { userId: targetKey }] })
+      : null;
+    if (!target) {
+      res.status(404).json({ success: false, message: "The new owner must be a member of this workspace" });
+      return;
+    }
+    if (target.userId.toString() === workspace.owner.toString()) {
+      res.status(400).json({ success: false, message: "That member already owns this workspace" });
+      return;
+    }
+
+    const previousOwnerId = workspace.owner;
+    target.role = "owner";
+    await target.save();
+    workspace.owner = target.userId as any;
+    await workspace.save();
+    await Membership.updateOne({ workspaceId: workspace._id, userId: previousOwnerId }, { $set: { role: "admin" } });
+
+    const newOwner = await User.findById(target.userId).select("email").lean();
+    await recordEvent(req, workspace._id, "workspace.transfer_ownership", { id: workspace._id, type: "workspace", label: workspace.name }, {
+      from: String(previousOwnerId),
+      to: String(target.userId),
+      toEmail: newOwner?.email,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Ownership transferred successfully",
+      workspaceId: workspace._id.toString(),
+      owner: target.userId.toString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/workspaces/:id/leave   (any member; the only owner must transfer ownership first)
+export const leaveWorkspace = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    const rawId = String(req.params.id || "").trim();
+    const workspace = mongoose.Types.ObjectId.isValid(rawId)
+      ? await Workspace.findById(rawId)
+      : await Workspace.findOne({ slug: rawId.toLowerCase() });
+    if (!workspace) {
+      res.status(404).json({ success: false, message: "Workspace not found" });
+      return;
+    }
+    if (!assertVerifiedWorkspace(req, res, workspace._id)) return;
+
+    const userId = authReq.user._id;
+    const membership = await Membership.findOne({ workspaceId: workspace._id, userId });
+    if (!membership) {
+      res.status(404).json({ success: false, message: "You are not a member of this workspace" });
+      return;
+    }
+
+    const ownerCount = await Membership.countDocuments({ workspaceId: workspace._id, role: "owner" });
+    if (membership.role === "owner" && ownerCount <= 1) {
+      const message = "You are the only owner. Transfer ownership to another member before leaving.";
+      res.status(400).json({ success: false, message, error: { code: "LAST_OWNER", message } });
+      return;
+    }
+
+    await Membership.deleteOne({ _id: membership._id });
+    if (workspace.owner.toString() === userId.toString()) {
+      const successor = await Membership.findOne({ workspaceId: workspace._id, role: "owner" });
+      if (successor) {
+        workspace.owner = successor.userId as any;
+        await workspace.save();
+      }
+    }
+    await User.updateOne({ _id: userId, workspaceId: workspace._id }, { $unset: { workspaceId: 1 } });
+
+    await recordEvent(req, workspace._id, "member.leave", { id: userId, type: "member", label: authReq.user.email });
+
+    res.status(200).json({ success: true, message: "You left the workspace" });
   } catch (error) {
     next(error);
   }

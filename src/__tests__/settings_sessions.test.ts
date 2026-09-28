@@ -240,7 +240,8 @@ describe("Workspace Settings (/api/workspaces/current)", () => {
 
     const delRes = await request(app)
       .delete("/api/workspaces/current")
-      .set("Authorization", `Bearer ${user1Token}`);
+      .set("Authorization", `Bearer ${user1Token}`)
+      .send({ reauthToken: "reauth-uid-user-1" });
 
     expect(delRes.status).toBe(200);
     expect(delRes.body.success).toBe(true);

@@ -21,7 +21,11 @@ jest.mock("firebase-admin/auth", () => {
     getUserByEmail: async () => {
       throw notFound();
     },
-    verifyIdToken: async () => {
+    // Reauth tokens for account deletion look like "reauth-<firebaseUid>"; anything else is rejected.
+    verifyIdToken: async (token: string) => {
+      if (typeof token === "string" && token.startsWith("reauth-")) {
+        return { uid: token.slice("reauth-".length), auth_time: Math.floor(Date.now() / 1000) };
+      }
       throw new Error("verifyIdToken is not mocked in this test");
     },
   };

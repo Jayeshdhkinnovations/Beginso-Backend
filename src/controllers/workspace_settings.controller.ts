@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { deleteAccountFlow } from "./user.controller";
 import { recordEvent } from "../services/event.service";
 import { getAuth } from "firebase-admin/auth";
 import mongoose from "mongoose";
@@ -335,67 +336,15 @@ export const downloadWorkspaceExportFile = async (req: Request, res: Response, n
 
 /**
  * DELETE /api/workspaces/current
- * Cascade deletes workspace → forms → responses → file metadata → files on disk → user sessions.
- * Complete sweep with zero orphans left behind!
+ * The app's "Delete workspace" action. Its confirmation tells the user the account is deleted too,
+ * so this is the same guarded flow as DELETE /api/users/profile: fresh password confirmation, and
+ * refusal while the caller owns a workspace other people still belong to.
  */
 export const deleteCurrentWorkspace = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const authReq = req as any;
-    const workspace = await getCallerWorkspace(req);
-    if (!workspace) {
-      res.status(404).json({ success: false, message: "Workspace not found" });
-      return;
-    }
-
-    const wsId = workspace._id;
-    const ownerId = workspace.owner;
-    await recordEvent(req, wsId, "workspace.delete", { id: wsId, type: "workspace", label: workspace.name });
-
-    // 1. Find all forms in workspace
-    const forms = await Form.find({ workspaceId: wsId });
-    const formIds = forms.map((f) => f._id);
-
-    // 2. Delete all responses for forms in workspace
-    await ResponseModel.deleteMany({ formId: { $in: formIds } });
-
-    // 3. Find and clean up upload metadata and physical files on disk
-    const uploads = await Upload.find({ owner: ownerId });
-    for (const upload of uploads) {
-      if (upload.path && fs.existsSync(upload.path)) {
-        try {
-          fs.unlinkSync(upload.path);
-        } catch (e) {
-          // Ignored disk cleanup error
-        }
-      }
-    }
-    await Upload.deleteMany({ owner: ownerId });
-
-    // 4. Delete forms
-    await Form.deleteMany({ workspaceId: wsId });
-
-    // 5. Revoke / delete user sessions and notifications for workspace owner
-    await SessionModel.deleteMany({ userId: ownerId });
-    await Notification.deleteMany({ userId: ownerId });
-
-    // 6. Delete workspace document
-    await Workspace.findByIdAndDelete(wsId);
-
-    // 7. Delete Firebase Auth user & MongoDB User record (closes account completely)
-    if (authReq.user?.firebaseUid) {
-      try {
-        await getAuth().deleteUser(authReq.user.firebaseUid);
-      } catch (fbErr) {
-        console.warn("Firebase deleteUser skipped or failed during workspace deletion:", fbErr);
-      }
-    }
-    await User.findByIdAndDelete(ownerId);
-
-    res.status(200).json({
-      success: true,
-      message: "Workspace and associated user account, forms, responses, uploads, and sessions permanently deleted.",
-    });
-  } catch (error) {
-    next(error);
+  const workspace = await getCallerWorkspace(req);
+  if (!workspace) {
+    res.status(404).json({ success: false, message: "Workspace not found" });
+    return;
   }
+  await deleteAccountFlow(req, res);
 };

@@ -1,4 +1,5 @@
 import { FormRepository } from "../repositories/form.repository";
+import { deleteFormData } from "./cleanup.service";
 import Form, { IForm, IFormField } from "../models/Form";
 import ResponseModel from "../models/Response";
 import Upload from "../models/Upload";
@@ -371,60 +372,8 @@ export class FormService {
   }
 
   async deleteForm(formId: string, workspaceId: string): Promise<void> {
-    const form = await this.getFormById(formId, workspaceId);
-
-    // Find all responses associated with this form
-    const responses = await ResponseModel.find({ formId });
-
-    // Collect all associated file names to delete
-    const fileNames = new Set<string>();
-
-    // 1. Check form branding
-    if (form.branding?.logoUrl) {
-      fileNames.add(path.basename(form.branding.logoUrl));
-    }
-    if (form.branding?.coverImageUrl) {
-      fileNames.add(path.basename(form.branding.coverImageUrl));
-    }
-
-    // 2. Check response answers for file uploads
-    const fileFields = form.fields.filter(f => f.type === "file_upload");
-    for (const resDoc of responses) {
-      if (resDoc.answers) {
-        for (const field of fileFields) {
-          const answer = resDoc.answers[field.label];
-          if (answer && typeof answer === "object" && answer.fileName) {
-            fileNames.add(path.basename(answer.fileName));
-          }
-        }
-      }
-    }
-
-    // 3. Find and delete corresponding Upload metadata & physical files from disk
-    if (fileNames.size > 0) {
-      const uniqueNames = Array.from(fileNames);
-      const uploads = await Upload.find({ path: { $in: uniqueNames } });
-
-      const uploadDir = getUploadDir();
-      for (const upload of uploads) {
-        const filePath = path.resolve(uploadDir, upload.path);
-        if (filePath.startsWith(path.resolve(uploadDir)) && fs.existsSync(filePath)) {
-          try {
-            fs.unlinkSync(filePath);
-          } catch (err) {
-            console.error("Failed to delete physical file during form cascade delete:", err);
-          }
-        }
-      }
-
-      await Upload.deleteMany({ _id: { $in: uploads.map(u => u._id) } });
-    }
-
-    // 4. Delete all associated responses from MongoDB
-    await ResponseModel.deleteMany({ formId });
-    await FormAccessGrant.deleteMany({ formId });
-
-    // 5. Delete the form from MongoDB
+    await this.getFormById(formId, workspaceId);
+    await deleteFormData(formId);
     await this.formRepository.delete(formId, workspaceId);
   }
 

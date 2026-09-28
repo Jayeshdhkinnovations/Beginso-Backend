@@ -1,4 +1,5 @@
 import { ResponseRepository } from "../repositories/response.repository";
+import { deleteResponseFiles } from "./cleanup.service";
 import { FormRepository } from "../repositories/form.repository";
 import Upload from "../models/Upload";
 import Form from "../models/Form";
@@ -304,44 +305,7 @@ export class ResponseService {
       throw err;
     }
 
-    // Cascade delete response_files metadata & physical files from disk
-    const uploadDocs = await Upload.find({
-      path: { $regex: responseId },
-    });
-
-    const uploadDir = getUploadDir();
-    for (const up of uploadDocs) {
-      if (up.path) {
-        const fullPath = path.isAbsolute(up.path)
-          ? up.path
-          : path.join(uploadDir, up.path);
-        try {
-          if (fs.existsSync(fullPath)) {
-            await deleteFileAndEmptyParents(fullPath, uploadDir);
-          }
-        } catch (fileErr) {
-          console.error(`Failed to delete physical file: ${fullPath}`, fileErr);
-        }
-      }
-    }
-
-    // Sweep response directory if present
-    try {
-      const responseDir = path.join(
-        uploadDir,
-        form.workspaceId ? form.workspaceId.toString() : "personal",
-        form._id.toString(),
-        "responses",
-        responseId
-      );
-      if (fs.existsSync(responseDir)) {
-        fs.rmSync(responseDir, { recursive: true, force: true });
-      }
-    } catch (dirErr) {
-      // Silently ignore directory sweep errors
-    }
-
-    await Upload.deleteMany({ path: { $regex: responseId } });
+    await deleteResponseFiles(responseId, form._id.toString());
     await this.responseRepository.deleteById(responseId);
 
     return true;

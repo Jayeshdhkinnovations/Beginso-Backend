@@ -27,16 +27,7 @@ export const protect = async (
     }
   }
 
-  // 2. Check Query Parameters (?token=... or ?access_token=...)
-  if (!token && req.query) {
-    if (typeof req.query.token === "string") {
-      token = req.query.token;
-    } else if (typeof req.query.access_token === "string") {
-      token = req.query.access_token;
-    }
-  }
-
-  // 3. Check Cookies (if token/jwt/access_token cookie exists)
+  // 2. Check Cookies (if token/jwt/access_token cookie exists)
   if (!token && req.headers.cookie) {
     const cookies = req.headers.cookie.split(";").reduce((acc, c) => {
       const [name, ...val] = c.trim().split("=");

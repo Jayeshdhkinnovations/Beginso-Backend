@@ -10,6 +10,9 @@ import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import FormAccessGrant from "../models/FormAccessGrant";
 import Membership from "../models/Membership";
+import SessionModel from "../models/Session";
+import { hasPermission } from "../middleware/permission.middleware";
+import mongoose from "mongoose";
 import { UploadResponse } from "../types/upload";
 
 // ponytail: This implementation utilizes local disk storage for keeping uploaded assets.
@@ -67,6 +70,13 @@ export const uploadFile = async (
     }
 
     const formId = req.query.formId || req.body.formId;
+    if (formId !== undefined && (typeof formId !== "string" || !mongoose.Types.ObjectId.isValid(formId))) {
+      if (file.path && fs.existsSync(file.path)) {
+        await deleteFileAndEmptyParents(file.path, getUploadDir());
+      }
+      res.status(400).json({ success: false, message: "formId must be a valid id" });
+      return;
+    }
     const isBanner =
       file.fieldname === "cover" ||
       file.fieldname === "banner" ||
@@ -93,6 +103,13 @@ export const uploadFile = async (
     // Now that it is, move the file into its real, structured resting place.
     const uploadDir = getUploadDir();
     const finalPath = path.join(uploadDir, relativePath);
+    if (!path.resolve(finalPath).startsWith(path.resolve(uploadDir) + path.sep)) {
+      if (file.path && fs.existsSync(file.path)) {
+        await deleteFileAndEmptyParents(file.path, uploadDir);
+      }
+      res.status(400).json({ success: false, message: "Invalid upload path" });
+      return;
+    }
     const finalDir = path.dirname(finalPath);
     if (!fs.existsSync(finalDir)) {
       fs.mkdirSync(finalDir, { recursive: true });
@@ -153,6 +170,63 @@ export const uploadFile = async (
   }
 };
 
+const SAFE_INLINE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"]);
+
+// Uploads are user-controlled content served from the API origin. A browser must never treat one
+// as a page: sandbox + nosniff, and only known-safe types may render inline.
+const setFileResponseHeaders = (res: Response, filePath: string): void => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+  if (!SAFE_INLINE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
+    res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath).replace(/["\r\n]/g, "")}"`);
+  }
+};
+
+// Authorization for a private upload is decided from the STORED file (its response and form),
+// never from the URL the caller typed. Same rules as reading the response itself (R3).
+const canReadUpload = async (user: any, uploadDoc: any): Promise<boolean> => {
+  if (user.role === "super_admin") return true;
+
+  const storedPath = String(uploadDoc.path).replace(/\\/g, "/");
+  const responseId = storedPath.match(/(?:^|\/)responses\/([0-9a-fA-F]{24})(?:\/|$)/)?.[1];
+  if (!responseId) {
+    return uploadDoc.owner?.toString() === user._id.toString();
+  }
+
+  const response = await ResponseModel.findById(responseId).select("formId").lean();
+  const form = response ? await Form.findById(response.formId).select("workspaceId createdBy").lean() : null;
+  if (!form) return false;
+
+  const grant = await FormAccessGrant.findOne({ formId: form._id, userId: user._id }).lean();
+  if (grant) return hasPermission(grant.role, "responses:read");
+
+  if (form.workspaceId) {
+    const membership = await Membership.findOne({ userId: user._id, workspaceId: form.workspaceId }).select("role").lean();
+    if (membership) return hasPermission(membership.role, "responses:read");
+    const ws = await Workspace.findById(form.workspaceId).select("owner").lean();
+    return ws?.owner?.toString() === user._id.toString();
+  }
+  return form.createdBy?.toString() === user._id.toString();
+};
+
+const getSessionToken = (req: AuthenticatedRequest): string | undefined => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && typeof authHeader === "string") {
+    const parts = authHeader.trim().split(" ");
+    if (parts.length === 2 && /^bearer$/i.test(parts[0])) return parts[1];
+    if (parts.length === 1) return parts[0];
+  }
+  if (req.headers.cookie) {
+    const cookies = req.headers.cookie.split(";").reduce((acc, c) => {
+      const [name, ...val] = c.trim().split("=");
+      acc[name] = val.join("=");
+      return acc;
+    }, {} as Record<string, string>);
+    return cookies.token || cookies.jwt || cookies.access_token;
+  }
+  return undefined;
+};
+
 export const getFile = async (
   req: AuthenticatedRequest,
   res: Response
@@ -161,105 +235,41 @@ export const getFile = async (
     const filename = req.params.filename || (req.params as any)[0];
 
     if (!filename || typeof filename !== "string") {
-      res.status(400).json({
-        success: false,
-        message: "Filename is required and must be a string",
-      });
+      res.status(400).json({ success: false, message: "Filename is required and must be a string" });
       return;
     }
 
     // Explicitly reject path traversal attempts
     if (filename.includes("..")) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid file path",
-      });
+      res.status(400).json({ success: false, message: "Invalid file path" });
       return;
     }
 
-    // Stable stored filename/path (avoid collisions and path traversal)
-    // Extract only base name to prevent traversal attacks
-    const safeFilename = path.basename(filename);
-    const uploadDir = getUploadDir();
-    const normalizedPath = filename.replace(/[\/\\]/g, path.sep);
+    // Exact match on the stored path only (no regex, no basename fallback): the file that is
+    // served is always the file that is authorized below.
     const forwardSlashPath = filename.replace(/[\/\\]/g, "/");
-
-    // Query DB first to find its relative path
     const uploadDoc = await Upload.findOne({
-      $or: [
-        { path: normalizedPath },
-        { path: forwardSlashPath },
-        { path: safeFilename },
-        { path: { $regex: safeFilename + "$" } }
-      ]
+      path: { $in: [forwardSlashPath, forwardSlashPath.replace(/\//g, path.sep), forwardSlashPath.replace(/\//g, "\\")] },
     });
-
-    let targetPath = uploadDoc ? uploadDoc.path : normalizedPath;
-    let filePath = path.resolve(uploadDir, targetPath);
-
-    if (!fs.existsSync(filePath)) {
-      targetPath = safeFilename;
-      filePath = path.resolve(uploadDir, targetPath);
-    }
-
-    // Double check that the resolved path is indeed inside the upload directory
-    if (!filePath.startsWith(path.resolve(uploadDir))) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid file path",
-      });
+    if (!uploadDoc) {
+      res.status(404).json({ success: false, message: "File not found" });
       return;
     }
 
+    const uploadDir = path.resolve(getUploadDir());
+    const filePath = path.resolve(uploadDir, uploadDoc.path);
+    if (!filePath.startsWith(uploadDir + path.sep)) {
+      res.status(400).json({ success: false, message: "Invalid file path" });
+      return;
+    }
     if (!fs.existsSync(filePath)) {
-      res.status(404).json({
-        success: false,
-        message: "File not found",
-      });
+      res.status(404).json({ success: false, message: "File not found" });
       return;
     }
 
-    // If it's a private file (not branding), check authentication
-    if (!uploadDoc || !uploadDoc.isBranding) {
-      let token: string | undefined;
-
-      // 1. Check Authorization Header (case-insensitive)
-      const authHeader = req.headers.authorization || (req.headers as any).Authorization;
-      if (authHeader && typeof authHeader === "string") {
-        const parts = authHeader.trim().split(" ");
-        if (parts.length === 2 && /^bearer$/i.test(parts[0])) {
-          token = parts[1];
-        } else if (parts.length === 1) {
-          token = parts[0];
-        }
-      }
-
-      // 2. Check Query Parameters (?token=... or ?access_token=...)
-      if (!token && req.query) {
-        if (typeof req.query.token === "string") {
-          token = req.query.token;
-        } else if (typeof req.query.access_token === "string") {
-          token = req.query.access_token;
-        } else if (typeof req.query.auth === "string") {
-          token = req.query.auth;
-        }
-      }
-
-      // 3. Check Custom Header
-      if (!token && req.headers["x-access-token"] && typeof req.headers["x-access-token"] === "string") {
-        token = req.headers["x-access-token"];
-      }
-
-      // 4. Check Cookies
-      if (!token && req.headers.cookie) {
-        const cookies = req.headers.cookie.split(";").reduce((acc, c) => {
-          const [name, ...val] = c.trim().split("=");
-          acc[name] = val.join("=");
-          return acc;
-        }, {} as Record<string, string>);
-        token = cookies.token || cookies.jwt || cookies.access_token;
-      }
-
+    // Branding images (logos, covers) are public; everything else needs a valid session.
+    if (!uploadDoc.isBranding) {
+      const token = getSessionToken(req);
       if (!token || token === "undefined" || token === "null") {
         res.status(401).json({
           success: false,
@@ -269,125 +279,16 @@ export const getFile = async (
         return;
       }
 
+      let user: any;
       try {
-        const decoded = jwt.verify(
-          token,
-          process.env.JWT_SECRET as string
-        ) as { id: string; email: string; role: string };
-
-        const user = await User.findById(decoded.id);
-        if (!user) {
-          res.status(401).json({
-            success: false,
-            message: "Unauthorized: Invalid user session",
-            error: { message: "Unauthorized: Invalid user session" },
-          });
-          return;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string; sessionId?: string };
+        if (decoded.sessionId) {
+          const session = await SessionModel.findById(decoded.sessionId);
+          if (!session || session.revokedAt) throw new Error("session revoked");
         }
-
-        // Workspace authorization check for private files with owner metadata
-        const userId = user._id.toString();
-        let userWorkspaceId = user.workspaceId
-          ? (user.workspaceId._id ? user.workspaceId._id.toString() : user.workspaceId.toString())
-          : "";
-        
-        if (!userWorkspaceId) {
-          const userWs = await Workspace.findOne({ owner: userId });
-          if (userWs) userWorkspaceId = userWs._id.toString();
-        }
-
-        let isAuthorized = user.role === "super_admin";
-
-        const isResponseFile = !!forwardSlashPath.match(/(?:^|\/)responses\//);
-
-        if (!isAuthorized && uploadDoc && uploadDoc.owner) {
-          const ownerId = uploadDoc.owner.toString();
-          if (userId === ownerId) {
-            isAuthorized = true;
-          }
-
-          if (!isAuthorized && !isResponseFile && userWorkspaceId) {
-            const ownerWs = await Workspace.findOne({ owner: ownerId });
-            const ownerWsId = ownerWs ? ownerWs._id.toString() : "";
-            if (ownerWsId && userWorkspaceId === ownerWsId) {
-              isAuthorized = true;
-            }
-          }
-
-          if (!isAuthorized && !isResponseFile) {
-            const workspace = await Workspace.findOne({
-              $or: [
-                { owner: ownerId, "members.user": userId },
-                { owner: userId, "members.user": ownerId },
-              ],
-            });
-            if (workspace) {
-              isAuthorized = true;
-            }
-          }
-        }
-
-        // Additional path-based resolution and per-form access grant check (BE 0.6 / R3)
-        if (!isAuthorized) {
-          let targetFormId: string | null = null;
-          const responseIdMatch = forwardSlashPath.match(/(?:^|\/)responses\/([0-9a-fA-F]{24})(?:\/|$)/);
-          if (responseIdMatch && responseIdMatch[1]) {
-            const responseDoc = await ResponseModel.findById(responseIdMatch[1]);
-            if (responseDoc && responseDoc.formId) {
-              targetFormId = responseDoc.formId.toString();
-            }
-          }
-
-          if (!targetFormId) {
-            const formIdMatch = forwardSlashPath.match(/(?:^|\/)([0-9a-fA-F]{24})(?:\/|$)/);
-            if (formIdMatch && formIdMatch[1]) {
-              const formDoc = await Form.findById(formIdMatch[1]);
-              if (formDoc) {
-                targetFormId = formDoc._id.toString();
-              }
-            }
-          }
-
-          if (targetFormId) {
-            const formDoc = await Form.findById(targetFormId);
-            if (formDoc) {
-              // 1. Workspace membership or ownership check
-              if (formDoc.workspaceId) {
-                const isOwner = userWorkspaceId && formDoc.workspaceId.toString() === userWorkspaceId;
-                const membership = await Membership.findOne({
-                  workspaceId: formDoc.workspaceId,
-                  userId: user._id,
-                });
-                if (isOwner || membership) {
-                  isAuthorized = true;
-                }
-              } else if (formDoc.createdBy && formDoc.createdBy.toString() === userId) {
-                isAuthorized = true;
-              }
-
-              // 2. Per-form grant check (works on personal and workspace forms)
-              if (!isAuthorized) {
-                const grant = await FormAccessGrant.findOne({
-                  formId: formDoc._id,
-                  userId: user._id,
-                });
-                if (grant) {
-                  isAuthorized = true;
-                }
-              }
-            }
-          }
-        }
-
-        if (!isAuthorized) {
-          res.status(403).json({
-            success: false,
-            message: "Forbidden: You do not have permission to access this file",
-            error: { message: "Forbidden: You do not have permission to access this file" },
-          });
-          return;
-        }
-      } catch (err) {
+        user = await User.findById(decoded.id);
+        if (!user) throw new Error("no user");
+      } catch {
         res.status(401).json({
           success: false,
           message: "Unauthorized: Invalid or expired token",
@@ -395,17 +296,27 @@ export const getFile = async (
         });
         return;
       }
+
+      if (user.status === "suspended") {
+        res.status(403).json({ success: false, message: "Account suspended", error: { code: "ACCOUNT_SUSPENDED", message: "Account suspended" } });
+        return;
+      }
+
+      if (!(await canReadUpload(user, uploadDoc))) {
+        res.status(403).json({
+          success: false,
+          message: "Forbidden: You do not have permission to access this file",
+          error: { message: "Forbidden: You do not have permission to access this file" },
+        });
+        return;
+      }
     }
 
-    // Serve/stream the stored file for preview/download
+    setFileResponseHeaders(res, filePath);
     res.sendFile(filePath);
   } catch (error: any) {
     console.error("Error serving file:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error serving file",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: "Error serving file" });
   }
 };
 

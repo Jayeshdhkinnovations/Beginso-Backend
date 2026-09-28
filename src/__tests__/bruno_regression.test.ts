@@ -258,14 +258,20 @@ describe("Bruno Regression Route Pass & Forms Lifecycle Tests", () => {
       .set("Authorization", `Bearer ${tokenA}`)
       .attach("logo", Buffer.from("fake-image-bytes"), "image.jpg");
     
-    const uniqueFilename = path.basename(uploadRes.body.url);
+    // Clients use the full path the upload endpoint returned, not just its last segment.
+    const storedPath = new URL(uploadRes.body.url).pathname.replace("/api/upload/file/", "");
 
     const streamRes = await request(app)
-      .get(`/api/upload/file/${uniqueFilename}`);
+      .get(`/api/upload/file/${storedPath}`);
     
     expect(streamRes.status).toBe(200);
     expect(streamRes.headers["content-type"]).toBe("image/jpeg");
+    expect(streamRes.headers["x-content-type-options"]).toBe("nosniff");
     expect(streamRes.body.toString()).toBe("fake-image-bytes");
+
+    // A bare filename must not resolve to a structured path (that lookup was a cross-tenant leak).
+    const bare = await request(app).get(`/api/upload/file/${path.basename(storedPath)}`);
+    expect(bare.status).toBe(404);
   });
 
   // 8. Test GET /api/templates returns 5+ active templates

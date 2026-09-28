@@ -21,6 +21,31 @@ const ensureExportsDir = (): void => {
   }
 };
 
+// Export files are named workspace_export_<workspaceId>_<jobId>.json. Lookups are exact, so a
+// caller can only ever reach their own workspace's exports, whatever jobId they send.
+const findExportFile = (files: string[], workspaceId: string, jobId: string): string | undefined => {
+  const prefix = `workspace_export_${workspaceId}_`;
+  if (jobId) {
+    if (!mongoose.Types.ObjectId.isValid(jobId)) return undefined;
+    const name = `${prefix}${jobId}.json`;
+    return files.includes(name) ? name : undefined;
+  }
+  return files.filter((f) => f.startsWith(prefix)).sort().pop();
+};
+
+// Exports advertise a 24h lifetime; enforce it.
+const purgeExpiredExports = (): void => {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const file of fs.readdirSync(UPLOADS_EXPORTS_DIR)) {
+    const full = path.join(UPLOADS_EXPORTS_DIR, file);
+    try {
+      if (fs.statSync(full).mtimeMs < cutoff) fs.unlinkSync(full);
+    } catch {
+      // already gone
+    }
+  }
+};
+
 const workspacePatchSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   logoUrl: z.union([z.string().url(), z.null()]).optional(),
@@ -176,6 +201,7 @@ export const createWorkspaceExport = async (req: Request, res: Response, next: N
     }
 
     ensureExportsDir();
+    purgeExpiredExports();
     const exportId = new mongoose.Types.ObjectId().toString();
     const exportFileName = `workspace_export_${workspace._id.toString()}_${exportId}.json`;
     const exportFilePath = path.join(UPLOADS_EXPORTS_DIR, exportFileName);
@@ -240,13 +266,7 @@ export const getWorkspaceExportStatus = async (req: Request, res: Response, next
     const jobId = (req.query.jobId as string) || "";
     const files = fs.readdirSync(UPLOADS_EXPORTS_DIR);
     
-    let matchingFile = false;
-    if (jobId) {
-      matchingFile = files.some((f) => f.includes(jobId));
-    } else {
-      const prefix = `workspace_export_${workspace._id.toString()}_`;
-      matchingFile = files.some((f) => f.startsWith(prefix));
-    }
+    const matchingFile = !!findExportFile(files, workspace._id.toString(), jobId);
 
     res.status(200).json({
       success: true,
@@ -278,13 +298,7 @@ export const downloadWorkspaceExportFile = async (req: Request, res: Response, n
     const jobId = (req.query.jobId as string) || "";
     const files = fs.readdirSync(UPLOADS_EXPORTS_DIR);
     
-    let matchingFile: string | undefined;
-    if (jobId) {
-      matchingFile = files.find((f) => f.includes(jobId));
-    } else {
-      const prefix = `workspace_export_${workspace._id.toString()}_`;
-      matchingFile = files.find((f) => f.startsWith(prefix));
-    }
+    const matchingFile = findExportFile(files, workspace._id.toString(), jobId);
 
     if (!matchingFile) {
       // Return 202 status envelope instead of breaking crash when retried before file finishes writing

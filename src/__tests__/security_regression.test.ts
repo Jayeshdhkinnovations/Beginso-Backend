@@ -616,7 +616,7 @@ describe("S-15 logout", () => {
 });
 
 describe("S-04 attachment download must authorise the file it serves", () => {
-  openHole("a user must not read another tenant's attachment by naming their own form in the URL", async () => {
+  it("a user must not read another tenant's attachment by naming their own form in the URL", async () => {
     const victimForm = await mkForm(wsB._id, ownerB._id);
     const victimResp = await ResponseModel.create({ formId: victimForm._id, answers: {} });
     const rel = path.join(ownerB._id.toString(), victimForm._id.toString(), "responses", victimResp._id.toString(), "secret-report.pdf");
@@ -633,8 +633,129 @@ describe("S-04 attachment download must authorise the file it serves", () => {
   });
 });
 
+describe("B6 private file downloads", () => {
+  // A response attachment as the app really stores it: <ownerId>/<formId>/responses/<responseId>/<name>
+  const mkResponseFile = async (name: string, content: string, form?: any) => {
+    const f = form ?? (await mkForm(wsB._id, ownerB._id));
+    const resp = await ResponseModel.create({ formId: f._id, answers: {} });
+    const rel = path.join(ownerB._id.toString(), f._id.toString(), "responses", resp._id.toString(), name);
+    fs.mkdirSync(path.dirname(path.join(uploadDir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(uploadDir, rel), content);
+    const up = await Upload.create({ name, size: content.length, type: "application/octet-stream", path: rel, owner: ownerB._id, isBranding: false });
+    return { form: f, resp, up, url: `/api/upload/file/${rel.split(path.sep).join("/")}` };
+  };
+
+  it("a member with responses:read can download, and the file is sandboxed", async () => {
+    const { url } = await mkResponseFile("cv.pdf", "PDF-BYTES");
+    const res = await auth(request(app).get(url), reviewerB);
+    expect(res.status).toBe(200);
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["content-security-policy"]).toContain("sandbox");
+    expect(res.headers["content-disposition"]).toBeUndefined();
+  });
+
+  it("an HTML or SVG attachment is always a download, never rendered inline", async () => {
+    const html = await mkResponseFile("page.html", "<script>alert(1)</script>");
+    const res = await auth(request(app).get(html.url), reviewerB);
+    expect(res.status).toBe(200);
+    expect(res.headers["content-disposition"]).toMatch(/^attachment/);
+    const svg = await mkResponseFile("pic.svg", "<svg onload='alert(1)'/>");
+    expect((await auth(request(app).get(svg.url), reviewerB)).headers["content-disposition"]).toMatch(/^attachment/);
+  });
+
+  it("an unrelated user and an unauthenticated caller are refused", async () => {
+    const { url } = await mkResponseFile("secret.pdf", "SECRET");
+    expect((await auth(request(app).get(url), outsider)).status).toBe(403);
+    expect((await auth(request(app).get(url), ownerA)).status).toBe(403);
+    expect((await request(app).get(url)).status).toBe(401);
+  });
+
+  it("being the upload's recorded owner is not enough once you are no longer in the workspace", async () => {
+    const { url, up } = await mkResponseFile("owned.pdf", "OWNED");
+    await Upload.updateOne({ _id: up._id }, { $set: { owner: outsider._id } });
+    expect((await auth(request(app).get(url), outsider)).status).toBe(403);
+  });
+
+  it("a per-form grantee can download, and revoking the grant ends it", async () => {
+    const { url, form } = await mkResponseFile("shared.pdf", "SHARED");
+    await FormAccessGrant.create({ formId: form._id, userId: outsider._id, role: "viewer", grantedBy: ownerB._id });
+    expect((await auth(request(app).get(url), outsider)).status).toBe(200);
+    await FormAccessGrant.deleteMany({ formId: form._id });
+    expect((await auth(request(app).get(url), outsider)).status).toBe(403);
+  });
+
+  it("a file is only found by its exact stored path", async () => {
+    const { url } = await mkResponseFile("exact.pdf", "EXACT");
+    expect((await auth(request(app).get("/api/upload/file/exact.pdf"), reviewerB)).status).toBe(404);
+    expect((await auth(request(app).get(url.replace("/responses/", "/response_/")), reviewerB)).status).toBe(404);
+  });
+
+  it("a token in the query string is not accepted, on files or anywhere else", async () => {
+    const { url } = await mkResponseFile("q.pdf", "Q");
+    const token = tok(reviewerB);
+    expect((await request(app).get(`${url}?token=${token}`)).status).toBe(401);
+    expect((await request(app).get(`${url}?access_token=${token}`)).status).toBe(401);
+    expect((await request(app).get(`/api/auth/me?token=${token}`)).status).toBe(401);
+  });
+
+  it("the file URL the API hands out carries no credential", async () => {
+    const { resp, up } = await mkResponseFile("nourl.pdf", "N");
+    const res = await auth(request(app).get(`/api/responses/${resp._id}/file/${up._id}`), ownerB);
+    expect(res.status).toBe(200);
+    expect(res.body.url).toContain("/api/upload/file/");
+    expect(res.body.url).not.toMatch(/token|access_token/);
+  });
+});
+
+describe("B6 upload input", () => {
+  it("rejects a formId that is not an id, and stores a valid one inside the upload dir", async () => {
+    const bad = await request(app).post("/api/upload?formId=not-an-id").set("Authorization", `Bearer ${tok(outsider)}`).attach("logo", Buffer.from("x"), "logo.png");
+    expect(bad.status).toBe(400);
+    const good = await request(app)
+      .post(`/api/upload?formId=${new mongoose.Types.ObjectId()}`)
+      .set("Authorization", `Bearer ${tok(outsider)}`)
+      .attach("logo", Buffer.from("x"), "logo.png");
+    expect(good.status).toBe(201);
+    expect(fs.existsSync(path.join(uploadDir, good.body.metadata.path))).toBe(true);
+  });
+});
+
+describe("B6 workspace export", () => {
+  const exportsDir = path.join(process.cwd(), "uploads", "exports");
+  const mkExport = (ws: any, jobId: string, content: string) => {
+    fs.mkdirSync(exportsDir, { recursive: true });
+    const file = path.join(exportsDir, `workspace_export_${ws._id}_${jobId}.json`);
+    fs.writeFileSync(file, content);
+    return file;
+  };
+
+  it("the owner downloads their own export; another workspace gets nothing for the same jobId", async () => {
+    const jobId = new mongoose.Types.ObjectId().toString();
+    const file = mkExport(wsB, jobId, JSON.stringify({ marker: "MINE-B" }));
+    try {
+      const own = await auth(request(app).get(`/api/workspaces/current/export/file?jobId=${jobId}`), ownerB);
+      expect(own.status).toBe(200);
+      expect(JSON.stringify(own.body) + (own.text ?? "")).toContain("MINE-B");
+      const other = await auth(request(app).get(`/api/workspaces/current/export/file?jobId=${jobId}`), ownerA);
+      expect(JSON.stringify(other.body) + (other.text ?? "")).not.toContain("MINE-B");
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+
+  it("a jobId that is not an id never matches a file", async () => {
+    const file = mkExport(wsB, new mongoose.Types.ObjectId().toString(), "X");
+    try {
+      const res = await auth(request(app).get("/api/workspaces/current/export/status?jobId=workspace_export_"), ownerB);
+      expect(res.body.exportJob.status).toBe("processing");
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+});
+
 describe("S-05 upload path traversal", () => {
-  openHole("formId must not be able to write outside the upload directory", async () => {
+  it("formId must not be able to write outside the upload directory", async () => {
     const escapeDir = `escaped-${crypto.randomBytes(4).toString("hex")}`;
     const escapedAbs = path.resolve(uploadDir, "..", escapeDir);
     try {
@@ -651,7 +772,7 @@ describe("S-05 upload path traversal", () => {
 });
 
 describe("S-07 workspace export download must be tied to the caller's workspace", () => {
-  openHole("owner of A must not download B's export by guessing jobId", async () => {
+  it("owner of A must not download B's export by guessing jobId", async () => {
     const exportsDir = path.join(process.cwd(), "uploads", "exports");
     fs.mkdirSync(exportsDir, { recursive: true });
     const file = path.join(exportsDir, `workspace_export_${wsB._id}_${new mongoose.Types.ObjectId()}.json`);

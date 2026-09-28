@@ -306,24 +306,12 @@ export const getResponseFileUrl = async (
     const host = req.get("host") || "localhost";
     const protocol = req.protocol || "http";
 
-    // Extract caller token for URL appending fallback
-    const authHeader = req.headers.authorization || (req.headers as any).Authorization;
-    let sessionToken: string | undefined;
-    if (authHeader && typeof authHeader === "string") {
-      const parts = authHeader.trim().split(" ");
-      sessionToken = parts.length === 2 ? parts[1] : parts[0];
-    }
-    if (!sessionToken && typeof req.query.token === "string") {
-      sessionToken = req.query.token;
-    }
-
     const result = await responseService.getResponseFileUrl(
       workspaceId || "",
       String(id),
       String(fileId),
       host,
       protocol,
-      sessionToken,
       isGrant
     );
 

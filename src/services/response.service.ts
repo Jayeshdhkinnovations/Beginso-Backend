@@ -353,7 +353,6 @@ export class ResponseService {
     fileId: string,
     host: string,
     protocol: string,
-    sessionToken?: string,
     isGrant?: boolean
   ): Promise<{ url: string }> {
     const response = await this.responseRepository.findById(responseId);
@@ -383,11 +382,7 @@ export class ResponseService {
       throw err;
     }
 
-    let safeUrl = `${protocol}://${host}/api/upload/file/${upload.path.replace(/\\/g, "/")}`;
-    if (sessionToken) {
-      safeUrl += `?token=${encodeURIComponent(sessionToken)}`;
-    }
-
-    return { url: safeUrl };
+    // No credential in the URL: the caller authenticates the download with its own session.
+    return { url: `${protocol}://${host}/api/upload/file/${upload.path.replace(/\\/g, "/")}` };
   }
 }

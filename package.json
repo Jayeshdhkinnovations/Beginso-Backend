@@ -10,6 +10,8 @@
     "test": "jest --maxWorkers=4",
     "test:handles": "jest --runInBand --detectOpenHandles",
     "type-check": "tsc --noEmit",
+    "migrate:v1": "ts-node src/scripts/migrateV1ToMemberships.ts",
+    "migrate:theme": "ts-node src/scripts/migrateUserTheme.ts",
     "seed:templates": "ts-node src/scripts/seedTemplates.ts",
     "seed:form": "ts-node src/scripts/seedFullForm.ts",
     "seed:superadmin": "ts-node src/scripts/seedSuperAdmin.ts",

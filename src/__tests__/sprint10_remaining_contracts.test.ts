@@ -237,7 +237,7 @@ describe("Sprint 10 — Remaining Backend Contracts (BE 0.6–BE 0.11)", () => {
         fields: [],
       });
 
-      const dryRunRes = await runV1Migration({ dryRun: true });
+      const dryRunRes = await runV1Migration({ dryRun: true, createWorkspaces: true });
 
       expect(dryRunRes.dryRun).toBe(true);
       expect(dryRunRes.usersMigrated).toBe(2); // userA & userB need workspace
@@ -259,7 +259,7 @@ describe("Sprint 10 — Remaining Backend Contracts (BE 0.6–BE 0.11)", () => {
       });
 
       // 1. Run migration
-      const migRes = await runV1Migration({ dryRun: false });
+      const migRes = await runV1Migration({ dryRun: false, createWorkspaces: true });
       expect(migRes.workspacesCreated).toBe(2);
       expect(migRes.formsUpdated).toBe(1);
 
@@ -273,7 +273,7 @@ describe("Sprint 10 — Remaining Backend Contracts (BE 0.6–BE 0.11)", () => {
       expect(getRes.body.workspaceId).toBeDefined();
 
       // 2. Re-run migration to test IDEMPOTENCY
-      const reRunRes = await runV1Migration({ dryRun: false });
+      const reRunRes = await runV1Migration({ dryRun: false, createWorkspaces: true });
       expect(reRunRes.workspacesCreated).toBe(0); // 0 new workspaces created
       expect(reRunRes.formsUpdated).toBe(0); // 0 extra forms updated
 
@@ -285,7 +285,7 @@ describe("Sprint 10 — Remaining Backend Contracts (BE 0.6–BE 0.11)", () => {
       expect(postRollbackForm?.workspaceId).toBeFalsy();
 
       // 4. Re-run after rollback
-      const finalRunRes = await runV1Migration({ dryRun: false });
+      const finalRunRes = await runV1Migration({ dryRun: false, createWorkspaces: true });
       expect(finalRunRes.workspacesCreated).toBe(2);
     });
   });

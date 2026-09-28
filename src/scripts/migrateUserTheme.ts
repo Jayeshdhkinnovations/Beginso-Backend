@@ -21,7 +21,11 @@ export const migrateUserTheme = async (): Promise<number> => {
 if (require.main === module) {
   dotenv.config();
   const run = async () => {
-    const mongoUri = process.env.MONGO_URI || "mongodb://localhost:27017/beginso";
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+    if (!mongoUri) {
+      console.error("Set MONGODB_URI (or MONGO_URI). Refusing to guess which database to change.");
+      process.exit(1);
+    }
     console.log("Connecting to MongoDB for User Theme migration...");
     await mongoose.connect(mongoUri);
     const count = await migrateUserTheme();

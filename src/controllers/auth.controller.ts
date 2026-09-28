@@ -77,9 +77,10 @@ export const signup = async (
       });
       return;
     }
+    console.error("Signup error:", error);
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Internal Server Error",
     });
   }
 };
@@ -121,10 +122,11 @@ export const getMe = async (
       },
     });
   } catch (error: any) {
+    console.error("Session error:", error);
     res.status(500).json({
       success: false,
-      message: error.message,
-      error: { message: error.message }
+      message: "Internal Server Error",
+      error: { message: "Internal Server Error" }
     });
   }
 };
@@ -247,7 +249,7 @@ export const session = async (
       lastLogin: new Date(),
       $push: {
         loginHistory: {
-          $each: [{ timestamp: new Date(), ip, userAgent, location }],
+          $each: [{ timestamp: new Date(), ip: hashIpAddress(ip), userAgent, location }],
           $slice: -5,
         },
       },
@@ -541,14 +543,14 @@ export const verifyEmailCode = async (
     const cleanCode = code.trim();
     const inputHash = hashKey(cleanCode);
 
-    // Find active OTP record for this UID
-    const otpRecord = await AuthOtp.findOne({
-      uid,
-      consumed: false,
-      expiresAt: { $gt: new Date() },
-    });
+    // Count this attempt atomically before comparing, so parallel guesses cannot exceed 5.
+    const otpRecord = await AuthOtp.findOneAndUpdate(
+      { uid, consumed: false, expiresAt: { $gt: new Date() }, attempts: { $lt: 5 } },
+      { $inc: { attempts: 1 } },
+      { new: true }
+    );
 
-    if (!otpRecord || otpRecord.attempts >= 5) {
+    if (!otpRecord) {
       res.status(400).json({
         message: "Invalid or expired verification code.",
       });
@@ -564,18 +566,18 @@ export const verifyEmailCode = async (
       crypto.timingSafeEqual(inputBuffer, storedBuffer);
 
     if (!isMatch) {
-      otpRecord.attempts += 1;
-      await otpRecord.save();
-
       res.status(400).json({
         message: "Invalid or expired verification code.",
       });
       return;
     }
 
-    // Atomically mark OTP as consumed
-    otpRecord.consumed = true;
-    await otpRecord.save();
+    // Atomically mark OTP as consumed; only one of two parallel correct submissions wins.
+    const consumed = await AuthOtp.updateOne({ _id: otpRecord._id, consumed: false }, { $set: { consumed: true } });
+    if (consumed.modifiedCount !== 1) {
+      res.status(400).json({ message: "Invalid or expired verification code." });
+      return;
+    }
 
     // Update Firebase user as emailVerified = true
     await getAuth().updateUser(uid, { emailVerified: true });

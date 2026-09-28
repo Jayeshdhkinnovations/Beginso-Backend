@@ -39,6 +39,21 @@ const resolveTargetMembership = async (workspaceId: mongoose.Types.ObjectId, mem
   return membership;
 };
 
+// Admins manage everyone below them; only the owner can touch or create another admin.
+const adminChangeAllowed = (req: Request, res: Response, targetRole: string, newRole?: string): boolean => {
+  const callerRole = (req as any).workspaceRole;
+  if (callerRole === "owner") return true;
+  if (targetRole === "admin" || newRole === "admin") {
+    res.status(403).json({
+      success: false,
+      message: "Only the workspace owner can change or remove an admin",
+      error: { code: "ADMIN_REQUIRES_OWNER", message: "Only the workspace owner can change or remove an admin" },
+    });
+    return false;
+  }
+  return true;
+};
+
 export const listMembers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const rawParam = req.params.id || req.params.workspaceId;
@@ -58,6 +73,7 @@ export const listMembers = async (req: Request, res: Response, next: NextFunctio
 
     const memberships = await Membership.find({ workspaceId: workspace._id })
       .populate("userId", "fullName email avatarUrl")
+      .limit(1000)
       .lean();
 
     // Map formatted members
@@ -204,6 +220,8 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
       return;
     }
 
+    if (!adminChangeAllowed(req, res, membership.role, role)) return;
+
     membership.role = role as any;
     await membership.save();
 
@@ -312,6 +330,8 @@ export const removeMember = async (req: Request, res: Response, next: NextFuncti
       });
       return;
     }
+
+    if (!adminChangeAllowed(req, res, membership.role)) return;
 
     await Membership.findByIdAndDelete(membership._id);
 

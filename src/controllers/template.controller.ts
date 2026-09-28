@@ -37,7 +37,6 @@ export const getTemplates = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({
       success: false,
       message: "Error fetching templates",
-      error: error.message,
     });
   }
 };
@@ -52,7 +51,6 @@ export const getPublicTemplates = async (req: Request, res: Response): Promise<v
     res.status(500).json({
       success: false,
       message: "Error fetching templates",
-      error: error.message,
     });
   }
 };
@@ -218,7 +216,6 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({
       success: false,
       message: "Error creating form from template",
-      error: error.message,
     });
   }
 };

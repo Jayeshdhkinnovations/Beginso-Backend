@@ -16,27 +16,20 @@ export const errorHandler = (
   if (err instanceof mongoose.Error.ValidationError) statusCode = 400;
   if (err.name === "MulterError") statusCode = 400;
 
+  // Never log headers, query or body: they hold cookies, OTP codes, emails and public-form answers.
+  const context = { method: req.method, ip: req.ip || "unknown" };
   if (statusCode >= 500) {
-    Logger.error("Global Error Interceptor", err, {
-      headers: req.headers,
-      query: req.query,
-      body: req.body,
-      ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
-    }, req.originalUrl, statusCode);
+    Logger.error("Global Error Interceptor", err, context, req.originalUrl, statusCode);
   } else {
-    Logger.warn(`Client Request Warning: ${err.message || "Request failed"}`, {
-      headers: req.headers,
-      query: req.query,
-      ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
-    }, req.originalUrl, statusCode);
+    Logger.warn(`Client Request Warning: ${err.message || "Request failed"}`, context, req.originalUrl, statusCode);
   }
 
   // Cast Error (invalid ObjectId)
   if (err instanceof mongoose.Error.CastError) {
     res.status(400).json({
       success: false,
-      message: `Cast to ObjectId failed for value "${err.value}" at path "${err.path}"`,
-      error: { message: err.message }
+      message: "Invalid identifier",
+      error: { message: "Invalid identifier" }
     });
     return;
   }
@@ -86,12 +79,14 @@ export const errorHandler = (
     return;
   }
 
-  // Default Error
+  // Default Error. A 5xx message is internal detail (driver text, duplicate-key values), so it is
+  // replaced with a generic one; the real error is in the server log above.
+  const publicMessage = statusCode >= 500 ? "Internal Server Error" : err.message || "Request failed";
   res.status(statusCode).json({
     success: false,
-    message: err.message || "Internal Server Error",
+    message: publicMessage,
     error: {
-      message: err.message || "Internal Server Error",
+      message: publicMessage,
       ...(err.code ? { code: err.code } : {}),
     }
   });

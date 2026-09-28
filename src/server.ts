@@ -14,13 +14,32 @@ if (process.env.NODE_ENV === "production" && !process.env.MONGODB_URI) {
 
 const PORT = process.env.PORT || 5000;
 
+// One bad fire-and-forget promise must not kill every tenant's requests silently, and a real crash
+// must exit so PM2 restarts a clean process.
+process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled promise rejection:", reason);
+});
+process.on("uncaughtException", (error) => {
+    console.error("Uncaught exception, exiting:", error);
+    process.exit(1);
+});
+
 const startServer = async () => {
     try {
         await connectDB();
 
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);
         });
+
+        // PM2 sends SIGTERM on restart/deploy: stop taking requests, let in-flight ones finish.
+        const shutdown = (signal: string) => {
+            console.log(`${signal} received, shutting down`);
+            server.close(() => process.exit(0));
+            setTimeout(() => process.exit(0), 10000).unref();
+        };
+        process.on("SIGTERM", () => shutdown("SIGTERM"));
+        process.on("SIGINT", () => shutdown("SIGINT"));
     } catch (error) {
         console.error("Server failed to start", error);
         process.exit(1);

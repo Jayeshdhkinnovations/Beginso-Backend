@@ -6,6 +6,7 @@ import Upload from "../models/Upload";
 import { SystemLog } from "../models/SystemLog";
 import { AuditLog } from "../models/AuditLog";
 import { MailLog } from "../models/MailLog";
+import SessionModel from "../models/Session";
 import { auth, revokeFirebaseUserTokens } from "../config/firebase";
 import fs from "fs";
 import path from "path";
@@ -558,8 +559,15 @@ export class SuperAdminService {
     }
     if (data.status) {
       admin.status = data.status;
-      if (data.status === "suspended" && admin.firebaseUid) {
-        await revokeFirebaseUserTokens(admin.firebaseUid);
+      if (data.status === "suspended") {
+        // Suspension takes effect now: end every Beginso session and stop Firebase from minting new ones.
+        await SessionModel.updateMany({ userId: admin._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
+        if (admin.firebaseUid) {
+          await revokeFirebaseUserTokens(admin.firebaseUid);
+          await auth.updateUser(admin.firebaseUid, { disabled: true }).catch((e: unknown) => console.error("Failed to disable Firebase user:", e));
+        }
+      } else if (data.status === "active" && admin.firebaseUid) {
+        await auth.updateUser(admin.firebaseUid, { disabled: false }).catch((e: unknown) => console.error("Failed to enable Firebase user:", e));
       }
     }
     if (data.workspaceName && admin.workspaceId) {

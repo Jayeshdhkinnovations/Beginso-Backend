@@ -34,7 +34,7 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       user,
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 

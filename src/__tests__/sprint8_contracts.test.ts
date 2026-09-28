@@ -367,12 +367,12 @@ describe("Sprint 8 — Phase 0 Backend Contracts [BE]", () => {
       });
     });
 
-    it("Moves form from Workspace A to Workspace B by user with forms:write on A and forms:create on B", async () => {
-      // Grant User A editor/member role in Workspace B as well
+    it("Moves form from Workspace A to Workspace B by an owner/admin of both", async () => {
+      // Moving needs owner/admin on both sides (CF6.4a), so User A is an admin in Workspace B
       await Membership.create({
         userId: userA._id,
         workspaceId: workspaceB._id,
-        role: "editor",
+        role: "admin",
         notificationPreference: "none",
       });
 

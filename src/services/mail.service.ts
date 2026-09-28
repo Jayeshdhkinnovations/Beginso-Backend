@@ -46,7 +46,9 @@ class MailService {
         secure,
         auth: user && pass ? { user, pass } : undefined,
         tls: {
-          rejectUnauthorized: false,
+          // Verify the server certificate. If the relay uses a self-signed cert, set
+          // SMTP_TLS_REJECT_UNAUTHORIZED=false explicitly instead of disabling it for everyone.
+          rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
         },
       });
     }

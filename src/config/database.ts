@@ -6,7 +6,9 @@ const connectDB = async (): Promise<void> => {
         if (!process.env.MONGODB_URI) {
             console.warn("⚠️ MONGODB_URI environment variable is missing. Falling back to local MongoDB: mongodb://127.0.0.1:27017/onboarding");
         }
-        await mongoose.connect(mongoUri);
+        mongoose.connection.on("error", (err) => console.error("MongoDB connection error:", err));
+        mongoose.connection.on("disconnected", () => console.warn("MongoDB disconnected"));
+        await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000, socketTimeoutMS: 45000 });
 
         console.log("✅ MongoDB Connected Successfully");
     } catch (error) {

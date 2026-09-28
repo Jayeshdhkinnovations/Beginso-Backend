@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 import crypto from "crypto";
+import { keyedHash } from "../utils/pepper";
 
 export interface IMailLog extends Document {
   template: "verification" | "password_reset" | "welcome";
@@ -68,11 +69,7 @@ export const MailLog = mongoose.model<IMailLog>("MailLog", MailLogSchema);
 
 export const computeEmailHash = (email: string): string => {
   const normalized = (email || "").trim().toLowerCase();
-  const pepper =
-    process.env.AUTH_EMAIL_HASH_PEPPER ||
-    process.env.JWT_SECRET ||
-    "beginso-mail-pepper-secret";
-  return crypto.createHmac("sha256", pepper).update(normalized).digest("hex");
+  return keyedHash(normalized);
 };
 
 export const recordMailLog = async (data: {

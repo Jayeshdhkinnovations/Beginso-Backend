@@ -1,3 +1,4 @@
+import { keyedHash } from "../utils/pepper";
 import mongoose, { Schema, Document } from "mongoose";
 import crypto from "crypto";
 
@@ -22,12 +23,12 @@ export interface ISession extends Document {
 }
 
 /**
- * Utility to compute SHA-256 hash (first 16 chars) of an IP address.
+ * Utility to compute a keyed hash (first 16 chars) of an IP address.
  * Raw IP address is NEVER stored on Session or User models.
  */
 export const hashIpAddress = (ip: string): string => {
   if (!ip) return "";
-  return crypto.createHash("sha256").update(ip.trim()).digest("hex").slice(0, 16);
+  return keyedHash(ip.trim()).slice(0, 16);
 };
 
 const SessionSchema = new Schema<ISession>(

@@ -83,7 +83,6 @@ router.post("/", protect as any, blockSuspended as any, requirePermission("uploa
       return res.status(500).json({
         success: false,
         message: "An error occurred during file upload initialization.",
-        error: err.message,
       });
     }
 

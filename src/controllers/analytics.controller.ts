@@ -1,3 +1,4 @@
+import { safeTimezone } from "../utils/safeInput";
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import Form from "../models/Form";
@@ -63,7 +64,7 @@ export const getOverview = async (req: Request, res: Response, next: NextFunctio
     const { form } = access;
     const fromStr = req.query.from as string;
     const toStr = req.query.to as string;
-    const timezone = (req.query.timezone as string) || "UTC";
+    const timezone = safeTimezone(req.query.timezone);
 
     const matchStage: any = { formId: form._id };
     let fromDate: Date | null = null;
@@ -166,7 +167,7 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
     const { form } = access;
     const fromStr = req.query.from as string;
     const toStr = req.query.to as string;
-    const timezone = (req.query.timezone as string) || "UTC";
+    const timezone = safeTimezone(req.query.timezone);
 
     const matchStage: any = { formId: form._id };
     let fromDate: Date | null = null;
@@ -332,7 +333,7 @@ export const getTrends = async (req: Request, res: Response, next: NextFunction)
     const toStr = req.query.to as string;
     const rawBucket = (req.query.bucket || req.query.interval || "day") as string;
     const bucket: "day" | "week" = rawBucket === "week" ? "week" : "day";
-    const timezone = (req.query.timezone as string) || "UTC";
+    const timezone = safeTimezone(req.query.timezone);
 
     const matchStage: any = { formId: form._id };
     let fromDate: Date | null = null;

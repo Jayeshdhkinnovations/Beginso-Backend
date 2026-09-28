@@ -65,6 +65,11 @@ const InvitationSchema = new Schema<IInvitation>(
 
 // Composite index for finding pending invitations by workspace and email
 InvitationSchema.index({ workspaceId: 1, email: 1, status: 1 });
+// At most one pending invitation per workspace and email, even under concurrent sends.
+InvitationSchema.index(
+  { workspaceId: 1, email: 1 },
+  { unique: true, partialFilterExpression: { status: "pending" } }
+);
 
 const Invitation = mongoose.model<IInvitation>("Invitation", InvitationSchema);
 

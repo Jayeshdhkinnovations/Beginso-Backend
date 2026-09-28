@@ -873,7 +873,7 @@ export const duplicateForm = async (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    const form = await formService.duplicateForm(formId as string, workspaceId);
+    const form = await formService.duplicateForm(formId as string, workspaceId, authReq.user._id);
     await recordEvent(req, form.workspaceId, "form.duplicate", { id: form._id, type: "form", label: form.title }, { sourceFormId: String(formId) });
 
     res.status(201).json({
@@ -1345,8 +1345,8 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
     const userId = authReq.user._id;
     const isSuperAdmin = authReq.user.role === "super_admin";
 
-    // 1. Source check: Caller must have forms:write (or forms:delete / admin / owner) on form's current workspace,
-    // or be form creator if personal form.
+    // 1. Source check: only an owner or admin of the form's current workspace may move it out
+    // (CF6.4a), or the creator if it is a personal form.
     if (!isSuperAdmin) {
       if (form.workspaceId) {
         const sourceWsId = form.workspaceId.toString();
@@ -1354,7 +1354,7 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
         const isSourceOwner = await Workspace.exists({ _id: sourceWsId, owner: userId });
         const sourceRole = sourceMembership ? sourceMembership.role : (isSourceOwner ? "owner" : null);
 
-        if (!sourceRole || (!hasPermission(sourceRole, "forms:write") && !hasPermission(sourceRole, "forms:delete"))) {
+        if (sourceRole !== "owner" && sourceRole !== "admin") {
           res.status(403).json({
             success: false,
             message: "Forbidden: You do not have permission to move this form from its source workspace",
@@ -1393,9 +1393,10 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
     if (targetWsInput === null || targetWsInput === "personal" || targetWsInput === "null") {
       const fromWs = form.workspaceId;
       form.workspaceId = null;
-      if (!form.createdBy) {
-        form.createdBy = userId;
-      }
+      // The mover owns a personal form: leaving the previous creator in place would let them keep
+      // (or regain) access to a form that is no longer in any shared space.
+      form.createdBy = userId;
+      await FormAccessGrant.deleteMany({ formId: form._id });
       await form.save();
       await recordEvent(req, fromWs, "form.move", { id: form._id, type: "form", label: form.title }, { to: "personal" });
 
@@ -1447,7 +1448,7 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
       const isDestOwner = targetWs.owner.toString() === userId.toString();
       const destRole = destMembership ? destMembership.role : (isDestOwner ? "owner" : null);
 
-      if (!destRole || !hasPermission(destRole, "forms:create")) {
+      if (destRole !== "owner" && destRole !== "admin") {
         res.status(403).json({
           success: false,
           message: "Forbidden: You do not have permission to create forms in the target workspace",
@@ -1463,6 +1464,8 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
     // Integrity guarantee: Preserves all fields, submissions, responses, and published/draft slugs untouched — only workspaceId pointer changes
     const fromWorkspace = form.workspaceId;
     form.workspaceId = targetWs._id;
+    // Per-form shares were granted in the old context; they do not carry into a new one.
+    await FormAccessGrant.deleteMany({ formId: form._id });
     await form.save();
     await recordEvent(req, fromWorkspace ?? targetWs._id, "form.move", { id: form._id, type: "form", label: form.title }, { to: targetWs._id.toString() });
 
@@ -1483,6 +1486,7 @@ export const listFormGrants = async (req: Request, res: Response, next: NextFunc
     const grants = await FormAccessGrant.find({ formId: rawId })
       .populate("userId", "fullName email avatarUrl")
       .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     const formatted = grants.map((g: any) => {

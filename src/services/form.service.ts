@@ -10,6 +10,8 @@ import path from "path";
 import mongoose from "mongoose";
 import { nanoid } from "nanoid";
 import { validateFieldsIntegrity, getHiddenFieldIds } from "../validations/form.validator";
+import { buildSearchText } from "../utils/responseSearch";
+import { asString, clampInt, escapeRegex } from "../utils/safeInput";
 
 const CHOICE_FIELD_TYPES = ["dropdown", "multiple_choice"];
 const MAX_SLUG_ATTEMPTS = 5;
@@ -164,8 +166,8 @@ export class FormService {
       personalUserId?: string;
     }
   ) {
-    const page = Number(options.page) || 1;
-    const limit = Number(options.limit) || 10;
+    const page = clampInt(options.page, 1, 1, 100000);
+    const limit = clampInt(options.limit, 10, 1, 50);
     const skip = (page - 1) * limit;
 
     const query: any = workspaceId
@@ -179,7 +181,8 @@ export class FormService {
     }
 
     if (options.search) {
-      query.title = { $regex: options.search, $options: "i" };
+      const search = asString(options.search);
+      if (search) query.title = { $regex: escapeRegex(search), $options: "i" };
     }
 
     const [forms, total] = await Promise.all([
@@ -187,16 +190,16 @@ export class FormService {
       this.formRepository.count(query, workspaceId),
     ]);
 
-    const formsWithCount = await Promise.all(
-      forms.map(async (f) => {
-        const doc = f.toObject ? f.toObject() : f;
-        const responseCount = await ResponseModel.countDocuments({ formId: doc._id });
-        return {
-          ...doc,
-          responseCount,
-        };
-      })
-    );
+    // One grouped count for the whole page instead of one query per form.
+    const counts = await ResponseModel.aggregate([
+      { $match: { formId: { $in: forms.map((f) => f._id) } } },
+      { $group: { _id: "$formId", n: { $sum: 1 } } },
+    ]);
+    const countByForm = new Map(counts.map((c: any) => [String(c._id), c.n]));
+    const formsWithCount = forms.map((f) => {
+      const doc = f.toObject ? f.toObject() : f;
+      return { ...doc, responseCount: countByForm.get(String(doc._id)) ?? 0 };
+    });
 
     const pages = Math.ceil(total / limit);
 
@@ -561,6 +564,7 @@ export class FormService {
       _id: responseId || new mongoose.Types.ObjectId(),
       formId,
       answers,
+      searchText: buildSearchText(answers),
       submittedAt: new Date(),
       ipHash,
     });
@@ -568,6 +572,12 @@ export class FormService {
     // Check if response limit has been reached and flip status to closed
     if (form.settings?.responseLimitEnabled && form.settings.responseLimit !== undefined) {
       const currentCount = await ResponseModel.countDocuments({ formId });
+      if (currentCount > form.settings.responseLimit) {
+        // Concurrent submissions both passed the earlier check: undo this one instead of overshooting.
+        await ResponseModel.deleteOne({ _id: newResponse._id });
+        await Form.updateOne({ _id: form._id }, { status: "closed" });
+        throw Object.assign(new Error("This form is no longer accepting responses"), { statusCode: 403 });
+      }
       if (currentCount >= form.settings.responseLimit) {
         await Form.updateOne({ _id: form._id }, { status: "closed" });
       }
@@ -578,10 +588,11 @@ export class FormService {
 
   async getSubmissions(formId: string, workspaceId: string, isGrant?: boolean) {
     await this.getFormById(formId, workspaceId, isGrant);
-    return await ResponseModel.find({ formId });
+    // ponytail: hard cap instead of pagination; add page/limit params if a form passes 1000 responses.
+    return await ResponseModel.find({ formId }).sort({ createdAt: -1 }).limit(1000);
   }
 
-  async duplicateForm(formId: string, workspaceId: string): Promise<IForm> {
+  async duplicateForm(formId: string, workspaceId: string, createdBy?: unknown): Promise<IForm> {
     const originalForm = await this.getFormById(formId, workspaceId);
 
     // Deep copy fields
@@ -601,6 +612,8 @@ export class FormService {
       title: `Copy of ${originalForm.title}`,
       description: originalForm.description,
       workspaceId: originalForm.workspaceId,
+      // The duplicator owns the copy; without this a personal duplicate has no owner at all.
+      ...(createdBy ? { createdBy } : {}),
       status: "draft",
       fields: duplicatedFields,
       schemaVersion: 1,

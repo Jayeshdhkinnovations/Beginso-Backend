@@ -48,14 +48,20 @@ export const createWorkspace = async (req: Request, res: Response, next: NextFun
 
     const workspace = await Workspace.create(workspaceData);
 
-    // Create owner membership for creator
-    await Membership.create({
-      userId: authReq.user._id,
-      workspaceId: workspace._id,
-      role: "owner",
-      notificationPreference: "all",
-      timezoneOverride: null,
-    });
+    // Create owner membership for creator. Without it the workspace would have no owner row, so
+    // undo the workspace if this write fails.
+    try {
+      await Membership.create({
+        userId: authReq.user._id,
+        workspaceId: workspace._id,
+        role: "owner",
+        notificationPreference: "all",
+        timezoneOverride: null,
+      });
+    } catch (membershipError) {
+      await Workspace.deleteOne({ _id: workspace._id });
+      throw membershipError;
+    }
 
     // Update user's active workspace if not yet set
     const user = await User.findById(authReq.user._id);

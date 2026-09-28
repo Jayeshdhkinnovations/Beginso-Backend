@@ -23,6 +23,20 @@ const getWorkspaceId = async (req: Request): Promise<string | null> => {
   return workspaceId || null;
 };
 
+const purgeExpiredReportFiles = async (workspaceId: string): Promise<void> => {
+  const expired = await ReportModel.find({
+    workspaceId,
+    expiresAt: { $lt: new Date() },
+    filePath: { $exists: true, $ne: null },
+  }).select("filePath");
+  const root = path.resolve(process.cwd(), "uploads");
+  for (const r of expired) {
+    const file = path.resolve(String(r.filePath));
+    if (file.startsWith(root + path.sep)) fs.rmSync(file, { force: true });
+    await ReportModel.updateOne({ _id: r._id }, { $unset: { filePath: 1 } });
+  }
+};
+
 /**
  * POST /api/reports
  * Creates a queued report job and returns immediately (non-blocking)
@@ -47,6 +61,23 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
 
     const { format, formId, status, search, from, to } = parseResult.data;
 
+    // PDF/CSV generation runs inside this process: refuse new jobs while this workspace already
+    // has several in flight, and drop files of expired reports while we are here.
+    const inFlight = await ReportModel.countDocuments({
+      workspaceId: userWorkspaceId,
+      status: { $in: ["queued", "processing"] },
+      createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) },
+    });
+    if (inFlight >= 3) {
+      res.status(429).json({
+        success: false,
+        message: "Too many reports are being generated. Wait for one to finish and try again.",
+        error: { code: "REPORT_QUEUE_FULL", message: "Too many reports are being generated." },
+      });
+      return;
+    }
+    await purgeExpiredReportFiles(userWorkspaceId);
+
     // 24 hours expiration window
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -61,7 +92,8 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
     // Resolve formTitle if formId provided
     let formTitle: string | null = "All Workspace Forms";
     if (formId && mongoose.Types.ObjectId.isValid(formId)) {
-      const formDoc = await Form.findById(formId).select("title");
+      // Scoped to the caller's workspace: another tenant's form title must never come back here.
+      const formDoc = await Form.findOne({ _id: formId, workspaceId: userWorkspaceId }).select("title");
       if (formDoc) formTitle = formDoc.title;
     }
 
@@ -211,7 +243,7 @@ export const getReportById = async (req: Request, res: Response, next: NextFunct
     const formId = report.filters?.formId || null;
     let formTitle: string | null = "All Workspace Forms";
     if (formId && mongoose.Types.ObjectId.isValid(formId)) {
-      const formDoc = await Form.findById(formId).select("title");
+      const formDoc = await Form.findOne({ _id: formId, workspaceId: userWorkspaceId }).select("title");
       if (formDoc) formTitle = formDoc.title;
     }
 

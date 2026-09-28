@@ -9,6 +9,7 @@ import { PaginatedResponsesResult, IResponse, IResponseFile } from "../types/res
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
+import { escapeRegex } from "../utils/safeInput";
 
 const cleanAnswers = (answers: Record<string, any>): Record<string, any> => {
   if (!answers || typeof answers !== "object") return {};
@@ -87,16 +88,22 @@ export class ResponseService {
 
     // Search filter against answers content
     if (search && search.trim() !== "") {
-      const searchRegex = new RegExp(search.replace(/[/\\^$*+?.()|[\]{}]/g, "\\$&"), "i");
-      const candidates = await this.responseRepository.findWithPagination(mongoQuery, 0, 10000);
-      const matchingIds = candidates
-        .filter((r) => {
-          const str = JSON.stringify(r.answers || {});
-          return searchRegex.test(str);
-        })
+      const needle = search.trim().toLowerCase();
+      const searchRegex = new RegExp(escapeRegex(needle), "i");
+
+      // Responses that have a stored searchText are matched inside MongoDB. Only responses stored
+      // before searchText existed (until the backfill script has run) still fall back to the old
+      // in-memory scan, capped as before.
+      const legacy = await this.responseRepository.findWithPagination(
+        { ...mongoQuery, searchText: { $exists: false } },
+        0,
+        10000
+      );
+      const legacyIds = legacy
+        .filter((r) => searchRegex.test(JSON.stringify(r.answers || {})))
         .map((r) => r._id);
 
-      mongoQuery._id = { $in: matchingIds };
+      mongoQuery.$or = [{ searchText: searchRegex }, { _id: { $in: legacyIds } }];
     }
 
     const skip = (page - 1) * limit;

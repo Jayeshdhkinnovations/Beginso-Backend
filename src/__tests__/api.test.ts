@@ -655,7 +655,7 @@ describe("Onboarding Platform Integration Tests", () => {
         .send({ answers: {} });
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain("Cast to ObjectId failed");
+      expect(res.body.message).toBe("Invalid identifier");
     });
   });
 

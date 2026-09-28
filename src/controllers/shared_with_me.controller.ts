@@ -21,6 +21,7 @@ export const getSharedWithMe = async (req: Request, res: Response, next: NextFun
     // BE 0.7: Scoped to caller's own account only; never reveals other grantees
     const grants = await FormAccessGrant.find({ userId })
       .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     if (grants.length === 0) {

@@ -18,7 +18,7 @@ export const getSessions = async (req: Request, res: Response, next: NextFunctio
     const userId = authReq.user._id;
     const currentSessionId = authReq.sessionId ? authReq.sessionId.toString() : null;
 
-    const sessions = await SessionModel.find({ userId }).sort({ lastActiveAt: -1 });
+    const sessions = await SessionModel.find({ userId }).sort({ lastActiveAt: -1 }).limit(100);
 
     const formattedSessions = sessions.map((s) => {
       const sId = s._id.toString();

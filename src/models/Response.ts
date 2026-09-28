@@ -6,6 +6,7 @@ export interface IResponse extends Document {
   status?: "new" | "in_progress" | "completed" | string;
   submittedAt?: Date;
   ipHash?: string;
+  searchText?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +36,12 @@ const ResponseSchema = new Schema<IResponse>(
     ipHash: {
       type: String,
       index: true,
+    },
+    // Lower-cased flat copy of the answer values, used only for response search. Missing on
+    // responses stored before it existed until scripts/backfillResponseSearchText.ts has run.
+    searchText: {
+      type: String,
+      select: false,
     },
   },
   { timestamps: true }

@@ -1,9 +1,9 @@
-import crypto from "crypto";
+import { keyedHash } from "./pepper";
 import { SystemLog } from "../models/SystemLog";
 
 export function hashIp(ip: string): string {
   if (!ip) return "unknown";
-  return crypto.createHash("sha256").update(ip).digest("hex");
+  return keyedHash(ip);
 }
 
 export function sanitizeObj(obj: any): any {

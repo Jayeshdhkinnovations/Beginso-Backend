@@ -12,6 +12,7 @@
     "type-check": "tsc --noEmit",
     "migrate:v1": "ts-node src/scripts/migrateV1ToMemberships.ts",
     "migrate:theme": "ts-node src/scripts/migrateUserTheme.ts",
+    "backfill:search": "ts-node src/scripts/backfillResponseSearchText.ts",
     "seed:templates": "ts-node src/scripts/seedTemplates.ts",
     "seed:form": "ts-node src/scripts/seedFullForm.ts",
     "seed:superadmin": "ts-node src/scripts/seedSuperAdmin.ts",

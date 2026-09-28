@@ -165,7 +165,6 @@ export const uploadFile = async (
     res.status(500).json({
       success: false,
       message: "An error occurred during file upload",
-      error: error.message,
     });
   }
 };

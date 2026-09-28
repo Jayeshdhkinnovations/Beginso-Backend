@@ -1,5 +1,5 @@
 import { Request } from "express";
-import crypto from "crypto";
+import { keyedHash } from "./pepper";
 
 /**
  * Extracts the real client IP address from request headers (Cloudflare, Nginx reverse proxy, multi-hop x-forwarded-for, or socket IP).
@@ -63,9 +63,9 @@ export const getRealClientIp = (req: Request): string => {
 };
 
 /**
- * Computes SHA-256 hash of IP address for privacy-compliant logging and rate limiting keys.
+ * Computes a keyed (HMAC-SHA-256) hash of IP address for privacy-compliant logging and rate limiting keys.
  */
 export const hashIp = (ip: string): string => {
   if (!ip || ip === "unknown") return "unknown";
-  return crypto.createHash("sha256").update(ip.trim()).digest("hex");
+  return keyedHash(ip.trim());
 };

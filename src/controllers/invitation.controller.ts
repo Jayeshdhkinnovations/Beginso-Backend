@@ -63,6 +63,7 @@ export const listInvitations = async (req: Request, res: Response, next: NextFun
     const invitations = await Invitation.find(filterQuery)
       .populate("invitedBy", "fullName email")
       .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     const formatted = invitations.map((inv: any) => {
@@ -237,7 +238,16 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
       message: "Invitation sent successfully",
       invitation,
     });
-  } catch (error) {
+  } catch (error: any) {
+    // Two sends for the same email raced: the unique pending index kept only one.
+    if (error?.code === 11000) {
+      res.status(409).json({
+        success: false,
+        message: "An invitation for this email is already pending",
+        error: { code: "INVITATION_ALREADY_PENDING", message: "An invitation for this email is already pending" },
+      });
+      return;
+    }
     next(error);
   }
 };

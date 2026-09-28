@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import { keyedHash } from "./pepper";
 
 interface RateLimitRecord {
   lastSentAt: number;
@@ -12,7 +12,7 @@ const resetLimits = new Map<string, RateLimitRecord>();
 const PEPPER = process.env.AUTH_EMAIL_HASH_PEPPER || "beginso-auth-pepper-secret-key";
 
 export const hashKey = (key: string): string => {
-  return crypto.createHmac("sha256", PEPPER).update(key.toLowerCase().trim()).digest("hex");
+  return keyedHash(key.toLowerCase().trim());
 };
 
 export const checkVerificationRateLimit = (uid: string): boolean => {

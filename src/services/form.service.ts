@@ -13,6 +13,8 @@ import { validateFieldsIntegrity, getHiddenFieldIds } from "../validations/form.
 import { isSafePattern, MAX_PATTERN_INPUT } from "../utils/uploadLimits";
 import { buildSearchText } from "../utils/responseSearch";
 import { asString, clampInt, escapeRegex } from "../utils/safeInput";
+import { allocateReference } from "./reference.service";
+import { logWorkspaceEvent } from "./event.service";
 
 const CHOICE_FIELD_TYPES = ["dropdown", "multiple_choice"];
 const MAX_SLUG_ATTEMPTS = 5;
@@ -583,6 +585,10 @@ export class FormService {
       }
     }
 
+    // Sprint 12, BE 0.3 (B8.1): allocated atomically, per form, before the document is written —
+    // this is the single choke point every submission path (authenticated + public) goes through.
+    const reference = await allocateReference(formId);
+
     const newResponse = await ResponseModel.create({
       _id: responseId || new mongoose.Types.ObjectId(),
       formId,
@@ -590,7 +596,23 @@ export class FormService {
       searchText: buildSearchText(answers),
       submittedAt: new Date(),
       ipHash,
+      reference,
     });
+
+    // Sprint 12, BE 0.3: workspace activity feed entry for the activity endpoint's "submitted"
+    // type. Personal (workspace-less) forms have no feed, same convention as every other event
+    // write in this sprint (event.service.ts). The submitter is anonymous/unauthenticated, so the
+    // actor is recorded the same way an unauthenticated invitee decline already is (null actorId).
+    if (form.workspaceId) {
+      await logWorkspaceEvent({
+        workspaceId: form.workspaceId,
+        actor: { id: null, email: "respondent@public", name: "Respondent" },
+        action: "response.submit",
+        targetId: newResponse._id.toString(),
+        targetType: "response",
+        targetLabel: newResponse._id.toString(),
+      }).catch(() => undefined);
+    }
 
     // Check if response limit has been reached and flip status to closed
     if (form.settings?.responseLimitEnabled && form.settings.responseLimit !== undefined) {

@@ -502,6 +502,46 @@ describe("Security & Injection Safety", () => {
     expect(res.status).toBe(403);
     expect(res.body.success).toBe(false);
   });
+
+  // Sprint 12 (30 Sep 2026), real bug found in manual QA: a user who is also a member/owner of a
+  // workspace (userA owns Workspace A, same as every other test in this file) saw that
+  // workspace's responses under the Personal shell, because sending no `x-workspace-slug` header
+  // at all was indistinguishable, to `requirePermission`, from "resolve my default workspace" —
+  // the exact silent fallback design.md's OQ-1 named as the risk to avoid. The frontend fix sends
+  // an explicit `x-workspace-slug: personal` header; this is the backend half: that header must
+  // list ONLY the caller's true personal-space responses (forms with no workspaceId), never
+  // Workspace A's, even though userA owns Workspace A.
+  it("Personal shell (x-workspace-slug: personal) never returns the caller's workspace responses", async () => {
+    const personalForm = await Form.create({
+      title: "Personal form (no workspace)",
+      createdBy: userAId,
+      workspaceId: null,
+      fields: [],
+      status: "published",
+    });
+    const personalResponse = await ResponseModel.create({
+      formId: personalForm._id,
+      answers: { email: "solo@test.com" },
+      status: "new",
+    });
+
+    const res = await request(app)
+      .get(`/api/responses`)
+      .set("Authorization", `Bearer ${userAToken}`)
+      .set("x-workspace-slug", "personal");
+
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((r: any) => r._id);
+    expect(ids).toContain(personalResponse._id.toString());
+    expect(ids).not.toContain(responseA1Id);
+
+    const statsRes = await request(app)
+      .get(`/api/responses/stats`)
+      .set("Authorization", `Bearer ${userAToken}`)
+      .set("x-workspace-slug", "personal");
+    expect(statsRes.status).toBe(200);
+    expect(statsRes.body.total).toBe(1);
+  });
 });
 
 describe("Compound Index Verification", () => {

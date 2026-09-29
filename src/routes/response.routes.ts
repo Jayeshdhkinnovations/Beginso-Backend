@@ -8,8 +8,10 @@ import {
   getResponseFileUrl,
   markResponseRead,
   markResponseUnread,
+  getResponseActivity,
 } from "../controllers/response.controller";
 import { bulkUpdateResponses } from "../controllers/bulk.controller";
+import { listNotes, createNote, updateNote, deleteNote } from "../controllers/note.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
@@ -27,5 +29,14 @@ router.delete("/:id", protect as any, blockSuspended as any, requirePermission("
 router.post("/:id/read", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, markResponseRead);
 router.post("/:id/unread", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, markResponseUnread);
 router.get("/:id/file/:fileId", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, getResponseFileUrl);
+
+// Notes (B5.1/B5.2/B5.3). List/create need the "act" tier this repo implements as responses:write;
+// edit/delete are further gated inside note.service.ts (author-only edit; author-or-Admin+ delete).
+router.get("/:id/notes", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, listNotes);
+router.post("/:id/notes", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "response" }) as any, createNote);
+router.patch("/:id/notes/:noteId", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "response" }) as any, updateNote);
+router.delete("/:id/notes/:noteId", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, deleteNote);
+
+router.get("/:id/activity", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, getResponseActivity);
 
 export default router;

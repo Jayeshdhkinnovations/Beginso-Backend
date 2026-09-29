@@ -9,9 +9,11 @@ import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import FormAccessGrant from "../models/FormAccessGrant";
 import ResponseModel from "../models/Response";
 import Notification from "../models/Notification";
+import { ActivityService } from "../services/activity.service";
 
 const responseService = new ResponseService();
 const readStateService = new ReadStateService();
+const activityService = new ActivityService();
 
 export const getResponses = async (
   req: Request,
@@ -432,6 +434,28 @@ export const markResponseRead = async (req: Request, res: Response, next: NextFu
     await readStateService.markRead(authReq.user._id.toString(), String(id));
     res.status(200).json({ success: true, message: "Marked as read", unread: false });
   } catch (error: any) {
+    next(error);
+  }
+};
+
+// GET /api/responses/:id/activity — reads the existing events/audit table (C3.6). Newest last
+// (chronological). No raw IP anywhere in the output (activityService never surfaces `ip`).
+export const getResponseActivity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized", error: { message: "Not authorized" } });
+      return;
+    }
+    const { id } = req.params;
+    const workspaceId = await getVerifiedWorkspaceId(req);
+    const activity = await activityService.forResponse(String(id), workspaceId || null);
+    res.status(200).json({ success: true, activity, data: activity });
+  } catch (error: any) {
+    if (error.statusCode) {
+      res.status(error.statusCode).json({ success: false, message: error.message, error: { message: error.message } });
+      return;
+    }
     next(error);
   }
 };

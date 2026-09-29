@@ -165,17 +165,18 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
     if (report.format === "csv") {
       const writeStream = fs.createWriteStream(targetFilePath, { encoding: "utf8" });
 
-      // CSV Header
-      writeStream.write(`Response ID,Form ID,Form Title,Status,Submitted At,Answers\n`);
+      // CSV Header. "Reference" (Sprint 12, BE 0.3 / B8.1) is the per-form sequential id (e.g.
+      // "#142") — never a note, note count, or anything note-derived belongs in this export.
+      writeStream.write(`Response ID,Reference,Form ID,Form Title,Status,Submitted At,Answers\n`);
 
       // Stream responses to prevent in-memory spikes
       const cursor = ResponseModel.find(query).sort({ submittedAt: -1 }).cursor();
       for (let r = await cursor.next(); r != null; r = await cursor.next()) {
         const formTitle = formMap.get(r.formId.toString())?.title || "Form Response";
         const answersFormatted = escapeCsv(r.answers);
-        const line = `${escapeCsv(r._id.toString())},${escapeCsv(r.formId.toString())},${escapeCsv(
-          formTitle
-        )},${escapeCsv(r.status || "new")},${escapeCsv(
+        const line = `${escapeCsv(r._id.toString())},${escapeCsv(r.reference || "")},${escapeCsv(
+          r.formId.toString()
+        )},${escapeCsv(formTitle)},${escapeCsv(r.status || "new")},${escapeCsv(
           r.submittedAt ? r.submittedAt.toISOString() : r.createdAt.toISOString()
         )},${answersFormatted}\n`;
         writeStream.write(line);

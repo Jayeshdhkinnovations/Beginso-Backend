@@ -29,6 +29,9 @@ export interface IResponseStageSummary {
 export interface IResponse {
   _id: string;
   formId: string;
+  // Sprint 12, BE 0.3 (B8.1): immutable, per-form sequential reference (e.g. "#142"). Optional
+  // only for responses predating this field and not yet backfilled.
+  reference?: string;
   answers: Record<string, any> | IAnswer[];
   stageId?: string;
   stage?: IResponseStageSummary | null;
@@ -41,6 +44,8 @@ export interface IResponse {
   assigneeId?: string | null;
   // Per calling user (Sprint 12, BE 0.2 / B8.2). Absence of a ResponseReadState row = unread.
   unread?: boolean;
+  // Sprint 12, BE 0.3 (B5.x): live count, never cached — recomputed on every list/detail read.
+  noteCount?: number;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }

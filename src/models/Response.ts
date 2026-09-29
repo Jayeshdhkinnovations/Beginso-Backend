@@ -12,6 +12,11 @@ export interface IResponse extends Document {
   submittedAt?: Date;
   ipHash?: string;
   searchText?: string;
+  // Sprint 12, BE 0.3 (B8.1): immutable, human-readable, sequential per form (e.g. "#142").
+  // Allocated atomically at submission via reference.service.ts; back-filled for pre-existing
+  // responses by scripts/backfillResponseReference.ts. Optional at the schema level only so old
+  // fixtures/tests that predate this field keep loading — every response created going forward has one.
+  reference?: string;
   // Sprint 12, BE 0.2 (B3.1): many-to-many with Tag, workspace-scoped.
   tagIds: mongoose.Types.ObjectId[];
   // Sprint 12, BE 0.2 (B3.2/R4): nullable current-member assignee.
@@ -60,6 +65,10 @@ const ResponseSchema = new Schema<IResponse>(
     searchText: {
       type: String,
       select: false,
+    },
+    reference: {
+      type: String,
+      index: true,
     },
     tagIds: {
       type: [{ type: Schema.Types.ObjectId, ref: "Tag" }],

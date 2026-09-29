@@ -6,6 +6,7 @@ import { assertVerifiedWorkspace } from "../utils/requestContext";
 import { hashIp } from "../utils/ip";
 import { recordEvent } from "../services/event.service";
 import { StageService } from "../services/stage.service";
+import { IStage } from "../models/Stage";
 import {
   createStageSchema,
   updateStageSchema,
@@ -14,6 +15,23 @@ import {
 } from "../validations/stage.validator";
 
 const stageService = new StageService();
+
+// Real bug found in manual QA (30 Sep 2026): `Stage` has no `toJSON` virtuals config (unlike
+// `response.service.ts`'s own `toStageSummary`, which explicitly maps `_id` -> `id`), so every
+// raw Mongoose stage document sent straight through `res.json` had `_id` but no `id` at all.
+// The frontend keys every list/option/column on `stage.id`, so this surfaced as React's "missing
+// key" warning on the stage filter and every Board column, and `response.stage.id` reads as
+// `undefined` wherever a stage came from this endpoint rather than the response list. Mirrors
+// `toStageSummary`'s field set exactly so both paths agree on shape.
+const toStageJson = (stage: IStage) => ({
+  id: stage._id.toString(),
+  name: stage.name,
+  colour: stage.colour,
+  category: stage.category,
+  order: stage.order,
+  isDefault: stage.isDefault,
+});
+const toStagesJson = (stages: IStage[]) => stages.map(toStageJson);
 
 const resolveWorkspace = async (paramId: any) => {
   if (!paramId) return null;
@@ -60,7 +78,8 @@ export const getStages = async (req: Request, res: Response, next: NextFunction)
     if (!workspace) return;
 
     const stages = await stageService.listStages(workspace._id.toString());
-    res.status(200).json({ success: true, stages, data: stages, total: stages.length });
+    const json = toStagesJson(stages);
+    res.status(200).json({ success: true, stages: json, data: json, total: json.length });
   } catch (error: any) {
     if (error.statusCode) return sendError(res, error);
     next(error);
@@ -77,7 +96,8 @@ export const createStage = async (req: Request, res: Response, _next: NextFuncti
 
     await recordEvent(req, workspace._id.toString(), "stage.create", { id: stage._id, type: "stage", label: stage.name });
 
-    res.status(201).json({ success: true, message: "Stage created successfully", stage, data: stage });
+    const json = toStageJson(stage);
+    res.status(201).json({ success: true, message: "Stage created successfully", stage: json, data: json });
   } catch (error: any) {
     sendError(res, error);
   }
@@ -94,7 +114,8 @@ export const updateStage = async (req: Request, res: Response, _next: NextFuncti
 
     await recordEvent(req, workspace._id.toString(), "stage.update", { id: stage._id, type: "stage", label: stage.name }, parsed);
 
-    res.status(200).json({ success: true, message: "Stage updated successfully", stage, data: stage });
+    const json = toStageJson(stage);
+    res.status(200).json({ success: true, message: "Stage updated successfully", stage: json, data: json });
   } catch (error: any) {
     sendError(res, error);
   }
@@ -131,8 +152,9 @@ export const reorderStages = async (req: Request, res: Response, _next: NextFunc
 
     const parsed = reorderStagesSchema.parse(req.body);
     const stages = await stageService.reorderStages(workspace._id.toString(), parsed.orderedIds);
+    const json = toStagesJson(stages);
 
-    res.status(200).json({ success: true, message: "Stages reordered successfully", stages, data: stages });
+    res.status(200).json({ success: true, message: "Stages reordered successfully", stages: json, data: json });
   } catch (error: any) {
     sendError(res, error);
   }

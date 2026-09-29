@@ -5,10 +5,10 @@ import Upload from "../models/Upload";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import StageModel, { IStage } from "../models/Stage";
-import Membership from "../models/Membership";
-import FormAccessGrant from "../models/FormAccessGrant";
 import { StageService } from "./stage.service";
 import { ReadStateService } from "./readState.service";
+import { NoteService } from "./note.service";
+import { userHasAccessToForm as userHasAccessToFormShared } from "../utils/formAccess";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
 import { PaginatedResponsesResult, IResponse, IResponseFile, IResponseStageSummary } from "../types/response.types";
 import mongoose from "mongoose";
@@ -45,6 +45,7 @@ export class ResponseService {
   private formRepository = new FormRepository();
   private stageService = new StageService();
   private readStateService = new ReadStateService();
+  private noteService = new NoteService();
 
   async getResponses(params: {
     workspaceId: string;
@@ -173,10 +174,15 @@ export class ResponseService {
       ? await this.readStateService.unreadMap(params.callerUserId, responses.map((r: any) => r._id))
       : null;
 
+    // Sprint 12, BE 0.3 (B5.x): live note counts for the whole page, one query — same batched-join
+    // pattern as the unread map above, never N+1.
+    const noteCountMap = await this.noteService.countsFor(responses.map((r: any) => r._id.toString()));
+
     // Format output matching IResponse interface
     const formattedData: IResponse[] = responses.map((r: any) => ({
       _id: r._id.toString(),
       formId: r.formId.toString(),
+      reference: r.reference,
       answers: cleanAnswers(r.answers),
       stageId: r.stageId ? r.stageId.toString() : undefined,
       stage: r.stageId ? toStageSummary(stagesById.get(r.stageId.toString())) : null,
@@ -186,6 +192,7 @@ export class ResponseService {
       tagIds: (r.tagIds || []).map((t: any) => t.toString()),
       assigneeId: r.assigneeId ? r.assigneeId.toString() : null,
       unread: unreadMap ? unreadMap.get(r._id.toString()) ?? true : undefined,
+      noteCount: noteCountMap.get(r._id.toString()) ?? 0,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -370,10 +377,12 @@ export class ResponseService {
     }));
 
     const stage = response.stageId ? await StageModel.findById(response.stageId) : null;
+    const noteCount = await this.noteService.countFor(responseId);
 
     return {
       _id: response._id.toString(),
       formId: response.formId.toString(),
+      reference: response.reference,
       answers: cleanAnswers(response.answers),
       stageId: response.stageId ? response.stageId.toString() : undefined,
       stage: toStageSummary(stage),
@@ -384,6 +393,7 @@ export class ResponseService {
       tagIds: (response.tagIds || []).map((t) => t.toString()),
       assigneeId: response.assigneeId ? response.assigneeId.toString() : null,
       unread: callerUserId ? await this.readStateService.isUnread(callerUserId, responseId) : undefined,
+      noteCount,
       createdAt: response.createdAt,
       updatedAt: response.updatedAt,
     };
@@ -582,15 +592,10 @@ export class ResponseService {
   }
 
   // A "current member with access to the response's form": either a workspace membership of the
-  // form's own workspace, or a per-form access grant.
+  // form's own workspace, or a per-form access grant. Delegates to the shared helper (also used
+  // by bulk.service.ts and note.service.ts) so all three never drift apart.
   async userHasAccessToForm(userId: string, formId: string, workspaceId: string | null): Promise<boolean> {
-    if (!mongoose.Types.ObjectId.isValid(userId)) return false;
-    if (workspaceId) {
-      const membership = await Membership.findOne({ userId, workspaceId }).lean();
-      if (membership) return true;
-    }
-    const grant = await FormAccessGrant.findOne({ userId, formId }).lean();
-    return !!grant;
+    return userHasAccessToFormShared(userId, formId, workspaceId);
   }
 
   // Soft delete (B2.2 / OQ-3). Exposed only via the bulk endpoint's `delete`/`restore` actions —

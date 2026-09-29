@@ -12,6 +12,14 @@ export interface IResponse extends Document {
   submittedAt?: Date;
   ipHash?: string;
   searchText?: string;
+  // Sprint 12, BE 0.2 (B3.1): many-to-many with Tag, workspace-scoped.
+  tagIds: mongoose.Types.ObjectId[];
+  // Sprint 12, BE 0.2 (B3.2/R4): nullable current-member assignee.
+  assigneeId?: mongoose.Types.ObjectId | null;
+  // Sprint 12, BE 0.2 (B2.2 / OQ-3): soft delete. null/unset = not deleted. Every list, count,
+  // stat, analytics figure and export must filter `deletedAt: null`; files are kept, only the
+  // record is hidden. Never write directly — go through ResponseService.softDelete/restore.
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +61,21 @@ const ResponseSchema = new Schema<IResponse>(
       type: String,
       select: false,
     },
+    tagIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Tag" }],
+      default: [],
+    },
+    assigneeId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );
@@ -62,6 +85,8 @@ ResponseSchema.index({ formId: 1, submittedAt: -1, status: 1 });
 ResponseSchema.index({ formId: 1, submittedAt: -1, stageId: 1 });
 ResponseSchema.index({ formId: 1, submittedAt: -1 });
 ResponseSchema.index({ submittedAt: -1 });
+ResponseSchema.index({ formId: 1, deletedAt: 1 });
+ResponseSchema.index({ tagIds: 1 });
 
 // Submissions listing sorts by createdAt within a form.
 ResponseSchema.index({ formId: 1, createdAt: -1 });

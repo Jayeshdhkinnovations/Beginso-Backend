@@ -2,13 +2,16 @@ import { Request, Response, NextFunction } from "express";
 import { recordEvent } from "../services/event.service";
 import { ZodError } from "zod";
 import { ResponseService } from "../services/response.service";
-import { updateResponseStatusSchema } from "../validations/response.validator";
+import { ReadStateService } from "../services/readState.service";
+import { updateResponseStatusSchema, updateResponseAssigneeSchema } from "../validations/response.validator";
 import mongoose from "mongoose";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import FormAccessGrant from "../models/FormAccessGrant";
 import ResponseModel from "../models/Response";
+import Notification from "../models/Notification";
 
 const responseService = new ResponseService();
+const readStateService = new ReadStateService();
 
 export const getResponses = async (
   req: Request,
@@ -49,6 +52,7 @@ export const getResponses = async (
       search: search ? String(search) : undefined,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
+      callerUserId: authReq.user._id.toString(),
     });
 
     res.status(200).json({
@@ -163,7 +167,8 @@ export const getResponseDetail = async (
       String(id),
       host,
       protocol,
-      isGrant
+      isGrant,
+      authReq.user._id.toString()
     );
 
     res.status(200).json({
@@ -202,30 +207,72 @@ export const updateResponseStatus = async (
     const workspaceId = await getVerifiedWorkspaceId(req);
     const { id } = req.params;
 
-    const parsed = updateResponseStatusSchema.parse({
-      status: req.body?.status,
-      stageId: req.body?.stageId,
-    });
+    let updatedResponse: any = null;
 
-    const { response: updatedResponse, fromStageId, toStageId } = await responseService.updateResponseStage(
-      workspaceId,
-      String(id),
-      parsed
-    );
+    // assigneeId (B3.2/R4) is independent of status/stageId — either or both may be present in
+    // the same PATCH body.
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "assigneeId")) {
+      const assigneeParsed = updateResponseAssigneeSchema.parse({ assigneeId: req.body.assigneeId });
+      const { response: assignedResponse, previousAssigneeId } = await responseService.updateResponseAssignee(
+        workspaceId,
+        String(id),
+        assigneeParsed.assigneeId
+      );
+      updatedResponse = assignedResponse;
 
-    // Kept as "response.status_change" (not "response.stage_change") so the existing audit-log
-    // consumer/contract for this endpoint is unchanged; metadata now also carries stage ids.
-    await recordEvent(
-      req,
-      workspaceId,
-      "response.status_change",
-      { id: String(id), type: "response", label: String(id) },
-      { status: updatedResponse.status, fromStageId, toStageId }
-    );
+      await recordEvent(
+        req,
+        workspaceId,
+        "response.assign",
+        { id: String(id), type: "response", label: String(id) },
+        { fromAssigneeId: previousAssigneeId, toAssigneeId: assigneeParsed.assigneeId }
+      );
+
+      // Self-assignment writes no notification.
+      const actorId = authReq.user._id.toString();
+      if (assigneeParsed.assigneeId && assigneeParsed.assigneeId !== actorId && workspaceId) {
+        await Notification.create({
+          userId: assigneeParsed.assigneeId,
+          workspaceId,
+          type: "assignment",
+          title: "Response assigned to you",
+          message: `${authReq.user.fullName || authReq.user.email} assigned a response to you`,
+        }).catch(() => undefined);
+      }
+    }
+
+    if (req.body?.status !== undefined || req.body?.stageId !== undefined) {
+      const parsed = updateResponseStatusSchema.parse({
+        status: req.body?.status,
+        stageId: req.body?.stageId,
+      });
+
+      const { response: stageResponse, fromStageId, toStageId } = await responseService.updateResponseStage(
+        workspaceId,
+        String(id),
+        parsed
+      );
+      updatedResponse = stageResponse;
+
+      // Kept as "response.status_change" (not "response.stage_change") so the existing audit-log
+      // consumer/contract for this endpoint is unchanged; metadata now also carries stage ids.
+      await recordEvent(
+        req,
+        workspaceId,
+        "response.status_change",
+        { id: String(id), type: "response", label: String(id) },
+        { status: stageResponse.status, fromStageId, toStageId }
+      );
+    }
+
+    if (!updatedResponse) {
+      // Neither status/stageId nor assigneeId was sent: same "at least one field" contract as before.
+      updateResponseStatusSchema.parse({ status: undefined, stageId: undefined });
+    }
 
     res.status(200).json({
       success: true,
-      message: "Response status updated successfully",
+      message: "Response updated successfully",
       response: updatedResponse,
       data: updatedResponse,
     });
@@ -343,6 +390,47 @@ export const getResponseFileUrl = async (
       });
       return;
     }
+    next(error);
+  }
+};
+
+// POST /api/responses/:id/read — idempotent. Marking read never happens on a GET; this is a
+// dedicated write endpoint (B8.2).
+export const markResponseRead = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized", error: { message: "Not authorized" } });
+      return;
+    }
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      res.status(404).json({ success: false, message: "Response not found", error: { message: "Response not found" } });
+      return;
+    }
+    await readStateService.markRead(authReq.user._id.toString(), String(id));
+    res.status(200).json({ success: true, message: "Marked as read", unread: false });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// POST /api/responses/:id/unread — idempotent (a delete of any existing read row).
+export const markResponseUnread = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized", error: { message: "Not authorized" } });
+      return;
+    }
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      res.status(404).json({ success: false, message: "Response not found", error: { message: "Response not found" } });
+      return;
+    }
+    await readStateService.markUnread(authReq.user._id.toString(), String(id));
+    res.status(200).json({ success: true, message: "Marked as unread", unread: true });
+  } catch (error: any) {
     next(error);
   }
 };

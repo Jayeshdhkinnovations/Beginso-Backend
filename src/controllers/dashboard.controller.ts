@@ -57,14 +57,15 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
     startOfMonth.setHours(0, 0, 0, 0);
 
     // 3. Aggregate total responses & responses this month
-    const totalResponses = await ResponseModel.countDocuments({ formId: { $in: formIds } });
+    const totalResponses = await ResponseModel.countDocuments({ formId: { $in: formIds }, deletedAt: null });
     const responsesThisMonth = await ResponseModel.countDocuments({
       formId: { $in: formIds },
+      deletedAt: null,
       submittedAt: { $gte: startOfMonth },
     });
 
     // 4. Fetch recent responses for recent activity (limit 5 per contract)
-    const recentResponses = await ResponseModel.find({ formId: { $in: formIds } })
+    const recentResponses = await ResponseModel.find({ formId: { $in: formIds }, deletedAt: null })
       .sort({ submittedAt: -1 })
       .limit(5);
 
@@ -85,7 +86,7 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
 
     // 5. Aggregate per-form total and completed response counts using MongoDB $group pipeline
     const formStatsArr = await ResponseModel.aggregate([
-      { $match: { formId: { $in: formIds } } },
+      { $match: { formId: { $in: formIds }, deletedAt: null } },
       {
         $group: {
           _id: "$formId",

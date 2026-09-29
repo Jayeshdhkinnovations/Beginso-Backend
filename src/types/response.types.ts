@@ -37,6 +37,10 @@ export interface IResponse {
   submittedAt?: Date | string;
   ipHash?: string;
   response_files?: IResponseFile[];
+  tagIds?: string[];
+  assigneeId?: string | null;
+  // Per calling user (Sprint 12, BE 0.2 / B8.2). Absence of a ResponseReadState row = unread.
+  unread?: boolean;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }

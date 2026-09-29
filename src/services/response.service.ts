@@ -5,7 +5,10 @@ import Upload from "../models/Upload";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import StageModel, { IStage } from "../models/Stage";
+import Membership from "../models/Membership";
+import FormAccessGrant from "../models/FormAccessGrant";
 import { StageService } from "./stage.service";
+import { ReadStateService } from "./readState.service";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
 import { PaginatedResponsesResult, IResponse, IResponseFile, IResponseStageSummary } from "../types/response.types";
 import mongoose from "mongoose";
@@ -41,6 +44,7 @@ export class ResponseService {
   private responseRepository = new ResponseRepository();
   private formRepository = new FormRepository();
   private stageService = new StageService();
+  private readStateService = new ReadStateService();
 
   async getResponses(params: {
     workspaceId: string;
@@ -50,6 +54,8 @@ export class ResponseService {
     search?: string;
     page?: number;
     limit?: number;
+    // Whose unread state to join in (the calling user). Omitted only by callers that don't need it.
+    callerUserId?: string;
   }): Promise<PaginatedResponsesResult> {
     const { workspaceId, formId, status, stageId, search } = params;
 
@@ -60,7 +66,7 @@ export class ResponseService {
     if (limit < 1) limit = 10;
     if (limit > 50) limit = 50; // Cap at 50 per page max
 
-    const mongoQuery: any = {};
+    const mongoQuery: any = { deletedAt: null };
 
     // Scope to workspaceId via form lookup
     if (formId) {
@@ -148,6 +154,11 @@ export class ResponseService {
         : []
     );
 
+    // Batched unread join for the calling user, one query for the whole page (B8.2) — never N+1.
+    const unreadMap = params.callerUserId
+      ? await this.readStateService.unreadMap(params.callerUserId, responses.map((r: any) => r._id))
+      : null;
+
     // Format output matching IResponse interface
     const formattedData: IResponse[] = responses.map((r: any) => ({
       _id: r._id.toString(),
@@ -158,6 +169,9 @@ export class ResponseService {
       status: r.status || "new",
       submittedAt: r.submittedAt,
       ipHash: r.ipHash,
+      tagIds: (r.tagIds || []).map((t: any) => t.toString()),
+      assigneeId: r.assigneeId ? r.assigneeId.toString() : null,
+      unread: unreadMap ? unreadMap.get(r._id.toString()) ?? true : undefined,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -230,7 +244,7 @@ export class ResponseService {
 
       const base = await this.responseRepository.getStatsByFormId(form._id as mongoose.Types.ObjectId);
       const scopeWorkspaceId = workspaceId || form.workspaceId!.toString();
-      const stageBreakdown = await this.buildStageBreakdown(scopeWorkspaceId, { formId: form._id });
+      const stageBreakdown = await this.buildStageBreakdown(scopeWorkspaceId, { formId: form._id, deletedAt: null });
       return { ...base, stageBreakdown };
     }
 
@@ -243,7 +257,7 @@ export class ResponseService {
     );
     const formIds = forms.map((f) => f._id);
 
-    const statusMatch: any = { formId: { $in: formIds } };
+    const statusMatch: any = { formId: { $in: formIds }, deletedAt: null };
     if (stageId && mongoose.Types.ObjectId.isValid(stageId)) {
       statusMatch.stageId = new mongoose.Types.ObjectId(stageId);
     }
@@ -279,10 +293,11 @@ export class ResponseService {
     responseId: string,
     host: string,
     protocol: string,
-    isGrant?: boolean
+    isGrant?: boolean,
+    callerUserId?: string
   ): Promise<IResponse> {
     const response = await this.responseRepository.findById(responseId);
-    if (!response) {
+    if (!response || response.deletedAt) {
       const err: any = new Error("Response not found");
       err.statusCode = 404;
       throw err;
@@ -321,6 +336,9 @@ export class ResponseService {
       submittedAt: response.submittedAt,
       ipHash: response.ipHash,
       response_files: responseFiles,
+      tagIds: (response.tagIds || []).map((t) => t.toString()),
+      assigneeId: response.assigneeId ? response.assigneeId.toString() : null,
+      unread: callerUserId ? await this.readStateService.isUnread(callerUserId, responseId) : undefined,
       createdAt: response.createdAt,
       updatedAt: response.updatedAt,
     };
@@ -453,5 +471,111 @@ export class ResponseService {
 
     // No credential in the URL: the caller authenticates the download with its own session.
     return { url: `${protocol}://${host}/api/upload/file/${upload.path.replace(/\\/g, "/")}` };
+  }
+
+  // Sprint 12, BE 0.2 (B3.2/R4). assigneeId is validated independently of stageId/status so a
+  // PATCH can change either or both. null unassigns. Returns the previous assigneeId so the
+  // caller can log an event and skip the self-assignment notification.
+  async updateResponseAssignee(
+    workspaceId: string,
+    responseId: string,
+    assigneeId: string | null
+  ): Promise<{ response: IResponse; previousAssigneeId: string | null }> {
+    if (!mongoose.Types.ObjectId.isValid(responseId)) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const existing = await this.responseRepository.findById(responseId);
+    if (!existing || existing.deletedAt) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const form = await this.formRepository.findById(existing.formId.toString());
+    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+      const err: any = new Error("Forbidden: You do not own this response's workspace");
+      err.statusCode = 403;
+      throw err;
+    }
+
+    if (assigneeId !== null) {
+      const hasAccess = await this.userHasAccessToForm(assigneeId, form._id.toString(), workspaceId);
+      if (!hasAccess) {
+        const err: any = new Error("assigneeId must be a current member with access to this response's form");
+        err.statusCode = 422;
+        err.code = "INVALID_ASSIGNEE";
+        throw err;
+      }
+    }
+
+    const previousAssigneeId = existing.assigneeId ? existing.assigneeId.toString() : null;
+    const updated = await ResponseModel.findByIdAndUpdate(
+      responseId,
+      { $set: { assigneeId: assigneeId ? new mongoose.Types.ObjectId(assigneeId) : null } },
+      { new: true }
+    );
+    if (!updated) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    return {
+      response: {
+        _id: updated._id.toString(),
+        formId: updated.formId.toString(),
+        answers: updated.answers,
+        assigneeId: updated.assigneeId ? updated.assigneeId.toString() : null,
+        status: updated.status,
+        stageId: updated.stageId ? updated.stageId.toString() : undefined,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      },
+      previousAssigneeId,
+    };
+  }
+
+  // A "current member with access to the response's form": either a workspace membership of the
+  // form's own workspace, or a per-form access grant.
+  async userHasAccessToForm(userId: string, formId: string, workspaceId: string | null): Promise<boolean> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) return false;
+    if (workspaceId) {
+      const membership = await Membership.findOne({ userId, workspaceId }).lean();
+      if (membership) return true;
+    }
+    const grant = await FormAccessGrant.findOne({ userId, formId }).lean();
+    return !!grant;
+  }
+
+  // Soft delete (B2.2 / OQ-3). Exposed only via the bulk endpoint's `delete`/`restore` actions —
+  // the pre-existing single-item DELETE /api/responses/:id stays a hard cascade delete (its
+  // contract, including physical file removal, is already tested and unchanged by this sprint).
+  async softDeleteResponse(responseId: string): Promise<{ wasAlreadyDeleted: boolean }> {
+    const existing = await ResponseModel.findById(responseId).select("deletedAt").lean();
+    if (!existing) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const wasAlreadyDeleted = !!existing.deletedAt;
+    if (!wasAlreadyDeleted) {
+      await ResponseModel.updateOne({ _id: responseId }, { $set: { deletedAt: new Date() } });
+    }
+    return { wasAlreadyDeleted };
+  }
+
+  async restoreResponse(responseId: string): Promise<{ wasDeleted: boolean }> {
+    const existing = await ResponseModel.findById(responseId).select("deletedAt").lean();
+    if (!existing) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const wasDeleted = !!existing.deletedAt;
+    if (wasDeleted) {
+      await ResponseModel.updateOne({ _id: responseId }, { $set: { deletedAt: null } });
+    }
+    return { wasDeleted };
   }
 }

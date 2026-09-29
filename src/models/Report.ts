@@ -12,12 +12,22 @@ export interface IReportFilters {
   search?: string;
   from?: string;
   to?: string;
+  // Sprint 12, BE 0.2 (B2.11): the same filter shape the list endpoint / bulk endpoint accept,
+  // or an explicit id list, in place of the old single `status` param.
+  tagIds?: string[];
+  assigneeId?: string;
+  unread?: boolean;
+  duplicate?: boolean;
+  ids?: string[];
 }
 
 export interface IReport extends Document {
   workspaceId: mongoose.Types.ObjectId;
   format: ReportFormat;
   filters?: IReportFilters;
+  // Sprint 12, BE 0.2: whose "unread" state filters.unread scopes to. Optional so pre-existing
+  // reports (created before this field existed) keep working without it.
+  requestedBy?: mongoose.Types.ObjectId;
   status: ReportStatus;
   errorMessage?: string;
   filePath?: string;
@@ -34,6 +44,10 @@ const ReportSchema = new Schema<IReport>(
       ref: "Workspace",
       required: true,
       index: true,
+    },
+    requestedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
     },
     format: {
       type: String,

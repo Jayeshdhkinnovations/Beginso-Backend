@@ -67,7 +67,7 @@ export const getOverview = async (req: Request, res: Response, next: NextFunctio
     const toStr = req.query.to as string;
     const timezone = safeTimezone(req.query.timezone);
 
-    const matchStage: any = { formId: form._id };
+    const matchStage: any = { formId: form._id, deletedAt: null };
     let fromDate: Date | null = null;
     let toDate: Date | null = null;
 
@@ -193,7 +193,7 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
     const toStr = req.query.to as string;
     const timezone = safeTimezone(req.query.timezone);
 
-    const matchStage: any = { formId: form._id };
+    const matchStage: any = { formId: form._id, deletedAt: null };
     let fromDate: Date | null = null;
     let toDate: Date | null = null;
 
@@ -359,7 +359,7 @@ export const getTrends = async (req: Request, res: Response, next: NextFunction)
     const bucket: "day" | "week" = rawBucket === "week" ? "week" : "day";
     const timezone = safeTimezone(req.query.timezone);
 
-    const matchStage: any = { formId: form._id };
+    const matchStage: any = { formId: form._id, deletedAt: null };
     let fromDate: Date | null = null;
     let toDate: Date | null = null;
 
@@ -448,7 +448,7 @@ export const getForms = async (req: Request, res: Response, next: NextFunction):
 
     const formIds = forms.map((f) => f._id);
 
-    const matchStage: any = { formId: { $in: formIds } };
+    const matchStage: any = { formId: { $in: formIds }, deletedAt: null };
     if (fromStr && fromStr !== "all") {
       const fromDate = new Date(fromStr);
       if (!isNaN(fromDate.getTime())) {

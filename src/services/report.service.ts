@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit";
 import ReportModel, { IReport } from "../models/Report";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
+import { buildResponseFilterQuery } from "../utils/responseFilters";
 
 const UPLOADS_REPORTS_DIR = path.join(process.cwd(), "uploads", "reports");
 
@@ -119,42 +120,44 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
     const formMap = new Map(forms.map((f) => [f._id.toString(), f]));
     const workspaceFormIds = forms.map((f) => f._id);
 
-    const query: any = { formId: { $in: workspaceFormIds } };
     const filters = report.filters || {};
 
-    if (filters.formId && mongoose.Types.ObjectId.isValid(filters.formId)) {
-      if (workspaceFormIds.some((id) => id.toString() === filters.formId)) {
-        query.formId = new mongoose.Types.ObjectId(filters.formId);
+    // Sprint 12, BE 0.2 (B2.11): the export IS the list — same filter shape, same permission
+    // scoping (workspace forms only), same deletedAt exclusion — built via the one shared helper
+    // the bulk endpoint's filter target also uses, so the two never drift apart. `ids` bypasses
+    // the filter entirely in favour of an explicit id list (still scoped to workspace forms below).
+    let query: any;
+    if (filters.ids && filters.ids.length > 0) {
+      const validIds = filters.ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+      query = { _id: { $in: validIds }, formId: { $in: workspaceFormIds }, deletedAt: null };
+    } else {
+      query = await buildResponseFilterQuery(
+        {
+          formId: filters.formId,
+          stageId: filters.stageId,
+          tagIds: filters.tagIds,
+          assigneeId: filters.assigneeId,
+          unread: filters.unread,
+          from: filters.from && filters.from !== "all" ? filters.from : undefined,
+          to: filters.to && filters.to !== "all" ? filters.to : undefined,
+          q: filters.search,
+        },
+        workspaceFormIds,
+        report.requestedBy ? report.requestedBy.toString() : undefined
+      );
+      // Legacy single-status filter, still honoured alongside the new filter shape.
+      if (filters.status && ["new", "in_progress", "completed"].includes(filters.status)) {
+        query.status = filters.status;
       }
     }
 
-    if (filters.status && ["new", "in_progress", "completed"].includes(filters.status)) {
-      query.status = filters.status;
-    }
-
-    // Sprint 12: scope by stage in addition to (or instead of) the legacy status filter above.
-    if (filters.stageId && mongoose.Types.ObjectId.isValid(filters.stageId)) {
-      query.stageId = new mongoose.Types.ObjectId(filters.stageId);
-    }
-
-    // Handle date range filters safely without creating empty object queries
-    let fromDateObj: Date | null = null;
-    let toDateObj: Date | null = null;
-
-    if ((filters.from && filters.from !== "all") || (filters.to && filters.to !== "all")) {
-      const submittedAtQuery: any = {};
-      if (filters.from && filters.from !== "all") {
-        fromDateObj = new Date(filters.from);
-        if (!isNaN(fromDateObj.getTime())) submittedAtQuery.$gte = fromDateObj;
-      }
-      if (filters.to && filters.to !== "all") {
-        toDateObj = new Date(filters.to);
-        if (!isNaN(toDateObj.getTime())) submittedAtQuery.$lte = toDateObj;
-      }
-      if (Object.keys(submittedAtQuery).length > 0) {
-        query.submittedAt = submittedAtQuery;
-      }
-    }
+    // Kept for the PDF's trend-chart range below.
+    const fromDateObj: Date | null =
+      filters.from && filters.from !== "all" && !isNaN(new Date(filters.from).getTime())
+        ? new Date(filters.from)
+        : null;
+    const toDateObj: Date | null =
+      filters.to && filters.to !== "all" && !isNaN(new Date(filters.to).getTime()) ? new Date(filters.to) : null;
 
     const filename = `${report._id.toString()}.${report.format}`;
     const targetFilePath = path.join(UPLOADS_REPORTS_DIR, filename);

@@ -17,6 +17,13 @@ const reportCreateSchema = z.object({
   search: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
+  // Sprint 12, BE 0.2 (B2.11): the same filter shape the list/bulk endpoints accept, or an
+  // explicit id list, in place of the old single `status` param.
+  tagIds: z.array(z.string()).optional(),
+  assigneeId: z.string().optional(),
+  unread: z.boolean().optional(),
+  duplicate: z.boolean().optional(),
+  ids: z.array(z.string()).optional(),
 });
 
 const getWorkspaceId = async (req: Request): Promise<string | null> => {
@@ -60,7 +67,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { format, formId, status, stageId, search, from, to } = parseResult.data;
+    const { format, formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids } = parseResult.data;
 
     // PDF/CSV generation runs inside this process: refuse new jobs while this workspace already
     // has several in flight, and drop files of expired reports while we are here.
@@ -84,8 +91,9 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
 
     const report = await ReportModel.create({
       workspaceId: new mongoose.Types.ObjectId(userWorkspaceId),
+      requestedBy: (req as any).user?._id,
       format,
-      filters: { formId, status, stageId, search, from, to },
+      filters: { formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids },
       status: "queued",
       expiresAt,
     });

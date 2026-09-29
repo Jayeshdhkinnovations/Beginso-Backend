@@ -15,3 +15,10 @@ export const updateResponseStatusSchema = z
   .refine((v) => v.status !== undefined || v.stageId !== undefined, {
     message: "Either status or stageId is required",
   });
+
+// Sprint 12, BE 0.2 (B3.2/R4): assigneeId is validated separately from status/stageId so a PATCH
+// can carry either or both in the same request. `null` unassigns; a string id must resolve to a
+// current member with access to the response's form (checked in ResponseService).
+export const updateResponseAssigneeSchema = z.object({
+  assigneeId: z.string().trim().min(1).nullable(),
+});

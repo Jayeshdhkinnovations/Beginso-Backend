@@ -30,7 +30,7 @@ export class ResponseRepository {
 
   async getStatsByFormId(formId: mongoose.Types.ObjectId): Promise<{ total: number; new: number; in_progress: number; completed: number }> {
     const statsResult = await ResponseModel.aggregate([
-      { $match: { formId } },
+      { $match: { formId, deletedAt: null } },
       {
         $group: {
           _id: "$status",

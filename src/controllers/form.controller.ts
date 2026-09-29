@@ -1762,10 +1762,11 @@ export const getFormOverview = async (req: Request, res: Response, next: NextFun
       return;
     }
 
-    const totalResponses = await ResponseModel.countDocuments({ formId: formDoc._id });
+    const totalResponses = await ResponseModel.countDocuments({ formId: formDoc._id, deletedAt: null });
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const responseCountThisWeek = await ResponseModel.countDocuments({
       formId: formDoc._id,
+      deletedAt: null,
       submittedAt: { $gte: oneWeekAgo }
     });
 

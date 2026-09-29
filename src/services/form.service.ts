@@ -212,7 +212,7 @@ export class FormService {
 
     // One grouped count for the whole page instead of one query per form.
     const counts = await ResponseModel.aggregate([
-      { $match: { formId: { $in: forms.map((f) => f._id) } } },
+      { $match: { formId: { $in: forms.map((f) => f._id) }, deletedAt: null } },
       { $group: { _id: "$formId", n: { $sum: 1 } } },
     ]);
     const countByForm = new Map(counts.map((c: any) => [String(c._id), c.n]));
@@ -614,8 +614,8 @@ export class FormService {
     const page = clampInt(options.page, 1, 1, 100000);
     const limit = clampInt(options.limit, 100, 1, 500);
     const [submissions, total] = await Promise.all([
-      ResponseModel.find({ formId }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-      ResponseModel.countDocuments({ formId }),
+      ResponseModel.find({ formId, deletedAt: null }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      ResponseModel.countDocuments({ formId, deletedAt: null }),
     ]);
     return { submissions, total, page, limit, totalPages: Math.ceil(total / limit) };
   }

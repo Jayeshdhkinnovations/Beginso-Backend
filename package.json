@@ -13,6 +13,7 @@
     "migrate:v1": "ts-node src/scripts/migrateV1ToMemberships.ts",
     "migrate:theme": "ts-node src/scripts/migrateUserTheme.ts",
     "migrate:stages": "ts-node src/scripts/migrateStagesFromStatus.ts",
+    "backfill:readstate": "ts-node src/scripts/backfillReadState.ts",
     "backfill:search": "ts-node src/scripts/backfillResponseSearchText.ts",
     "seed:templates": "ts-node src/scripts/seedTemplates.ts",
     "seed:form": "ts-node src/scripts/seedFullForm.ts",

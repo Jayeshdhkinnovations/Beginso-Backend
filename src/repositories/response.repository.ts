@@ -70,6 +70,31 @@ export class ResponseRepository {
     );
   }
 
+  // Sprint 12: moves a response onto a stage and keeps the deprecated `status` field synced to
+  // that stage's category in the same write, so every pre-Sprint-12 status consumer stays correct.
+  async updateStage(
+    id: string,
+    stageId: mongoose.Types.ObjectId,
+    status: "new" | "in_progress" | "completed"
+  ): Promise<IResponse | null> {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    return await ResponseModel.findByIdAndUpdate(
+      id,
+      { $set: { stageId, status } },
+      { returnDocument: "after", runValidators: true }
+    );
+  }
+
+  // Raw {stageId, count} pairs; the service joins these against Stage docs for name/colour/order.
+  async getStageCounts(query: any): Promise<Array<{ _id: mongoose.Types.ObjectId | null; count: number }>> {
+    return await ResponseModel.aggregate([
+      { $match: query },
+      { $group: { _id: "$stageId", count: { $sum: 1 } } },
+    ]);
+  }
+
   async deleteById(id: string): Promise<IResponse | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;

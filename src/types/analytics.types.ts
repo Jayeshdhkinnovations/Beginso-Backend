@@ -4,6 +4,17 @@ export interface IStatusCount {
   percentage: number;
 }
 
+// Sprint 12: per-stage breakdown alongside the legacy statusDistribution. Omits stages with zero
+// responses that never got a stageId (pre-migration data).
+export interface IStageCount {
+  stageId: string;
+  name: string;
+  colour: string;
+  category: "completed" | "in_progress" | "new";
+  count: number;
+  percentage: number;
+}
+
 export interface IAnalyticsOverviewData {
   formId: string;
   total: number;
@@ -12,6 +23,7 @@ export interface IAnalyticsOverviewData {
   new: number;
   completionRate: number;
   statusDistribution: IStatusCount[];
+  stageDistribution: IStageCount[];
   dateRange: {
     from: string | null;
     to: string | null;

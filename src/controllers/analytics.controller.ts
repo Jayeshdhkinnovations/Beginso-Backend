@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Form from "../models/Form";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import ResponseModel from "../models/Response";
+import StageModel from "../models/Stage";
 import {
   AnalyticsOverviewResponse,
   AnalyticsQuestionsResponse,
@@ -112,6 +113,28 @@ export const getOverview = async (req: Request, res: Response, next: NextFunctio
 
     const completionRate = total > 0 ? Number(((completed / total) * 100).toFixed(2)) : 0;
 
+    // Stage breakdown (Sprint 12): same match window as statusDistribution above, grouped by stageId.
+    const stageStats = await ResponseModel.aggregate([
+      { $match: { ...matchStage, stageId: { $exists: true, $ne: null } } },
+      { $group: { _id: "$stageId", count: { $sum: 1 } } },
+    ]);
+    const stageIds = stageStats.map((s) => s._id).filter(Boolean);
+    const stages = stageIds.length ? await StageModel.find({ _id: { $in: stageIds } }) : [];
+    const stagesById = new Map(stages.map((s) => [s._id.toString(), s]));
+    const stageDistribution = stageStats
+      .filter((s) => s._id && stagesById.has(s._id.toString()))
+      .map((s) => {
+        const stage = stagesById.get(s._id.toString())!;
+        return {
+          stageId: s._id.toString(),
+          name: stage.name,
+          colour: stage.colour,
+          category: stage.category,
+          count: s.count,
+          percentage: total > 0 ? Number(((s.count / total) * 100).toFixed(2)) : 0,
+        };
+      });
+
     const statusDistribution = [
       {
         status: "completed" as const,
@@ -140,6 +163,7 @@ export const getOverview = async (req: Request, res: Response, next: NextFunctio
         new: newCount,
         completionRate,
         statusDistribution,
+        stageDistribution,
         dateRange: {
           from: fromDate ? fromDate.toISOString() : null,
           to: toDate ? toDate.toISOString() : null,

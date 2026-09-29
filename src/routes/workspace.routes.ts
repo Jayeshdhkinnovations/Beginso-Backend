@@ -13,6 +13,7 @@ import { requirePermission } from "../middleware/permission.middleware";
 
 import teamRoutes from "./team.routes";
 import invitationRoutes from "./invitation.routes";
+import stageRoutes from "./stage.routes";
 
 import { listWorkspaceActivity, listWorkspaceAudit } from "../controllers/event.controller";
 
@@ -23,6 +24,9 @@ router.use("/:id/members", teamRoutes);
 router.use("/:workspaceId/members", teamRoutes);
 router.use("/:id/invitations", invitationRoutes);
 router.use("/:workspaceId/invitations", invitationRoutes);
+// Pipeline stages (Sprint 12, BE 0.1)
+router.use("/:id/stages", stageRoutes);
+router.use("/:workspaceId/stages", stageRoutes);
 
 // Activity Feed & Audit Log routes (BE 0.3 / BE 0.4)
 router.get("/:id/events", protect as any, blockSuspended as any, requirePermission("workspace:read", { resourceType: "workspace" }) as any, listWorkspaceActivity);

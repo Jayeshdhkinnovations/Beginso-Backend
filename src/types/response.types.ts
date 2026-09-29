@@ -18,10 +18,21 @@ export interface IResponseFile {
   uploadTime: Date | string;
 }
 
+export interface IResponseStageSummary {
+  id: string;
+  name: string;
+  colour: string;
+  category: "new" | "in_progress" | "completed";
+  order: number;
+}
+
 export interface IResponse {
   _id: string;
   formId: string;
   answers: Record<string, any> | IAnswer[];
+  stageId?: string;
+  stage?: IResponseStageSummary | null;
+  // DEPRECATED: derived from stage.category, kept for pre-Sprint-12 consumers. See models/Response.ts.
   status?: "new" | "in_progress" | "completed" | string;
   submittedAt?: Date | string;
   ipHash?: string;

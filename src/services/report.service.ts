@@ -132,6 +132,11 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
       query.status = filters.status;
     }
 
+    // Sprint 12: scope by stage in addition to (or instead of) the legacy status filter above.
+    if (filters.stageId && mongoose.Types.ObjectId.isValid(filters.stageId)) {
+      query.stageId = new mongoose.Types.ObjectId(filters.stageId);
+    }
+
     // Handle date range filters safely without creating empty object queries
     let fromDateObj: Date | null = null;
     let toDateObj: Date | null = null;

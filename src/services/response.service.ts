@@ -4,12 +4,25 @@ import { FormRepository } from "../repositories/form.repository";
 import Upload from "../models/Upload";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
+import StageModel, { IStage } from "../models/Stage";
+import { StageService } from "./stage.service";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
-import { PaginatedResponsesResult, IResponse, IResponseFile } from "../types/response.types";
+import { PaginatedResponsesResult, IResponse, IResponseFile, IResponseStageSummary } from "../types/response.types";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
 import { escapeRegex } from "../utils/safeInput";
+
+const toStageSummary = (stage: IStage | null | undefined): IResponseStageSummary | null => {
+  if (!stage) return null;
+  return {
+    id: stage._id.toString(),
+    name: stage.name,
+    colour: stage.colour,
+    category: stage.category,
+    order: stage.order,
+  };
+};
 
 const cleanAnswers = (answers: Record<string, any>): Record<string, any> => {
   if (!answers || typeof answers !== "object") return {};
@@ -27,16 +40,18 @@ const cleanAnswers = (answers: Record<string, any>): Record<string, any> => {
 export class ResponseService {
   private responseRepository = new ResponseRepository();
   private formRepository = new FormRepository();
+  private stageService = new StageService();
 
   async getResponses(params: {
     workspaceId: string;
     formId?: string;
     status?: string;
+    stageId?: string;
     search?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponsesResult> {
-    const { workspaceId, formId, status, search } = params;
+    const { workspaceId, formId, status, stageId, search } = params;
 
     let page = Number(params.page) || 1;
     if (page < 1) page = 1;
@@ -81,9 +96,19 @@ export class ResponseService {
       mongoQuery.formId = { $in: formIds };
     }
 
-    // Status filter
+    // Status filter (legacy; still correct because status is kept in sync with stage.category)
     if (status) {
       mongoQuery.status = status;
+    }
+
+    // Stage filter (Sprint 12): takes precedence when both are sent since it is the primary key.
+    if (stageId) {
+      if (!mongoose.Types.ObjectId.isValid(stageId)) {
+        const err: any = new Error("Invalid stageId parameter");
+        err.statusCode = 400;
+        throw err;
+      }
+      mongoQuery.stageId = new mongoose.Types.ObjectId(stageId);
     }
 
     // Search filter against answers content
@@ -115,11 +140,21 @@ export class ResponseService {
 
     const totalPages = Math.ceil(total / limit);
 
+    // Batch-fetch stages referenced by this page rather than populating per-response.
+    const stageIds = [...new Set(responses.filter((r: any) => r.stageId).map((r: any) => r.stageId.toString()))];
+    const stagesById = new Map<string, IStage>(
+      stageIds.length
+        ? (await StageModel.find({ _id: { $in: stageIds } })).map((s) => [s._id.toString(), s])
+        : []
+    );
+
     // Format output matching IResponse interface
     const formattedData: IResponse[] = responses.map((r: any) => ({
       _id: r._id.toString(),
       formId: r.formId.toString(),
       answers: cleanAnswers(r.answers),
+      stageId: r.stageId ? r.stageId.toString() : undefined,
+      stage: r.stageId ? toStageSummary(stagesById.get(r.stageId.toString())) : null,
       status: r.status || "new",
       submittedAt: r.submittedAt,
       ipHash: r.ipHash,
@@ -136,15 +171,42 @@ export class ResponseService {
     };
   }
 
+  // Joins raw {stageId,count} pairs against the workspace's stages for name/colour/category.
+  // Responses with no stageId yet (pre-migration) are omitted, same as an unset $group key.
+  private async buildStageBreakdown(
+    workspaceId: string,
+    matchQuery: any
+  ): Promise<Array<{ stageId: string; name: string; colour: string; category: string; count: number }>> {
+    const [counts, stages] = await Promise.all([
+      this.responseRepository.getStageCounts(matchQuery),
+      this.stageService.listStages(workspaceId),
+    ]);
+    const stagesById = new Map(stages.map((s) => [s._id.toString(), s]));
+    return counts
+      .filter((c) => c._id)
+      .map((c) => {
+        const stage = stagesById.get(c._id!.toString());
+        return {
+          stageId: c._id!.toString(),
+          name: stage?.name || "Unknown stage",
+          colour: stage?.colour || "slate",
+          category: stage?.category || "new",
+          count: c.count,
+        };
+      });
+  }
+
   async getResponseStats(
     workspaceId: string,
     formId?: string,
-    isGrant?: boolean
+    isGrant?: boolean,
+    stageId?: string
   ): Promise<{
     total: number;
     new: number;
     in_progress: number;
     completed: number;
+    stageBreakdown?: Array<{ stageId: string; name: string; colour: string; category: string; count: number }>;
   }> {
     if (formId) {
       if (!mongoose.Types.ObjectId.isValid(formId)) {
@@ -166,7 +228,10 @@ export class ResponseService {
         throw err;
       }
 
-      return await this.responseRepository.getStatsByFormId(form._id as mongoose.Types.ObjectId);
+      const base = await this.responseRepository.getStatsByFormId(form._id as mongoose.Types.ObjectId);
+      const scopeWorkspaceId = workspaceId || form.workspaceId!.toString();
+      const stageBreakdown = await this.buildStageBreakdown(scopeWorkspaceId, { formId: form._id });
+      return { ...base, stageBreakdown };
     }
 
     // Workspace-wide stats across all forms in workspace
@@ -178,10 +243,17 @@ export class ResponseService {
     );
     const formIds = forms.map((f) => f._id);
 
+    const statusMatch: any = { formId: { $in: formIds } };
+    if (stageId && mongoose.Types.ObjectId.isValid(stageId)) {
+      statusMatch.stageId = new mongoose.Types.ObjectId(stageId);
+    }
+
     const statsArr = await ResponseModel.aggregate([
-      { $match: { formId: { $in: formIds } } },
+      { $match: statusMatch },
       { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
+
+    const stageBreakdown = await this.buildStageBreakdown(workspaceId, statusMatch);
 
     let newCount = 0;
     let inProgressCount = 0;
@@ -198,6 +270,7 @@ export class ResponseService {
       new: newCount,
       in_progress: inProgressCount,
       completed: completedCount,
+      stageBreakdown,
     };
   }
 
@@ -236,10 +309,14 @@ export class ResponseService {
       uploadTime: up.uploadTime,
     }));
 
+    const stage = response.stageId ? await StageModel.findById(response.stageId) : null;
+
     return {
       _id: response._id.toString(),
       formId: response.formId.toString(),
       answers: cleanAnswers(response.answers),
+      stageId: response.stageId ? response.stageId.toString() : undefined,
+      stage: toStageSummary(stage),
       status: response.status || "new",
       submittedAt: response.submittedAt,
       ipHash: response.ipHash,
@@ -249,11 +326,15 @@ export class ResponseService {
     };
   }
 
-  async updateResponseStatus(
+  // Moves a response onto a stage (Sprint 12) or, for callers not yet migrated, onto whichever
+  // stage matches the legacy status value's category. Either way stageId and the derived status
+  // land in the same write, so both keep reading correct regardless of which one the caller used.
+  // Returns the previous stageId alongside the updated response so the caller can log an event.
+  async updateResponseStage(
     workspaceId: string,
     responseId: string,
-    status: "new" | "in_progress" | "completed"
-  ): Promise<IResponse> {
+    input: { status?: "new" | "in_progress" | "completed"; stageId?: string }
+  ): Promise<{ response: IResponse; fromStageId: string | null; toStageId: string }> {
     if (!mongoose.Types.ObjectId.isValid(responseId)) {
       const err: any = new Error("Response not found");
       err.statusCode = 404;
@@ -278,7 +359,18 @@ export class ResponseService {
       throw err;
     }
 
-    const updated = await this.responseRepository.updateStatus(responseId, status);
+    // stageId is the primary key; status is resolved to a matching stage when stageId is absent.
+    const targetStage = input.stageId
+      ? await this.stageService.getStageInWorkspace(workspaceId, input.stageId)
+      : await this.stageService.resolveStageForCategory(workspaceId, input.status!);
+
+    const fromStageId = existingResponse.stageId ? existingResponse.stageId.toString() : null;
+
+    const updated = await this.responseRepository.updateStage(
+      responseId,
+      targetStage._id as mongoose.Types.ObjectId,
+      targetStage.category
+    );
     if (!updated) {
       const err: any = new Error("Response not found");
       err.statusCode = 404;
@@ -286,14 +378,20 @@ export class ResponseService {
     }
 
     return {
-      _id: updated._id.toString(),
-      formId: updated.formId.toString(),
-      answers: updated.answers,
-      status: updated.status || status,
-      submittedAt: updated.submittedAt,
-      ipHash: updated.ipHash,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
+      response: {
+        _id: updated._id.toString(),
+        formId: updated.formId.toString(),
+        answers: updated.answers,
+        stageId: updated.stageId!.toString(),
+        stage: toStageSummary(targetStage),
+        status: updated.status || targetStage.category,
+        submittedAt: updated.submittedAt,
+        ipHash: updated.ipHash,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      },
+      fromStageId,
+      toStageId: targetStage._id.toString(),
     };
   }
 

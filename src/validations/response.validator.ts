@@ -1,7 +1,17 @@
 import { z } from "zod";
 
-export const updateResponseStatusSchema = z.object({
-  status: z.enum(["new", "in_progress", "completed"], {
-    error: "status must be one of 'new', 'in_progress', or 'completed'",
-  }),
-});
+// stageId is the Sprint 12 way to change a response's place in the pipeline; status is kept for
+// callers that have not migrated yet. At least one is required, and if both are sent stageId wins
+// (see ResponseService.updateResponseStage) — its stage's category is what determines status.
+export const updateResponseStatusSchema = z
+  .object({
+    status: z
+      .enum(["new", "in_progress", "completed"], {
+        error: "status must be one of 'new', 'in_progress', or 'completed'",
+      })
+      .optional(),
+    stageId: z.string().trim().min(1).optional(),
+  })
+  .refine((v) => v.status !== undefined || v.stageId !== undefined, {
+    message: "Either status or stageId is required",
+  });

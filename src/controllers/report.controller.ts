@@ -13,6 +13,7 @@ const reportCreateSchema = z.object({
   format: z.enum(["csv", "pdf"]),
   formId: z.string().optional(),
   status: z.enum(["new", "in_progress", "completed"]).optional(),
+  stageId: z.string().optional(),
   search: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -59,7 +60,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { format, formId, status, search, from, to } = parseResult.data;
+    const { format, formId, status, stageId, search, from, to } = parseResult.data;
 
     // PDF/CSV generation runs inside this process: refuse new jobs while this workspace already
     // has several in flight, and drop files of expired reports while we are here.
@@ -84,7 +85,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
     const report = await ReportModel.create({
       workspaceId: new mongoose.Types.ObjectId(userWorkspaceId),
       format,
-      filters: { formId, status, search, from, to },
+      filters: { formId, status, stageId, search, from, to },
       status: "queued",
       expiresAt,
     });

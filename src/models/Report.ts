@@ -8,6 +8,7 @@ export type ReportStatus = "queued" | "processing" | "completed" | "failed" | "e
 export interface IReportFilters {
   formId?: string;
   status?: string;
+  stageId?: string;
   search?: string;
   from?: string;
   to?: string;

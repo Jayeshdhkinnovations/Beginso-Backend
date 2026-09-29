@@ -39,12 +39,13 @@ export const getResponses = async (
       return;
     }
 
-    const { formId, status, search, page, limit } = req.query;
+    const { formId, status, stageId, search, page, limit } = req.query;
 
     const result = await responseService.getResponses({
       workspaceId,
       formId: formId ? String(formId) : undefined,
       status: status ? String(status) : undefined,
+      stageId: stageId ? String(stageId) : undefined,
       search: search ? String(search) : undefined,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
@@ -83,7 +84,7 @@ export const getResponseStats = async (
       return;
     }
 
-    const { formId } = req.query;
+    const { formId, stageId } = req.query;
     let isGrant = false;
     const workspaceId = await getVerifiedWorkspaceId(req);
     if (formId && mongoose.Types.ObjectId.isValid(String(formId))) {
@@ -106,7 +107,8 @@ export const getResponseStats = async (
     const stats = await responseService.getResponseStats(
       workspaceId || "",
       String(formId || ""),
-      isGrant
+      isGrant,
+      stageId ? String(stageId) : undefined
     );
 
     res.status(200).json({
@@ -202,15 +204,24 @@ export const updateResponseStatus = async (
 
     const parsed = updateResponseStatusSchema.parse({
       status: req.body?.status,
+      stageId: req.body?.stageId,
     });
 
-    const updatedResponse = await responseService.updateResponseStatus(
+    const { response: updatedResponse, fromStageId, toStageId } = await responseService.updateResponseStage(
       workspaceId,
       String(id),
-      parsed.status
+      parsed
     );
 
-    await recordEvent(req, workspaceId, "response.status_change", { id: String(id), type: "response", label: String(id) }, { status: parsed.status });
+    // Kept as "response.status_change" (not "response.stage_change") so the existing audit-log
+    // consumer/contract for this endpoint is unchanged; metadata now also carries stage ids.
+    await recordEvent(
+      req,
+      workspaceId,
+      "response.status_change",
+      { id: String(id), type: "response", label: String(id) },
+      { status: updatedResponse.status, fromStageId, toStageId }
+    );
 
     res.status(200).json({
       success: true,

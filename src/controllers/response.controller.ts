@@ -101,9 +101,12 @@ export const getResponseStats = async (
       res.status(200).json({
         success: true,
         total: 0,
+        unread: 0,
         new: 0,
         in_progress: 0,
         completed: 0,
+        byCategory: { new: 0, in_progress: 0, completed: 0 },
+        byStage: [],
       });
       return;
     }
@@ -112,11 +115,16 @@ export const getResponseStats = async (
       workspaceId || "",
       String(formId || ""),
       isGrant,
-      stageId ? String(stageId) : undefined
+      stageId ? String(stageId) : undefined,
+      authReq.user._id.toString()
     );
 
     res.status(200).json({
       success: true,
+      // Flat, per design.md §11.2's documented contract (frontend reads r.data.total/byStage/
+      // byCategory/unread directly, not nested) — `stats` kept alongside for any other consumer
+      // that reads the old nested shape, same dual-key convention as tag/stage controllers.
+      ...stats,
       stats,
     });
   } catch (error: any) {

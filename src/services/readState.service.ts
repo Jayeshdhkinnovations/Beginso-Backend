@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ResponseReadState from "../models/ResponseReadState";
+import ResponseModel from "../models/Response";
 
 // Per-user unread state (Sprint 12, BE 0.2 / B8.2). Absence of a row = unread; "mark unread" is a
 // delete, never a boolean flip, so both endpoints are naturally idempotent.
@@ -37,6 +38,37 @@ export class ReadStateService {
       map.set(key, !readIds.has(key));
     }
     return map;
+  }
+
+  // Count of responses matching `matchQuery` with no read row for this user — the stats
+  // endpoint's `unread` figure. A $lookup + empty-array match rather than fetching ids first,
+  // since the caller (getResponseStats) never otherwise needs the matched ids themselves.
+  async countUnread(userId: string, matchQuery: Record<string, unknown>): Promise<number> {
+    const result = await ResponseModel.aggregate([
+      { $match: matchQuery },
+      {
+        $lookup: {
+          from: "responsereadstates",
+          let: { rid: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$responseId", "$$rid"] },
+                    { $eq: ["$userId", new mongoose.Types.ObjectId(userId)] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "readState",
+        },
+      },
+      { $match: { readState: { $size: 0 } } },
+      { $count: "count" },
+    ]);
+    return result[0]?.count ?? 0;
   }
 
   // Migration helper (backfillReadState.ts): marks every response in `responseIds` as read for

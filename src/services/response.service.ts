@@ -210,18 +210,33 @@ export class ResponseService {
       });
   }
 
+  // Sprint 12 (BE 0.1/0.2), design.md §11.2 `GET /api/responses/stats`: the documented V2
+  // contract is flat `{total, unread, byStage, byCategory}`. This method used to return only the
+  // pre-Sprint-12 shape (`new`/`in_progress`/`completed`/`stageBreakdown`) — a real bug, not just
+  // a naming mismatch: the frontend reads `byCategory`/`byStage`/`unread`, none of which existed
+  // here, so every stat card silently read as 0 regardless of actual data. Legacy
+  // `new`/`in_progress`/`completed` keys are kept as aliases during the deprecation window
+  // (design.md's own note), `byCategory ` is the V2-primary field.
   async getResponseStats(
     workspaceId: string,
     formId?: string,
     isGrant?: boolean,
-    stageId?: string
+    stageId?: string,
+    callerUserId?: string
   ): Promise<{
     total: number;
+    unread: number;
     new: number;
     in_progress: number;
     completed: number;
-    stageBreakdown?: Array<{ stageId: string; name: string; colour: string; category: string; count: number }>;
+    byCategory: { new: number; in_progress: number; completed: number };
+    byStage: Array<{ stageId: string; name: string; colour: string; category: string; count: number }>;
+    /** @deprecated alias for byStage, kept for any caller still on the pre-Sprint-12 field name */
+    stageBreakdown: Array<{ stageId: string; name: string; colour: string; category: string; count: number }>;
   }> {
+    let statusMatch: any;
+    let scopeWorkspaceId: string;
+
     if (formId) {
       if (!mongoose.Types.ObjectId.isValid(formId)) {
         const err: any = new Error("Invalid formId parameter");
@@ -242,32 +257,30 @@ export class ResponseService {
         throw err;
       }
 
-      const base = await this.responseRepository.getStatsByFormId(form._id as mongoose.Types.ObjectId);
-      const scopeWorkspaceId = workspaceId || form.workspaceId!.toString();
-      const stageBreakdown = await this.buildStageBreakdown(scopeWorkspaceId, { formId: form._id, deletedAt: null });
-      return { ...base, stageBreakdown };
+      statusMatch = { formId: form._id, deletedAt: null };
+      scopeWorkspaceId = workspaceId || form.workspaceId!.toString();
+    } else {
+      // Workspace-wide stats across all forms in workspace
+      const forms = await this.formRepository.findWithPagination(
+        { workspaceId },
+        0,
+        10000,
+        workspaceId
+      );
+      const formIds = forms.map((f) => f._id);
+
+      statusMatch = { formId: { $in: formIds }, deletedAt: null };
+      if (stageId && mongoose.Types.ObjectId.isValid(stageId)) {
+        statusMatch.stageId = new mongoose.Types.ObjectId(stageId);
+      }
+      scopeWorkspaceId = workspaceId;
     }
 
-    // Workspace-wide stats across all forms in workspace
-    const forms = await this.formRepository.findWithPagination(
-      { workspaceId },
-      0,
-      10000,
-      workspaceId
-    );
-    const formIds = forms.map((f) => f._id);
-
-    const statusMatch: any = { formId: { $in: formIds }, deletedAt: null };
-    if (stageId && mongoose.Types.ObjectId.isValid(stageId)) {
-      statusMatch.stageId = new mongoose.Types.ObjectId(stageId);
-    }
-
-    const statsArr = await ResponseModel.aggregate([
-      { $match: statusMatch },
-      { $group: { _id: "$status", count: { $sum: 1 } } },
+    const [statsArr, byStage, unread] = await Promise.all([
+      ResponseModel.aggregate([{ $match: statusMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      this.buildStageBreakdown(scopeWorkspaceId, statusMatch),
+      callerUserId ? this.readStateService.countUnread(callerUserId, statusMatch) : Promise.resolve(0),
     ]);
-
-    const stageBreakdown = await this.buildStageBreakdown(workspaceId, statusMatch);
 
     let newCount = 0;
     let inProgressCount = 0;
@@ -281,10 +294,13 @@ export class ResponseService {
 
     return {
       total: newCount + inProgressCount + completedCount,
+      unread,
       new: newCount,
       in_progress: inProgressCount,
       completed: completedCount,
-      stageBreakdown,
+      byCategory: { new: newCount, in_progress: inProgressCount, completed: completedCount },
+      byStage,
+      stageBreakdown: byStage,
     };
   }
 

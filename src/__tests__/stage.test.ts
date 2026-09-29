@@ -344,5 +344,20 @@ describe("Legacy status-based endpoints keep working when a workspace renames it
     const shippedEntry = statsRes.body.stats.stageBreakdown.find((s: any) => s.stageId === completedStageId);
     expect(shippedEntry.name).toBe("Shipped");
     expect(shippedEntry.count).toBeGreaterThanOrEqual(1);
+
+    // V2 contract (design.md §11.2): the response is flat, not nested under `stats`, and the
+    // primary fields are `byCategory`/`byStage`/`unread` — this is what the frontend actually
+    // reads (src/types/response.ts ResponseStats). Regression for the bug where this endpoint
+    // only ever returned the legacy nested shape, silently zeroing every Inbox stat card.
+    expect(statsRes.body.total).toBe(statsRes.body.stats.total);
+    expect(statsRes.body.byCategory).toEqual({
+      new: statsRes.body.stats.new,
+      in_progress: statsRes.body.stats.in_progress,
+      completed: statsRes.body.stats.completed,
+    });
+    const shippedByStage = statsRes.body.byStage.find((s: any) => s.stageId === completedStageId);
+    expect(shippedByStage.name).toBe("Shipped");
+    expect(shippedByStage.count).toBeGreaterThanOrEqual(1);
+    expect(typeof statsRes.body.unread).toBe("number");
   });
 });

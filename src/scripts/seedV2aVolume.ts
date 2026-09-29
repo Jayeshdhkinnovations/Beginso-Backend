@@ -14,6 +14,13 @@ dotenv.config();
 // × 500 responses = 20 workspaces, ~300 memberships, 200 forms, ~100,000 responses. Sized for a
 // small-to-mid B2B tenant a year or two in — enough to catch an unindexed collection scan, not so
 // large it needs its own infra to generate. Change the constants below and re-run if that's wrong.
+//
+// A run of this exact shape (against an ephemeral in-memory MongoDB, not this real database) was
+// timed on 29 Sep 2026: every hot query listed in BE 0.4 used an index (IXSCAN/IDHACK), zero
+// collection scans, all under 10ms even on a single in-memory core. See BACKEND.md §18/§21 and
+// `.kiro/specs/sprint-11-v2a-hardening/tasks.md` BE 0.4 for the full table. Re-run against a real
+// staging Mongo (not production) if you want production-representative wall-clock numbers, not just
+// the scan-type signal this already confirmed.
 const WORKSPACES = 20;
 const MEMBERS_PER_WORKSPACE = 15;
 const FORMS_PER_WORKSPACE = 10;

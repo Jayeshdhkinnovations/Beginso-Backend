@@ -5,11 +5,16 @@ meta {
 }
 
 post {
-  url: {{base_url}}/api/invitations/{{invitationToken}}/decline
+  url: {{base_url}}/api/invitations/{{invitationToken3}}/decline
   body: none
   auth: none
 }
 
 assert {
   res.status: eq 200
+}
+
+docs {
+  Uses invitationToken3 — a third invitation, separate from invitationToken2 which Accept above
+  already consumed. Unauthenticated on purpose: the token itself is the proof.
 }

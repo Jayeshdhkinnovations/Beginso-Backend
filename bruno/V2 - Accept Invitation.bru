@@ -5,9 +5,13 @@ meta {
 }
 
 post {
-  url: {{base_url}}/api/invitations/{{invitationToken}}/accept
+  url: {{base_url}}/api/invitations/{{invitationToken2}}/accept
   body: none
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{inviteeToken}}
 }
 
 assert {
@@ -16,5 +20,6 @@ assert {
 }
 
 docs {
-  Caller's email must match the invitation.
+  Caller's email must match the invitation, so this overrides the collection's default owner token
+  with inviteeToken (the seeded user whose email matches invitationToken2's invitee).
 }

@@ -15,9 +15,13 @@ headers {
 }
 
 assert {
-  res.status: eq 200
+  res.status: eq 400
+  res.body.error.code: eq LAST_OWNER
 }
 
 docs {
-  The only owner gets 400 LAST_OWNER.
+  The only owner gets 400 LAST_OWNER — and by this point in the sequence (after "Remove Member",
+  seq 109) {{token}}'s workspace genuinely has only the owner left, so 400 is the correct, exercised
+  outcome here. To see a non-owner leave succeed (200), run this with a token belonging to a
+  still-current non-owner member instead.
 }

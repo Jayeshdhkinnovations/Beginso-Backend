@@ -21,9 +21,12 @@ body:json {
 }
 
 assert {
-  res.status: eq 200
+  res.status: eq 404
 }
 
 docs {
-  Owner only.
+  Owner only. Runs after "Remove Member" (seq 109) has already removed {{targetUserId}} from this
+  workspace, so the correct outcome here is 404 ("must already be a member") — this row exercises
+  that guard, not the success path. To see transfer succeed, run it against a still-current member,
+  e.g. re-invite {{targetUserId}} first, or duplicate this request earlier in the sequence.
 }

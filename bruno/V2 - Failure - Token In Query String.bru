@@ -10,6 +10,10 @@ get {
   auth: none
 }
 
+headers {
+  Authorization:
+}
+
 assert {
   res.status: eq 401
 }

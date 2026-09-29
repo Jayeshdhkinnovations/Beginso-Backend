@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/invitations/{{invitationToken}}
+  url: {{base_url}}/api/invitations/{{invitationToken2}}
   body: none
   auth: none
 }
@@ -16,5 +16,6 @@ assert {
 }
 
 docs {
-  Public. Token from the invitation email.
+  Public. Token from the invitation email. Uses invitationToken2 (untouched by resend/revoke),
+  since Accept below (same invitation) still needs it pending.
 }

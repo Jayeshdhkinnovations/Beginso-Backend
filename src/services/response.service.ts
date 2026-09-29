@@ -48,6 +48,9 @@ export class ResponseService {
 
   async getResponses(params: {
     workspaceId: string;
+    // Sprint 12 fix (30 Sep 2026): true Personal-shell listing — forms with no workspaceId,
+    // owned by this user. Mirrors formService.listForms's own personalUserId handling.
+    personalUserId?: string;
     formId?: string;
     status?: string;
     stageId?: string;
@@ -57,7 +60,7 @@ export class ResponseService {
     // Whose unread state to join in (the calling user). Omitted only by callers that don't need it.
     callerUserId?: string;
   }): Promise<PaginatedResponsesResult> {
-    const { workspaceId, formId, status, stageId, search } = params;
+    const { workspaceId, personalUserId, formId, status, stageId, search } = params;
 
     let page = Number(params.page) || 1;
     if (page < 1) page = 1;
@@ -68,7 +71,7 @@ export class ResponseService {
 
     const mongoQuery: any = { deletedAt: null };
 
-    // Scope to workspaceId via form lookup
+    // Scope to workspaceId (or the caller's personal forms) via form lookup
     if (formId) {
       if (!mongoose.Types.ObjectId.isValid(formId)) {
         const err: any = new Error("Form not found");
@@ -83,13 +86,24 @@ export class ResponseService {
         throw err;
       }
 
-      if (!form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+      const belongsToWorkspace = !!workspaceId && !!form.workspaceId && form.workspaceId.toString() === workspaceId;
+      const belongsToCaller =
+        !!personalUserId && !form.workspaceId && String(form.createdBy) === personalUserId;
+
+      if (!belongsToWorkspace && !belongsToCaller) {
         const err: any = new Error("Forbidden: You do not own this form's workspace");
         err.statusCode = 403;
         throw err;
       }
 
       mongoQuery.formId = form._id;
+    } else if (personalUserId) {
+      const forms = await this.formRepository.findWithPagination(
+        { createdBy: personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] },
+        0,
+        10000
+      );
+      mongoQuery.formId = { $in: forms.map((f) => f._id) };
     } else {
       // Find all forms in workspace
       const forms = await this.formRepository.findWithPagination(
@@ -222,7 +236,9 @@ export class ResponseService {
     formId?: string,
     isGrant?: boolean,
     stageId?: string,
-    callerUserId?: string
+    callerUserId?: string,
+    // Sprint 12 fix (30 Sep 2026): true Personal-shell stats, mirrors getResponses above.
+    personalUserId?: string
   ): Promise<{
     total: number;
     unread: number;
@@ -251,14 +267,26 @@ export class ResponseService {
         throw err;
       }
 
-      if (!isGrant && (!form.workspaceId || form.workspaceId.toString() !== workspaceId)) {
+      const belongsToWorkspace = !!workspaceId && !!form.workspaceId && form.workspaceId.toString() === workspaceId;
+      const belongsToCaller =
+        !!personalUserId && !form.workspaceId && String(form.createdBy) === personalUserId;
+
+      if (!isGrant && !belongsToWorkspace && !belongsToCaller) {
         const err: any = new Error("Forbidden: You do not own this form's workspace");
         err.statusCode = 403;
         throw err;
       }
 
       statusMatch = { formId: form._id, deletedAt: null };
-      scopeWorkspaceId = workspaceId || form.workspaceId!.toString();
+      scopeWorkspaceId = workspaceId || form.workspaceId?.toString() || "";
+    } else if (personalUserId) {
+      const forms = await this.formRepository.findWithPagination(
+        { createdBy: personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] },
+        0,
+        10000
+      );
+      statusMatch = { formId: { $in: forms.map((f) => f._id) }, deletedAt: null };
+      scopeWorkspaceId = "";
     } else {
       // Workspace-wide stats across all forms in workspace
       const forms = await this.formRepository.findWithPagination(
@@ -278,7 +306,8 @@ export class ResponseService {
 
     const [statsArr, byStage, unread] = await Promise.all([
       ResponseModel.aggregate([{ $match: statusMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
-      this.buildStageBreakdown(scopeWorkspaceId, statusMatch),
+      // Personal-shell forms have no workspace-owned stages (OQ-9: stages fixed to defaults there).
+      scopeWorkspaceId ? this.buildStageBreakdown(scopeWorkspaceId, statusMatch) : Promise.resolve([]),
       callerUserId ? this.readStateService.countUnread(callerUserId, statusMatch) : Promise.resolve(0),
     ]);
 

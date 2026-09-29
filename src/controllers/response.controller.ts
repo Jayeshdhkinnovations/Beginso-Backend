@@ -30,10 +30,17 @@ export const getResponses = async (
     }
 
     const workspaceId = await getVerifiedWorkspaceId(req);
-    if (!workspaceId) {
+    // Sprint 12 fix (30 Sep 2026): mirrors form.controller.ts's listForms `isExplicitPersonal`
+    // handling. `!workspaceId` used to mean "show nothing" here — but it also covers the caller's
+    // genuine Personal shell (explicit `x-workspace-slug: personal`), which has real responses of
+    // its own (forms with no workspaceId) and must not be served empty OR silently fall back to
+    // some other workspace's data.
+    const personalUserId =
+      authReq.explicitPersonalContext || !workspaceId ? authReq.user._id.toString() : undefined;
+    if (!workspaceId && !personalUserId) {
       res.status(200).json({
         success: true,
-        responses: [],
+        data: [],
         total: 0,
         page: 1,
         limit: 10,
@@ -46,6 +53,7 @@ export const getResponses = async (
 
     const result = await responseService.getResponses({
       workspaceId,
+      personalUserId,
       formId: formId ? String(formId) : undefined,
       status: status ? String(status) : undefined,
       stageId: stageId ? String(stageId) : undefined,
@@ -97,7 +105,11 @@ export const getResponseStats = async (
         isGrant = true;
       }
     }
-    if (!workspaceId && !isGrant) {
+    // Sprint 12 fix (30 Sep 2026): same personal-shell handling as getResponses above — do not
+    // return an all-zero stub for the caller's genuine Personal context.
+    const personalUserId =
+      authReq.explicitPersonalContext || (!workspaceId && !isGrant) ? authReq.user._id.toString() : undefined;
+    if (!workspaceId && !isGrant && !personalUserId) {
       res.status(200).json({
         success: true,
         total: 0,
@@ -116,7 +128,8 @@ export const getResponseStats = async (
       String(formId || ""),
       isGrant,
       stageId ? String(stageId) : undefined,
-      authReq.user._id.toString()
+      authReq.user._id.toString(),
+      personalUserId
     );
 
     res.status(200).json({

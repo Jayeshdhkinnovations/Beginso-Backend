@@ -44,6 +44,9 @@ export interface IResponse {
   assigneeId?: string | null;
   // Per calling user (Sprint 12, BE 0.2 / B8.2). Absence of a ResponseReadState row = unread.
   unread?: boolean;
+  // Sprint 12, BE 0.6 (B4.10/B8.3): id of the earlier response this one duplicates, or null.
+  // Flag only — never merged or dropped. See duplicate.service.ts for the OQ-6 assumption.
+  duplicateOfId?: string | null;
   // Sprint 12, BE 0.3 (B5.x): live count, never cached — recomputed on every list/detail read.
   noteCount?: number;
   createdAt?: Date | string;

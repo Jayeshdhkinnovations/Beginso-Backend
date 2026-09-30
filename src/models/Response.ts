@@ -25,6 +25,15 @@ export interface IResponse extends Document {
   // stat, analytics figure and export must filter `deletedAt: null`; files are kept, only the
   // record is hidden. Never write directly — go through ResponseService.softDelete/restore.
   deletedAt?: Date | null;
+  // Sprint 12, BE 0.6 (B8.3/OQ-6). Lower-cased value of the form's first `type: "email"` field for
+  // this submission, or null if the form has no email field / it was left blank. Stored (not
+  // recomputed per read) so duplicate lookup is one indexed query, not a per-response answers scan
+  // — see duplicate.service.ts for the extraction + lookup logic and the OQ-6 assumption it records.
+  respondentEmail?: string | null;
+  // Sprint 12, BE 0.6 (B4.10/B8.3): id of the earliest earlier response to the SAME form whose
+  // respondentEmail matched (case-insensitive) at submission time. Flag only — never merged or
+  // dropped. null = not a duplicate (or no email field on the form).
+  duplicateOfId?: mongoose.Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,9 +94,22 @@ const ResponseSchema = new Schema<IResponse>(
       default: null,
       index: true,
     },
+    respondentEmail: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    duplicateOfId: {
+      type: Schema.Types.ObjectId,
+      ref: "Response",
+      default: null,
+    },
   },
   { timestamps: true }
 );
+
+// Duplicate lookup at submission time: "earlier responses to this form with this email".
+ResponseSchema.index({ formId: 1, respondentEmail: 1 });
 
 // Compound indexes for fast listing, filtering & sorting by formId + submittedAt (+ status/stage)
 ResponseSchema.index({ formId: 1, submittedAt: -1, status: 1 });

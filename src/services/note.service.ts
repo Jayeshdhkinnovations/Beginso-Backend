@@ -71,21 +71,26 @@ export class NoteService {
     return { response: response!, form, workspaceId: form!.workspaceId ? form!.workspaceId.toString() : null };
   }
 
-  private async toDTO(note: INote): Promise<NoteDTO> {
+  private async toDTO(note: INote, formId: string, workspaceId: string | null): Promise<NoteDTO> {
     const mentionUsers = note.mentionIds.length
       ? await User.find({ _id: { $in: note.mentionIds } }).select("fullName email").lean()
       : [];
     const mentionById = new Map(mentionUsers.map((u: any) => [u._id.toString(), u]));
 
     // authorRemoved is recomputed live rather than trusted from the stored (currently
-    // never-updated) column — see Note.ts's header comment.
-    const authorStillExists = await User.exists({ _id: note.authorId });
+    // never-updated) column — see Note.ts's header comment. Sprint 12, BE 0.6 fix: this used to
+    // check only whether the User document still exists globally, which stays true even after
+    // offboarding (member removal deletes the Membership, never the User) — so a removed author's
+    // notes never flagged authorRemoved. Reuses the same access check that governs whether the
+    // author could act on this response at all (userHasAccessToFormShared), matching how mentions
+    // are validated, so "removed" here means "no longer has access", per F16/B3.3.
+    const authorStillHasAccess = await userHasAccessToForm(note.authorId.toString(), formId, workspaceId);
 
     return {
       id: note._id.toString(),
       authorId: note.authorId.toString(),
       authorName: note.authorName,
-      authorRemoved: !authorStillExists,
+      authorRemoved: !authorStillHasAccess,
       body: note.body,
       mentions: note.mentionIds.map((id) => {
         const u = mentionById.get(id.toString());
@@ -97,9 +102,9 @@ export class NoteService {
   }
 
   async list(responseId: string): Promise<NoteDTO[]> {
-    await this.resolveResponse(responseId);
+    const { form, workspaceId } = await this.resolveResponse(responseId);
     const notes = await Note.find({ responseId }).sort({ createdAt: 1 });
-    return Promise.all(notes.map((n) => this.toDTO(n)));
+    return Promise.all(notes.map((n) => this.toDTO(n, form._id.toString(), workspaceId)));
   }
 
   // Validates every mentionId is a *current* member with access to this specific form — never
@@ -170,7 +175,7 @@ export class NoteService {
       }).catch(() => undefined);
     }
 
-    return this.toDTO(note);
+    return this.toDTO(note, form._id.toString(), workspaceId);
   }
 
   async update(
@@ -211,7 +216,7 @@ export class NoteService {
       workspaceId,
     });
 
-    return this.toDTO(note!);
+    return this.toDTO(note!, form._id.toString(), workspaceId);
   }
 
   async delete(responseId: string, noteId: string, actor: { id: string; role: string | null }): Promise<void> {

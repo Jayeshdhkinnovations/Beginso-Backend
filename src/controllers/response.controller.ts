@@ -51,7 +51,7 @@ export const getResponses = async (
       return;
     }
 
-    const { formId, status, stageId, search, page, limit } = req.query;
+    const { formId, status, stageId, search, page, limit, duplicate } = req.query;
 
     const result = await responseService.getResponses({
       workspaceId,
@@ -63,6 +63,7 @@ export const getResponses = async (
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       callerUserId: authReq.user._id.toString(),
+      duplicate: duplicate === "true" || duplicate === "1",
     });
 
     res.status(200).json({

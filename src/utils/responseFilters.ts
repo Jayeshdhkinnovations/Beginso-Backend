@@ -12,8 +12,7 @@ export interface ResponseFilters {
   tagIds?: string[];
   assigneeId?: string; // an id, or 'unassigned' / 'me'
   unread?: boolean;
-  // Accepted for forward-compatibility with a future duplicate-detection feature; there is no
-  // field to filter on yet, so this is a documented no-op rather than a fabricated behavior.
+  // Sprint 12, BE 0.6 (B4.10): true = only responses flagged as a duplicate (duplicateOfId set).
   duplicate?: boolean;
   from?: string;
   to?: string;
@@ -39,6 +38,10 @@ export const buildResponseFilterQuery = async (
 
   if (filters.stageId && mongoose.Types.ObjectId.isValid(filters.stageId)) {
     query.stageId = new mongoose.Types.ObjectId(filters.stageId);
+  }
+
+  if (filters.duplicate) {
+    query.duplicateOfId = { $ne: null };
   }
 
   if (filters.tagIds && filters.tagIds.length > 0) {

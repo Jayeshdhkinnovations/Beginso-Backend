@@ -39,6 +39,8 @@ const toActivityType = (action: string, metadata: Record<string, any> | undefine
     case "response.assign":
     case "response.bulk_assign":
       return metadata?.toAssigneeId ? "assigned" : "unassigned";
+    case "response.offboard_unassign":
+      return "unassigned";
     case "response.bulk_tag":
       return "tag_added";
     case "response.bulk_untag":

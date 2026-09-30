@@ -7,6 +7,9 @@ import SessionModel from "../models/Session";
 import { logWorkspaceEvent } from "../services/event.service";
 import { hashIp } from "../utils/ip";
 import { assertVerifiedWorkspace } from "../utils/requestContext";
+import { ResponseService } from "../services/response.service";
+
+const responseService = new ResponseService();
 
 // Helper to resolve workspace from param (ObjectId or slug)
 const resolveWorkspace = async (paramId: any) => {
@@ -367,6 +370,19 @@ export const removeMember = async (req: Request, res: Response, next: NextFuncti
         targetType: "member",
         targetLabel: targetUserDoc?.email || membership.userId.toString()
       });
+
+      // Sprint 12, BE 0.6 (B3.3/F16): runs AFTER the membership is gone, so a failure here never
+      // fails the removal itself — offboarding must not fail or orphan (must-guarantee). Caught
+      // and logged rather than surfaced as a failed removal to the caller.
+      try {
+        await responseService.offboardMemberAssignments(workspace._id.toString(), targetUserId, {
+          id: authReq.user._id,
+          email: authReq.user.email,
+          name: authReq.user.fullName || authReq.user.name,
+        });
+      } catch (offboardErr) {
+        console.error("offboardMemberAssignments failed for removed member", targetUserId, offboardErr);
+      }
     }
 
     res.status(200).json({

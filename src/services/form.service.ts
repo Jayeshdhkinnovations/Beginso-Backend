@@ -15,6 +15,7 @@ import { buildSearchText } from "../utils/responseSearch";
 import { asString, clampInt, escapeRegex } from "../utils/safeInput";
 import { allocateReference } from "./reference.service";
 import { logWorkspaceEvent } from "./event.service";
+import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
 
 const CHOICE_FIELD_TYPES = ["dropdown", "multiple_choice"];
 const MAX_SLUG_ATTEMPTS = 5;
@@ -589,6 +590,13 @@ export class FormService {
     // this is the single choke point every submission path (authenticated + public) goes through.
     const reference = await allocateReference(formId);
 
+    // Sprint 12, BE 0.6 (B4.10/B8.3): flag-only duplicate detection at the same choke point every
+    // submission (authenticated + public) already goes through for reference allocation. See
+    // duplicate.service.ts for the OQ-6 assumption ("the email" = the form's first `type: "email"`
+    // field). Never blocks or alters the submission — a duplicate is still created normally.
+    const respondentEmail = extractRespondentEmail(form.fields as any, answers);
+    const duplicateOfId = await findDuplicateOf(formId, respondentEmail);
+
     const newResponse = await ResponseModel.create({
       _id: responseId || new mongoose.Types.ObjectId(),
       formId,
@@ -597,6 +605,8 @@ export class FormService {
       submittedAt: new Date(),
       ipHash,
       reference,
+      respondentEmail,
+      duplicateOfId,
     });
 
     // Sprint 12, BE 0.3: workspace activity feed entry for the activity endpoint's "submitted"

@@ -8,6 +8,7 @@ import StageModel, { IStage } from "../models/Stage";
 import { StageService } from "./stage.service";
 import { ReadStateService } from "./readState.service";
 import { NoteService } from "./note.service";
+import { logWorkspaceEvent } from "./event.service";
 import { userHasAccessToForm as userHasAccessToFormShared } from "../utils/formAccess";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
 import { PaginatedResponsesResult, IResponse, IResponseFile, IResponseStageSummary } from "../types/response.types";
@@ -60,6 +61,8 @@ export class ResponseService {
     limit?: number;
     // Whose unread state to join in (the calling user). Omitted only by callers that don't need it.
     callerUserId?: string;
+    // Sprint 12, BE 0.6 (B4.10): "Show duplicates" filter — true = only flagged responses.
+    duplicate?: boolean;
   }): Promise<PaginatedResponsesResult> {
     const { workspaceId, personalUserId, formId, status, stageId, search } = params;
 
@@ -132,6 +135,11 @@ export class ResponseService {
       mongoQuery.stageId = new mongoose.Types.ObjectId(stageId);
     }
 
+    // Duplicate filter (Sprint 12, BE 0.6 / B4.10)
+    if (params.duplicate) {
+      mongoQuery.duplicateOfId = { $ne: null };
+    }
+
     // Search filter against answers content
     if (search && search.trim() !== "") {
       const needle = search.trim().toLowerCase();
@@ -193,6 +201,7 @@ export class ResponseService {
       assigneeId: r.assigneeId ? r.assigneeId.toString() : null,
       unread: unreadMap ? unreadMap.get(r._id.toString()) ?? true : undefined,
       noteCount: noteCountMap.get(r._id.toString()) ?? 0,
+      duplicateOfId: r.duplicateOfId ? r.duplicateOfId.toString() : null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -394,6 +403,7 @@ export class ResponseService {
       assigneeId: response.assigneeId ? response.assigneeId.toString() : null,
       unread: callerUserId ? await this.readStateService.isUnread(callerUserId, responseId) : undefined,
       noteCount,
+      duplicateOfId: response.duplicateOfId ? response.duplicateOfId.toString() : null,
       createdAt: response.createdAt,
       updatedAt: response.updatedAt,
     };
@@ -613,6 +623,47 @@ export class ResponseService {
       await ResponseModel.updateOne({ _id: responseId }, { $set: { deletedAt: new Date() } });
     }
     return { wasAlreadyDeleted };
+  }
+
+  // Sprint 12, BE 0.6 (B3.3/F16). Called by team.controller.ts's removeMember AFTER the membership
+  // row is deleted, so it never blocks or fails the removal itself: every response in this
+  // workspace currently assigned to the removed user is unassigned (assigneeId -> null), one
+  // workspace event written per response. `assignee=unassigned` filtering (responseFilters.ts /
+  // getResponses) already treats a null assigneeId as unassigned, so nothing else is needed for
+  // "findable under Unassigned" — verified, not assumed.
+  async offboardMemberAssignments(
+    workspaceId: string,
+    removedUserId: string,
+    actor: { id: string; email: string; name: string }
+  ): Promise<{ responsesUnassigned: number }> {
+    const forms = await this.formRepository.findWithPagination({ workspaceId }, 0, 10000, workspaceId);
+    const formIds = forms.map((f) => f._id);
+    if (formIds.length === 0) return { responsesUnassigned: 0 };
+
+    const assigned = await ResponseModel.find({
+      formId: { $in: formIds },
+      assigneeId: new mongoose.Types.ObjectId(removedUserId),
+      deletedAt: null,
+    })
+      .select("_id")
+      .lean();
+
+    for (const r of assigned) {
+      await ResponseModel.updateOne({ _id: r._id }, { $set: { assigneeId: null } });
+      // logWorkspaceEvent swallows its own errors (see event.service.ts) so one failed event write
+      // never stops the rest of the unassign loop or the member removal that triggered it.
+      await logWorkspaceEvent({
+        workspaceId,
+        actor,
+        action: "response.offboard_unassign",
+        targetId: r._id.toString(),
+        targetType: "response",
+        targetLabel: r._id.toString(),
+        metadata: { removedUserId, toAssigneeId: null },
+      });
+    }
+
+    return { responsesUnassigned: assigned.length };
   }
 
   async restoreResponse(responseId: string): Promise<{ wasDeleted: boolean }> {

@@ -26,6 +26,17 @@ let owner: any;
 let ws: any;
 const tok = (u: any) => generateToken({ id: u._id.toString(), email: u.email, role: u.role });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Bug fix (CI flake): a flat `sleep(300)` assumed the queue's async processing always lands
+// inside that window — true on a fast local machine, not guaranteed on a CPU-shared CI runner.
+// Polls instead of guessing a fixed duration, so this is correct regardless of how fast/slow the
+// event loop happens to be, with a generous 5s ceiling rather than tightening a magic number.
+async function waitUntil(predicate: () => boolean, timeoutMs = 5000, intervalMs = 25): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error(`waitUntil: condition not met within ${timeoutMs}ms`);
+    await sleep(intervalMs);
+  }
+}
 
 beforeAll(async () => {
   await mongoose.disconnect();
@@ -81,13 +92,13 @@ describe("report queue", () => {
     );
     const [a, b, c] = [await mkReport(1), await mkReport(2), await mkReport(3)];
     kickReportQueue();
-    await sleep(300);
+    await waitUntil(() => started.length === 1);
     expect(started).toEqual([String(a._id)]);
     release[0]();
-    await sleep(300);
+    await waitUntil(() => started.length === 2);
     expect(started).toEqual([String(a._id), String(b._id)]);
     release[1]();
-    await sleep(300);
+    await waitUntil(() => started.length === 3);
     expect(started).toEqual([String(a._id), String(b._id), String(c._id)]);
     release[2]();
     spy.mockRestore();

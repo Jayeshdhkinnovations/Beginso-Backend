@@ -2,6 +2,24 @@ import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import mongoose from "mongoose";
 import { Logger } from "../utils/logger";
+import { MAX_UPLOAD_MB, MAX_UPLOAD_FILES } from "../utils/uploadLimits";
+
+// Bug fix: Multer's own default messages ("File too large", "Too many files", "Field value too
+// long", "Unexpected field", ...) never state the actual configured limit, and the frontend was
+// discarding this message entirely for every 400 anyway — showing one hardcoded guess
+// ("25 MB / 10 files") regardless of which of Multer's several distinct limit codes actually
+// fired. A submission genuinely under both those numbers (confirmed: two files, 4.2MB + 1.1MB)
+// still hit this generic text, meaning the real cause was something else Multer rejected
+// (e.g. LIMIT_FIELD_VALUE on a text field) and got mislabelled as a file-size problem.
+const MULTER_MESSAGES: Record<string, () => string> = {
+  LIMIT_FILE_SIZE: () => `A file is larger than the ${MAX_UPLOAD_MB()} MB per-file limit.`,
+  LIMIT_FILE_COUNT: () => `Too many files — the limit is ${MAX_UPLOAD_FILES()} files per submission.`,
+  LIMIT_FIELD_VALUE: () => "One of the form's field values is too long.",
+  LIMIT_UNEXPECTED_FILE: () => "A file was sent for a field that doesn't accept one.",
+  LIMIT_PART_COUNT: () => "The submission has too many parts.",
+  LIMIT_FIELD_COUNT: () => "The submission has too many fields.",
+  LIMIT_FIELD_KEY: () => "One of the form's field names is too long.",
+};
 
 export const errorHandler = (
   err: any,
@@ -69,12 +87,14 @@ export const errorHandler = (
     return;
   }
 
-  // Multer Errors (e.g. LIMIT_FILE_SIZE)
+  // Multer Errors (e.g. LIMIT_FILE_SIZE) — see MULTER_MESSAGES above for why this states the
+  // actual configured limit instead of relying on Multer's own terse default text.
   if (err.name === "MulterError") {
+    const message = MULTER_MESSAGES[err.code]?.() ?? err.message ?? "File upload error";
     res.status(400).json({
       success: false,
-      message: err.message || "File upload error",
-      error: { message: err.message || "File upload error", code: err.code }
+      message,
+      error: { message, code: err.code }
     });
     return;
   }

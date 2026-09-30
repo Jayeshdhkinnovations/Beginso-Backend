@@ -18,6 +18,7 @@ import reportRoutes from "./routes/report.routes";
 import notificationRoutes from "./routes/notification.routes";
 import invitationRoutes from "./routes/invitation.routes";
 import sharedWithMeRoutes from "./routes/shared_with_me.routes";
+import savedViewRoutes from "./routes/savedView.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { normalizeErrorShape } from "./middleware/errorShape.middleware";
 import { buildInfo, describeBuild } from "./utils/buildInfo";
@@ -94,6 +95,7 @@ app.use("/api/templates", templateRoutes);
 app.use("/api/superadmin", superadminRoutes);
 app.use("/api/invitations", invitationRoutes);
 app.use("/api/shared-with-me", sharedWithMeRoutes);
+app.use("/api/views", savedViewRoutes);
 app.use("/api", healthRoutes);
 
 app.use(errorHandler as any);

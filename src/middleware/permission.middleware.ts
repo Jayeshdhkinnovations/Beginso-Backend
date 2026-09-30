@@ -253,6 +253,17 @@ export const requirePermission = (
 
       // 1. Resolve target workspace ID
       let targetWorkspaceId: string | null = null;
+      // Set true only when the resource itself was found and confirmed to have no workspace
+      // (`workspaceId: null`) — a definitive "this is personal" fact, not merely "we didn't
+      // resolve one yet". Real bug found in production (30 Sep 2026): publishing/closing a
+      // genuinely personal form 403'd with "Insufficient permissions" whenever the caller also
+      // happened to be a member of some workspace, because the old code below left
+      // `targetWorkspaceId` unset for a personal form and fell through to the "caller's default
+      // workspace" fallback — checking the *wrong* workspace's role instead of recognising the
+      // form/response has none. Same root cause as the Sprint 12 Inbox personal-shell leak fixed
+      // earlier today (design.md OQ-1's "no silent default-workspace fallback"), just reachable
+      // from routes that never send `x-workspace-slug` at all, not only ones that omit it.
+      let resourceConfirmedPersonal = false;
 
       if (options?.extractWorkspaceId) {
         targetWorkspaceId = await options.extractWorkspaceId(req);
@@ -299,15 +310,17 @@ export const requirePermission = (
           } else if (mongoose.Types.ObjectId.isValid(paramId)) {
             if (options.resourceType === "form") {
               const form = await Form.findById(paramId).select("workspaceId").lean();
-              if (form && form.workspaceId) {
-                targetWorkspaceId = form.workspaceId.toString();
+              if (form) {
+                if (form.workspaceId) targetWorkspaceId = form.workspaceId.toString();
+                else resourceConfirmedPersonal = true;
               }
             } else if (options.resourceType === "response") {
               const resp = await ResponseModel.findById(paramId).select("formId").lean();
               if (resp && resp.formId) {
                 const form = await Form.findById(resp.formId).select("workspaceId").lean();
-                if (form && form.workspaceId) {
-                  targetWorkspaceId = form.workspaceId.toString();
+                if (form) {
+                  if (form.workspaceId) targetWorkspaceId = form.workspaceId.toString();
+                  else resourceConfirmedPersonal = true;
                 }
               }
             } else if (options.resourceType === "report") {
@@ -318,6 +331,20 @@ export const requirePermission = (
             }
           }
         }
+      }
+
+      // The resource itself confirmed it has no workspace — that is authoritative and final,
+      // never overridden by a header/query/body/fallback guess about some *other* workspace the
+      // caller happens to belong to. Distinct from `hasExplicitPersonalSignal` below (caller
+      // intent) — this is a fact about the resource being acted on.
+      if (!targetWorkspaceId && resourceConfirmedPersonal) {
+        authReq.workspaceId = null;
+        authReq.explicitPersonalContext = true;
+        authReq.membership = null;
+        authReq.membershipId = null;
+        authReq.workspaceRole = null;
+        next();
+        return;
       }
 
       // Personal space: honoured only when no workspace owns this request, and never for

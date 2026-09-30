@@ -59,12 +59,17 @@ export const scoreResponse = async (req: Request, res: Response): Promise<void> 
       scoreService.myRows(String(id), String(authReq.membershipId)),
     ]);
 
+    // `entries` is the documented contract field (design.md §11.2, frontend's `ResponseScore`
+    // type) — `myScores` was this endpoint's own naming, kept alongside for compatibility with
+    // anything already reading it, but `entries` is what ScoreCard.tsx actually deserializes.
     res.status(200).json({
       success: true,
       message: "Score saved",
-      data: { ...aggregate, myScores: myRows },
+      data: { ...aggregate, entries: myRows, myScores: myRows },
       ...aggregate,
+      entries: myRows,
       myScores: myRows,
+      score: { responseId: id, ...aggregate, entries: myRows },
     });
   } catch (error: any) {
     sendError(res, error);
@@ -84,7 +89,17 @@ export const getResponseScore = async (req: Request, res: Response, next: NextFu
       ? await scoreService.myRows(String(id), String(authReq.membershipId))
       : [];
 
-    res.status(200).json({ success: true, data: { ...aggregate, myScores }, ...aggregate, myScores });
+    // See scoreResponse above: `entries` is the documented/typed contract field; `myScores` kept
+    // alongside for compatibility. `score` wraps the whole shape for `unwrapEnvelope`'s normal
+    // named-key convention, same as every other service in this codebase.
+    res.status(200).json({
+      success: true,
+      data: { ...aggregate, entries: myScores, myScores },
+      ...aggregate,
+      entries: myScores,
+      myScores,
+      score: { responseId: id, ...aggregate, entries: myScores },
+    });
   } catch (error: any) {
     if (error.statusCode) return sendError(res, error);
     next(error);

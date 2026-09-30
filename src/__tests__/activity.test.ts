@@ -61,7 +61,7 @@ describe("GET /api/responses/:id/activity", () => {
     expect(res.body.activity[0].type).toBe("submitted");
   });
 
-  it("returns entries in chronological order (oldest first / newest last)", async () => {
+  it("returns entries in reverse-chronological order (newest first — Sprint 12 close-out change)", async () => {
     const resp = await ResponseModel.create({ formId, answers: {} });
 
     await request(app).patch(`/api/responses/${resp._id}`).set("Authorization", `Bearer ${ownerToken}`).send({ status: "in_progress" });
@@ -71,11 +71,11 @@ describe("GET /api/responses/:id/activity", () => {
     const res = await request(app).get(`/api/responses/${resp._id}/activity`).set("Authorization", `Bearer ${ownerToken}`);
     expect(res.status).toBe(200);
     const types = res.body.activity.map((a: any) => a.type);
-    expect(types).toEqual(["stage_changed", "assigned", "unassigned"]);
+    expect(types).toEqual(["unassigned", "assigned", "stage_changed"]);
 
     const times = res.body.activity.map((a: any) => new Date(a.at).getTime());
     for (let i = 1; i < times.length; i++) {
-      expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
+      expect(times[i]).toBeLessThanOrEqual(times[i - 1]);
     }
   });
 

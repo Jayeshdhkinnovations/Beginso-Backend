@@ -16,8 +16,26 @@ export interface ActivityItem {
   actorName: string;
   actorRemoved: boolean;
   at: Date;
-  detail: Record<string, any> | undefined;
+  detail: string | undefined;
 }
+
+// Bug fix, Sprint 12 close-out: `detail` was the raw `Event.metadata` object, sent straight to
+// the frontend — which renders it as `— ${detail}`, i.e. the literal string "[object Object]"
+// (a JS object stringifies that way in template-literal interpolation). Metadata only ever holds
+// raw ids (fromStageId, toAssigneeId, tagIds, ...), never a resolved name, so this builds a
+// count/presence-based summary instead of guessing at a name this query never joined for.
+const toActivityDetail = (type: string, metadata: Record<string, any> | undefined): string | undefined => {
+  if (!metadata) return undefined;
+  switch (type) {
+    case "tag_added":
+    case "tag_removed": {
+      const count = Array.isArray(metadata.tagIds) ? metadata.tagIds.length : 0;
+      return count > 0 ? `${count} tag${count === 1 ? "" : "s"}` : undefined;
+    }
+    default:
+      return undefined;
+  }
+};
 
 const notFound = (message: string): never => {
   const err: any = new Error(message);
@@ -67,8 +85,10 @@ export class ActivityService {
     // convention — see recordEvent's comment), so there is simply nothing to read.
     if (!scopeWorkspaceId) return [];
 
+    // Newest first (Sprint 12 close-out change — the most recent activity is what a reviewer
+    // opening the sidebar actually wants to see without scrolling).
     const events = await Event.find({ targetType: "response", targetId: responseId, workspaceId: scopeWorkspaceId })
-      .sort({ createdAt: 1 }) // oldest first == "newest last"
+      .sort({ createdAt: -1 })
       .lean();
 
     const actorIds = [...new Set(events.filter((e) => e.actorId).map((e) => e.actorId!.toString()))];
@@ -93,7 +113,7 @@ export class ActivityService {
         at: e.createdAt,
         // Never the raw `ip` field (existing rule: ipHash only, never a raw address) — metadata
         // never carried one to begin with, so this is naturally satisfied, not filtered here.
-        detail: e.metadata,
+        detail: toActivityDetail(type, e.metadata),
       });
     }
     return items;

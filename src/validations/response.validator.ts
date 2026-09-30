@@ -22,3 +22,11 @@ export const updateResponseStatusSchema = z
 export const updateResponseAssigneeSchema = z.object({
   assigneeId: z.string().trim().min(1).nullable(),
 });
+
+// Bug fix, Sprint 12 close-out: `PATCH /api/responses/:id` had no branch for `tagIds` at all —
+// the frontend's TagPicker sends the response's full desired tag list (add/remove computed
+// client-side), which fell through to `updateResponseStatusSchema`'s "status or stageId required"
+// refinement and 422'd on every tag change. Same independent-field pattern as assigneeId above.
+export const updateResponseTagsSchema = z.object({
+  tagIds: z.array(z.string().trim().min(1)),
+});

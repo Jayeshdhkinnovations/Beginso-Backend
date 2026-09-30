@@ -22,6 +22,11 @@ const badRequest = (message: string): never => {
 };
 
 export interface ITagWithUsage {
+  // `id` is what the frontend's `Tag` type actually reads (TagPicker's key/selection, the
+  // create/select payloads) — `_id` kept alongside for any caller still on the raw Mongoose
+  // field name. Missing `id` here was silently sending `tagIds: [undefined]` on every tag
+  // selection, which the backend's own validator correctly rejected with a 422.
+  id: string;
   _id: string;
   workspaceId: string;
   name: string;
@@ -32,6 +37,7 @@ export interface ITagWithUsage {
 }
 
 const toDTO = (tag: ITag, usageCount: number): ITagWithUsage => ({
+  id: tag._id.toString(),
   _id: tag._id.toString(),
   workspaceId: tag.workspaceId.toString(),
   name: tag.name,

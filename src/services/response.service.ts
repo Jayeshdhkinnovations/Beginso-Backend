@@ -5,6 +5,8 @@ import Upload from "../models/Upload";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import StageModel, { IStage } from "../models/Stage";
+import User, { IUser } from "../models/User";
+import TagModel, { ITag } from "../models/Tag";
 import { StageService } from "./stage.service";
 import { ReadStateService } from "./readState.service";
 import { NoteService } from "./note.service";
@@ -12,7 +14,14 @@ import { ScoreService } from "./score.service";
 import { logWorkspaceEvent } from "./event.service";
 import { userHasAccessToForm as userHasAccessToFormShared } from "../utils/formAccess";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
-import { PaginatedResponsesResult, IResponse, IResponseFile, IResponseStageSummary } from "../types/response.types";
+import {
+  PaginatedResponsesResult,
+  IResponse,
+  IResponseFile,
+  IResponseStageSummary,
+  IResponseAssigneeSummary,
+  IResponseTagSummary,
+} from "../types/response.types";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
@@ -28,6 +37,20 @@ const toStageSummary = (stage: IStage | null | undefined): IResponseStageSummary
     order: stage.order,
   };
 };
+
+// Bug fix, Sprint 12 close-out: `assigneeId`/`tagIds` were being sent as raw ids only — neither
+// `AssigneePicker` nor `TagPicker` on the frontend can render a name/colour from an id alone, so
+// the sidebar always looked "stuck" at Unassigned/no-tags regardless of what was actually saved.
+const toAssigneeSummary = (user: IUser | null | undefined): IResponseAssigneeSummary | null => {
+  if (!user) return null;
+  return { id: user._id.toString(), name: user.fullName, avatarUrl: user.avatarUrl ?? null };
+};
+
+const toTagSummaries = (tagIds: mongoose.Types.ObjectId[] | undefined, tagsById: Map<string, ITag>): IResponseTagSummary[] =>
+  (tagIds || [])
+    .map((id) => tagsById.get(id.toString()))
+    .filter((t): t is ITag => !!t)
+    .map((t) => ({ id: t._id.toString(), name: t.name, colour: t.colour }));
 
 const cleanAnswers = (answers: Record<string, any>): Record<string, any> => {
   if (!answers || typeof answers !== "object") return {};
@@ -179,6 +202,17 @@ export class ResponseService {
         : []
     );
 
+    // Bug fix, Sprint 12 close-out (same batched-join pattern as stages above): assignee/tags
+    // were never resolved past their raw ids, so the sidebar always showed Unassigned/no tags.
+    const assigneeIds = [...new Set(responses.filter((r: any) => r.assigneeId).map((r: any) => r.assigneeId.toString()))];
+    const usersById = new Map<string, IUser>(
+      assigneeIds.length ? (await User.find({ _id: { $in: assigneeIds } })).map((u) => [u._id.toString(), u]) : []
+    );
+    const allTagIds = [...new Set(responses.flatMap((r: any) => (r.tagIds || []).map((t: any) => t.toString())))];
+    const tagsById = new Map<string, ITag>(
+      allTagIds.length ? (await TagModel.find({ _id: { $in: allTagIds } })).map((t) => [t._id.toString(), t]) : []
+    );
+
     // Batched unread join for the calling user, one query for the whole page (B8.2) — never N+1.
     const unreadMap = params.callerUserId
       ? await this.readStateService.unreadMap(params.callerUserId, responses.map((r: any) => r._id))
@@ -205,7 +239,9 @@ export class ResponseService {
       submittedAt: r.submittedAt,
       ipHash: r.ipHash,
       tagIds: (r.tagIds || []).map((t: any) => t.toString()),
+      tags: toTagSummaries(r.tagIds, tagsById),
       assigneeId: r.assigneeId ? r.assigneeId.toString() : null,
+      assignee: r.assigneeId ? toAssigneeSummary(usersById.get(r.assigneeId.toString())) : null,
       unread: unreadMap ? unreadMap.get(r._id.toString()) ?? true : undefined,
       noteCount: noteCountMap.get(r._id.toString()) ?? 0,
       scoreAverage: scoreMap.get(r._id.toString())?.scoreAverage ?? null,
@@ -397,6 +433,10 @@ export class ResponseService {
     const stage = response.stageId ? await StageModel.findById(response.stageId) : null;
     const noteCount = await this.noteService.countFor(responseId);
     const scoreAggregate = await this.scoreService.aggregateFor(responseId);
+    // Same bug fix as getResponses above — resolve assignee/tags past their raw ids.
+    const assigneeUser = response.assigneeId ? await User.findById(response.assigneeId) : null;
+    const tagDocs = response.tagIds?.length ? await TagModel.find({ _id: { $in: response.tagIds } }) : [];
+    const tagsById = new Map<string, ITag>(tagDocs.map((t) => [t._id.toString(), t]));
 
     return {
       _id: response._id.toString(),
@@ -410,7 +450,9 @@ export class ResponseService {
       ipHash: response.ipHash,
       response_files: responseFiles,
       tagIds: (response.tagIds || []).map((t) => t.toString()),
+      tags: toTagSummaries(response.tagIds, tagsById),
       assigneeId: response.assigneeId ? response.assigneeId.toString() : null,
+      assignee: toAssigneeSummary(assigneeUser),
       unread: callerUserId ? await this.readStateService.isUnread(callerUserId, responseId) : undefined,
       noteCount,
       scoreAverage: scoreAggregate.scoreAverage,
@@ -598,18 +640,96 @@ export class ResponseService {
       throw err;
     }
 
+    // Bug fix, Sprint 12 close-out: this response only ever carried `assigneeId` (a raw id) —
+    // AssigneePicker needs the resolved `assignee` object to render a name, so the PATCH response
+    // showed the change had saved (assigneeId was correct) while the sidebar itself never
+    // reflected it, since nothing consuming this response ever had a name to display.
+    const assigneeUser = updated.assigneeId ? await User.findById(updated.assigneeId) : null;
+
     return {
       response: {
         _id: updated._id.toString(),
         formId: updated.formId.toString(),
         answers: updated.answers,
         assigneeId: updated.assigneeId ? updated.assigneeId.toString() : null,
+        assignee: toAssigneeSummary(assigneeUser),
         status: updated.status,
         stageId: updated.stageId ? updated.stageId.toString() : undefined,
         createdAt: updated.createdAt,
         updatedAt: updated.updatedAt,
       },
       previousAssigneeId,
+    };
+  }
+
+  // Bug fix, Sprint 12 close-out: no service method (and no controller branch) ever handled a
+  // full tagIds replace — see updateResponseTagsSchema's comment for the 422 this caused. Full
+  // replace, not add/remove, matching the frontend's own computed-full-list `updateTags` call.
+  async updateResponseTags(
+    workspaceId: string,
+    responseId: string,
+    tagIds: string[]
+  ): Promise<{ response: IResponse; previousTagIds: string[] }> {
+    if (!mongoose.Types.ObjectId.isValid(responseId)) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const existing = await this.responseRepository.findById(responseId);
+    if (!existing || existing.deletedAt) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const form = await this.formRepository.findById(existing.formId.toString());
+    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+      const err: any = new Error("Forbidden: You do not own this response's workspace");
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const uniqueTagIds = [...new Set(tagIds)];
+    if (uniqueTagIds.length > 0) {
+      const validTagIds = new Set(
+        (await TagModel.find({ _id: { $in: uniqueTagIds }, workspaceId }).select("_id")).map((t) => t._id.toString())
+      );
+      const invalid = uniqueTagIds.filter((id) => !validTagIds.has(id));
+      if (invalid.length > 0) {
+        const err: any = new Error("One or more tags do not exist in this workspace");
+        err.statusCode = 422;
+        err.code = "INVALID_TAG";
+        throw err;
+      }
+    }
+
+    const previousTagIds = (existing.tagIds || []).map((t) => t.toString());
+    const updated = await ResponseModel.findByIdAndUpdate(
+      responseId,
+      { $set: { tagIds: uniqueTagIds.map((id) => new mongoose.Types.ObjectId(id)) } },
+      { new: true }
+    );
+    if (!updated) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const tagDocs = uniqueTagIds.length ? await TagModel.find({ _id: { $in: uniqueTagIds } }) : [];
+    const tagsById = new Map<string, ITag>(tagDocs.map((t) => [t._id.toString(), t]));
+
+    return {
+      response: {
+        _id: updated._id.toString(),
+        formId: updated.formId.toString(),
+        answers: updated.answers,
+        tagIds: uniqueTagIds,
+        tags: toTagSummaries(updated.tagIds, tagsById),
+        status: updated.status,
+        stageId: updated.stageId ? updated.stageId.toString() : undefined,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      },
+      previousTagIds,
     };
   }
 

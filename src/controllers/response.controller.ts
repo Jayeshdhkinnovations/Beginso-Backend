@@ -3,7 +3,7 @@ import { recordEvent } from "../services/event.service";
 import { ZodError } from "zod";
 import { ResponseService } from "../services/response.service";
 import { ReadStateService } from "../services/readState.service";
-import { updateResponseStatusSchema, updateResponseAssigneeSchema } from "../validations/response.validator";
+import { updateResponseStatusSchema, updateResponseAssigneeSchema, updateResponseTagsSchema } from "../validations/response.validator";
 import mongoose from "mongoose";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import FormAccessGrant from "../models/FormAccessGrant";
@@ -262,6 +262,39 @@ export const updateResponseStatus = async (
           title: "Response assigned to you",
           message: `${authReq.user.fullName || authReq.user.email} assigned a response to you`,
         }).catch(() => undefined);
+      }
+    }
+
+    // Bug fix, Sprint 12 close-out: tagIds had no branch here at all — see
+    // updateResponseTagsSchema's comment for the 422 this caused on every tag change.
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "tagIds")) {
+      const tagsParsed = updateResponseTagsSchema.parse({ tagIds: req.body.tagIds });
+      const { response: taggedResponse, previousTagIds } = await responseService.updateResponseTags(
+        workspaceId,
+        String(id),
+        tagsParsed.tagIds
+      );
+      updatedResponse = taggedResponse;
+
+      const added = tagsParsed.tagIds.filter((t) => !previousTagIds.includes(t));
+      const removed = previousTagIds.filter((t) => !tagsParsed.tagIds.includes(t));
+      if (added.length > 0) {
+        await recordEvent(
+          req,
+          workspaceId,
+          "response.bulk_tag",
+          { id: String(id), type: "response", label: String(id) },
+          { tagIds: added }
+        );
+      }
+      if (removed.length > 0) {
+        await recordEvent(
+          req,
+          workspaceId,
+          "response.bulk_untag",
+          { id: String(id), type: "response", label: String(id) },
+          { tagIds: removed }
+        );
       }
     }
 

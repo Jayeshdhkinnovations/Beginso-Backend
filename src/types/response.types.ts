@@ -26,6 +26,18 @@ export interface IResponseStageSummary {
   order: number;
 }
 
+export interface IResponseAssigneeSummary {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+export interface IResponseTagSummary {
+  id: string;
+  name: string;
+  colour: string;
+}
+
 export interface IResponse {
   _id: string;
   formId: string;
@@ -41,7 +53,11 @@ export interface IResponse {
   ipHash?: string;
   response_files?: IResponseFile[];
   tagIds?: string[];
+  // Populated alongside `tagIds`/`assigneeId` — the frontend's TagPicker/AssigneePicker render
+  // these directly, never resolving the raw ids themselves.
+  tags?: IResponseTagSummary[];
   assigneeId?: string | null;
+  assignee?: IResponseAssigneeSummary | null;
   // Per calling user (Sprint 12, BE 0.2 / B8.2). Absence of a ResponseReadState row = unread.
   unread?: boolean;
   // Sprint 12, BE 0.6 (B4.10/B8.3): id of the earlier response this one duplicates, or null.

@@ -39,7 +39,10 @@ const badRequest = (message: string): never => {
 
 export class StageService {
   // Every workspace must always have >=1 stage. Idempotent: only seeds when none exist yet, so
-  // calling this on every GET is cheap and safe.
+  // calling this on every GET is cheap and safe. `workspaceId` here is always a real workspace —
+  // the personal shell never reaches this (see `updateResponseStage`'s own null-workspace branch);
+  // `Stage.workspaceId` is a required field, so a personal/null "workspace" isn't representable
+  // here at all.
   async ensureDefaultStages(workspaceId: string): Promise<IStage[]> {
     const existing = await StageModel.find({ workspaceId }).sort({ order: 1 });
     if (existing.length > 0) return existing;

@@ -240,7 +240,8 @@ export const updateResponseStatus = async (
       const { response: assignedResponse, previousAssigneeId } = await responseService.updateResponseAssignee(
         workspaceId,
         String(id),
-        assigneeParsed.assigneeId
+        assigneeParsed.assigneeId,
+        authReq.user._id.toString()
       );
       updatedResponse = assignedResponse;
 
@@ -272,7 +273,8 @@ export const updateResponseStatus = async (
       const { response: taggedResponse, previousTagIds } = await responseService.updateResponseTags(
         workspaceId,
         String(id),
-        tagsParsed.tagIds
+        tagsParsed.tagIds,
+        authReq.user._id.toString()
       );
       updatedResponse = taggedResponse;
 
@@ -377,7 +379,7 @@ export const deleteResponse = async (
     const workspaceId = await getVerifiedWorkspaceId(req);
     const { id } = req.params;
 
-    await responseService.deleteResponse(workspaceId, String(id));
+    await responseService.deleteResponse(workspaceId, String(id), authReq.user._id.toString());
     await recordEvent(req, workspaceId, "response.delete", { id: String(id), type: "response", label: String(id) });
 
     // Return HTTP 204 No Content on successful deletion
@@ -431,7 +433,8 @@ export const getResponseFileUrl = async (
       String(fileId),
       host,
       protocol,
-      isGrant
+      isGrant,
+      authReq.user._id.toString()
     );
 
     res.status(200).json({

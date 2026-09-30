@@ -21,16 +21,17 @@ const getWorkspaceId = async (req: Request): Promise<string | null> => {
  * Helper to validate form existence and workspace authorization.
  * Returns form document or sends error response (400, 404, 403).
  */
+// Bug fix, Sprint 12 close-out: `!userWorkspaceId` alone 403'd every personal-form analytics
+// request unconditionally — the personal shell was never given a real authorization path at all,
+// only rejected outright. A personal form's owner check is `createdBy`, not a workspace id (there
+// is none) — same fix, same reasoning as `response.service.ts`'s `ownsResponseForm` helper.
 const validateFormAccess = async (
   req: Request,
   res: Response,
   formIdStr?: string
 ): Promise<{ form: any; userWorkspaceId: string } | null> => {
   const userWorkspaceId = await getWorkspaceId(req);
-  if (!userWorkspaceId) {
-    res.status(403).json({ success: false, message: "Workspace not found or access denied" });
-    return null;
-  }
+  const callerUserId = (req as any).user?._id?.toString();
 
   if (!formIdStr || !mongoose.Types.ObjectId.isValid(formIdStr)) {
     res.status(400).json({ success: false, message: "Valid formId query parameter is required" });
@@ -43,13 +44,16 @@ const validateFormAccess = async (
     return null;
   }
 
-  const formWsId = form.workspaceId ? form.workspaceId.toString() : "";
-  if (formWsId !== userWorkspaceId) {
+  const isOwned = form.workspaceId
+    ? !!userWorkspaceId && form.workspaceId.toString() === userWorkspaceId
+    : !!callerUserId && form.createdBy?.toString() === callerUserId;
+
+  if (!isOwned) {
     res.status(403).json({ success: false, message: "Access denied to form from another workspace" });
     return null;
   }
 
-  return { form, userWorkspaceId };
+  return { form, userWorkspaceId: userWorkspaceId ?? "" };
 };
 
 /**
@@ -421,15 +425,14 @@ export const getTrends = async (req: Request, res: Response, next: NextFunction)
 export const getForms = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userWorkspaceId = await getWorkspaceId(req);
-    if (!userWorkspaceId) {
-      res.status(200).json({
-        success: true,
-        data: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        totalPages: 0,
-      });
+    const callerUserId = (req as any).user?._id;
+    // Bug fix, Sprint 12 close-out: a personal-scope caller always got an empty list here,
+    // whether or not this endpoint was ever explicitly told it was personal — now that the
+    // frontend sends the explicit 'personal' signal, list the caller's OWN personal forms rather
+    // than nothing (same `createdBy` ownership check as every other personal-shell fix today).
+    const formQuery = userWorkspaceId ? { workspaceId: userWorkspaceId } : { workspaceId: null, createdBy: callerUserId };
+    if (!userWorkspaceId && !callerUserId) {
+      res.status(200).json({ success: true, data: [], total: 0, page: 1, limit: 10, totalPages: 0 });
       return;
     }
 
@@ -440,8 +443,8 @@ export const getForms = async (req: Request, res: Response, next: NextFunction):
     const limit = Math.min(50, Math.max(1, rawLimit));
     const skip = (page - 1) * limit;
 
-    const totalFormsCount = await Form.countDocuments({ workspaceId: userWorkspaceId });
-    const forms = await Form.find({ workspaceId: userWorkspaceId })
+    const totalFormsCount = await Form.countDocuments(formQuery);
+    const forms = await Form.find(formQuery)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);

@@ -52,6 +52,20 @@ const toTagSummaries = (tagIds: mongoose.Types.ObjectId[] | undefined, tagsById:
     .filter((t): t is ITag => !!t)
     .map((t) => ({ id: t._id.toString(), name: t.name, colour: t.colour }));
 
+// Bug fix, Sprint 12 close-out: every response-scoped method below independently duplicated
+// `!form.workspaceId || form.workspaceId.toString() !== workspaceId` as its ownership check —
+// which throws 403 unconditionally the instant a form has no workspace, since `!form.workspaceId`
+// alone is `true` regardless of what the caller's own `workspaceId` is. That made EVERY personal
+// form's responses inaccessible to their own owner (view detail, delete, assign, tag, download —
+// every one of these five call sites had the identical bug). A personal form's real owner check
+// is `createdBy`, not `workspaceId` (there is none to compare).
+const ownsResponseForm = (form: { workspaceId?: mongoose.Types.ObjectId | null; createdBy?: mongoose.Types.ObjectId | null } | null, workspaceId: string | null, callerUserId?: string): boolean => {
+  if (!form) return false;
+  return form.workspaceId
+    ? form.workspaceId.toString() === workspaceId
+    : !!callerUserId && form.createdBy?.toString() === callerUserId;
+};
+
 const cleanAnswers = (answers: Record<string, any>): Record<string, any> => {
   if (!answers || typeof answers !== "object") return {};
   const cleaned: Record<string, any> = {};
@@ -410,7 +424,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!isGrant && (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId)) {
+    if (!isGrant && !ownsResponseForm(form, workspaceId, callerUserId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;
@@ -496,6 +510,44 @@ export class ResponseService {
       throw err;
     }
 
+    // Bug fix, Sprint 12 close-out (OQ-9 "fixed default stages" for the personal shell): a
+    // personal response has no workspace, so it can never have a real Stage document — `Stage.
+    // workspaceId` is a required field, and `new mongoose.Types.ObjectId(null)` (what the old
+    // code path silently did here) doesn't throw, it just fabricates a fresh random id, which
+    // would have created a new orphaned Stage set on every single change. Personal writes go
+    // straight to the raw `status` field instead; the frontend supplies the matching display
+    // (`PERSONAL_DEFAULT_STAGES`) itself rather than reading a `stage` object that can't exist.
+    if (!workspaceId) {
+      if (!input.status) {
+        const err: any = new Error("status is required for a personal response");
+        err.statusCode = 422;
+        throw err;
+      }
+      const fromStageId = existingResponse.stageId ? existingResponse.stageId.toString() : null;
+      const updated = await ResponseModel.findByIdAndUpdate(responseId, { $set: { status: input.status } }, { new: true });
+      if (!updated) {
+        const err: any = new Error("Response not found");
+        err.statusCode = 404;
+        throw err;
+      }
+      return {
+        response: {
+          _id: updated._id.toString(),
+          formId: updated.formId.toString(),
+          answers: updated.answers,
+          stageId: undefined,
+          stage: null,
+          status: updated.status,
+          submittedAt: updated.submittedAt,
+          ipHash: updated.ipHash,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+        },
+        fromStageId,
+        toStageId: input.status,
+      };
+    }
+
     // stageId is the primary key; status is resolved to a matching stage when stageId is absent.
     const targetStage = input.stageId
       ? await this.stageService.getStageInWorkspace(workspaceId, input.stageId)
@@ -532,7 +584,7 @@ export class ResponseService {
     };
   }
 
-  async deleteResponse(workspaceId: string, responseId: string): Promise<boolean> {
+  async deleteResponse(workspaceId: string, responseId: string, callerUserId?: string): Promise<boolean> {
     const response = await this.responseRepository.findById(responseId);
     if (!response) {
       const err: any = new Error("Response not found");
@@ -541,7 +593,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+    if (!form || !ownsResponseForm(form, workspaceId, callerUserId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;
@@ -559,7 +611,8 @@ export class ResponseService {
     fileId: string,
     host: string,
     protocol: string,
-    isGrant?: boolean
+    isGrant?: boolean,
+    callerUserId?: string
   ): Promise<{ url: string }> {
     const response = await this.responseRepository.findById(responseId);
     if (!response) {
@@ -569,7 +622,7 @@ export class ResponseService {
     }
 
     const form = await this.formRepository.findById(response.formId.toString());
-    if (!isGrant && (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId)) {
+    if (!isGrant && !ownsResponseForm(form, workspaceId, callerUserId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;
@@ -598,7 +651,8 @@ export class ResponseService {
   async updateResponseAssignee(
     workspaceId: string,
     responseId: string,
-    assigneeId: string | null
+    assigneeId: string | null,
+    callerUserId?: string
   ): Promise<{ response: IResponse; previousAssigneeId: string | null }> {
     if (!mongoose.Types.ObjectId.isValid(responseId)) {
       const err: any = new Error("Response not found");
@@ -612,7 +666,7 @@ export class ResponseService {
       throw err;
     }
     const form = await this.formRepository.findById(existing.formId.toString());
-    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+    if (!form || !ownsResponseForm(form, workspaceId, callerUserId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;
@@ -668,7 +722,8 @@ export class ResponseService {
   async updateResponseTags(
     workspaceId: string,
     responseId: string,
-    tagIds: string[]
+    tagIds: string[],
+    callerUserId?: string
   ): Promise<{ response: IResponse; previousTagIds: string[] }> {
     if (!mongoose.Types.ObjectId.isValid(responseId)) {
       const err: any = new Error("Response not found");
@@ -682,7 +737,7 @@ export class ResponseService {
       throw err;
     }
     const form = await this.formRepository.findById(existing.formId.toString());
-    if (!form || !form.workspaceId || form.workspaceId.toString() !== workspaceId) {
+    if (!ownsResponseForm(form, workspaceId, callerUserId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;

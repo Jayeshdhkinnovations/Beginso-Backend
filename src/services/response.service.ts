@@ -8,6 +8,7 @@ import StageModel, { IStage } from "../models/Stage";
 import { StageService } from "./stage.service";
 import { ReadStateService } from "./readState.service";
 import { NoteService } from "./note.service";
+import { ScoreService } from "./score.service";
 import { logWorkspaceEvent } from "./event.service";
 import { userHasAccessToForm as userHasAccessToFormShared } from "../utils/formAccess";
 import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
@@ -47,6 +48,7 @@ export class ResponseService {
   private stageService = new StageService();
   private readStateService = new ReadStateService();
   private noteService = new NoteService();
+  private scoreService = new ScoreService();
 
   async getResponses(params: {
     workspaceId: string;
@@ -186,6 +188,11 @@ export class ResponseService {
     // pattern as the unread map above, never N+1.
     const noteCountMap = await this.noteService.countsFor(responses.map((r: any) => r._id.toString()));
 
+    // Sprint 12, BE 0.5 (B6.1): batched scoreAverage/scoreCount for the whole page, one query —
+    // same batched-join pattern as noteCountMap above, so the Inbox list shows scores without an
+    // extra per-row call.
+    const scoreMap = await this.scoreService.aggregateForMany(responses.map((r: any) => r._id.toString()));
+
     // Format output matching IResponse interface
     const formattedData: IResponse[] = responses.map((r: any) => ({
       _id: r._id.toString(),
@@ -201,6 +208,8 @@ export class ResponseService {
       assigneeId: r.assigneeId ? r.assigneeId.toString() : null,
       unread: unreadMap ? unreadMap.get(r._id.toString()) ?? true : undefined,
       noteCount: noteCountMap.get(r._id.toString()) ?? 0,
+      scoreAverage: scoreMap.get(r._id.toString())?.scoreAverage ?? null,
+      scoreCount: scoreMap.get(r._id.toString())?.scoreCount ?? 0,
       duplicateOfId: r.duplicateOfId ? r.duplicateOfId.toString() : null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -387,6 +396,7 @@ export class ResponseService {
 
     const stage = response.stageId ? await StageModel.findById(response.stageId) : null;
     const noteCount = await this.noteService.countFor(responseId);
+    const scoreAggregate = await this.scoreService.aggregateFor(responseId);
 
     return {
       _id: response._id.toString(),
@@ -403,6 +413,8 @@ export class ResponseService {
       assigneeId: response.assigneeId ? response.assigneeId.toString() : null,
       unread: callerUserId ? await this.readStateService.isUnread(callerUserId, responseId) : undefined,
       noteCount,
+      scoreAverage: scoreAggregate.scoreAverage,
+      scoreCount: scoreAggregate.scoreCount,
       duplicateOfId: response.duplicateOfId ? response.duplicateOfId.toString() : null,
       createdAt: response.createdAt,
       updatedAt: response.updatedAt,

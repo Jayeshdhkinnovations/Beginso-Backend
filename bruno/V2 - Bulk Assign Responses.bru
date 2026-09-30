@@ -1,0 +1,26 @@
+meta {
+  name: V2 - Bulk Assign Responses
+  type: http
+  seq: 221
+}
+
+post {
+  url: {{base_url}}/api/responses/bulk
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "target": { "filter": {}, "formId": "{{formId}}" },
+    "action": { "type": "assign", "assigneeId": "{{targetUserId}}" }
+  }
+}
+
+assert {
+  res.status: eq 200
+}

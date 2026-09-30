@@ -1,0 +1,26 @@
+meta {
+  name: V2 - Bulk Update Responses
+  type: http
+  seq: 220
+}
+
+post {
+  url: {{base_url}}/api/responses/bulk
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "target": { "ids": ["{{responseId}}"] },
+    "action": { "type": "stage", "stageId": "{{stageId}}" }
+  }
+}
+
+assert {
+  res.status: eq 200
+}

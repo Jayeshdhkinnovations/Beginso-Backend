@@ -1,0 +1,15 @@
+meta {
+  name: Delete Response Note
+  type: http
+  seq: 243
+}
+
+delete {
+  url: {{base_url}}/api/responses/{{responseId}}/notes/{{noteId}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 204
+}

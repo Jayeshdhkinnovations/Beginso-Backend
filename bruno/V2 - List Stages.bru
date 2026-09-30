@@ -1,0 +1,20 @@
+meta {
+  name: V2 - List Stages
+  type: http
+  seq: 200
+}
+
+get {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/stages
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.stages: isArray
+}

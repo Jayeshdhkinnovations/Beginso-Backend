@@ -1,0 +1,19 @@
+meta {
+  name: V2 - Delete Saved View
+  type: http
+  seq: 233
+}
+
+delete {
+  url: {{base_url}}/api/views/{{viewId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+}

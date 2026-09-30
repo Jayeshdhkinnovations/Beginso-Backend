@@ -1,0 +1,29 @@
+meta {
+  name: Get Responses - Filter Duplicates Only
+  type: http
+  seq: 250
+}
+
+get {
+  url: {{base_url}}/api/responses?formId={{formId}}&duplicate=true
+  body: none
+  auth: inherit
+}
+
+params:query {
+  formId: {{formId}}
+  duplicate: true
+}
+
+assert {
+  res.status: eq 200
+  res.body.data: isArray
+}
+
+docs {
+  `duplicate=true` maps to response.controller.ts's `duplicate` query param (response.service.ts:
+  mongoQuery.duplicateOfId = { $ne: null }). Every item in `data` is expected to have a non-null
+  `duplicateOfId` pointing at the earlier response it duplicates. Compare against
+  "Get Response Detail", which also exposes duplicateOfId (null when the response is not a
+  duplicate — e.g. it was the first submission for that email, or the form has no email field).
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Update Response Note
+  type: http
+  seq: 242
+}
+
+patch {
+  url: {{base_url}}/api/responses/{{responseId}}/notes/{{noteId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "body": "Edited: looks good to me"
+  }
+}
+
+assert {
+  res.status: eq 200
+}

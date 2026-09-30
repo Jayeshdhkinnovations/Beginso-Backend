@@ -1,0 +1,26 @@
+meta {
+  name: V2 - Update Saved View
+  type: http
+  seq: 232
+}
+
+patch {
+  url: {{base_url}}/api/views/{{viewId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "name": "My Team's Open Items (Updated)",
+    "viewMode": "board"
+  }
+}
+
+assert {
+  res.status: eq 200
+}

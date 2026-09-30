@@ -12,6 +12,7 @@ import {
 } from "../controllers/response.controller";
 import { bulkUpdateResponses } from "../controllers/bulk.controller";
 import { listNotes, createNote, updateNote, deleteNote } from "../controllers/note.controller";
+import { scoreResponse, getResponseScore } from "../controllers/score.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
@@ -38,5 +39,10 @@ router.patch("/:id/notes/:noteId", protect as any, blockSuspended as any, requir
 router.delete("/:id/notes/:noteId", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, deleteNote);
 
 router.get("/:id/activity", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, getResponseActivity);
+
+// Scoring (Sprint 12, BE 0.5 / B6.1, OQ-7 resolved 3 Oct 2026). Scoring a response requires the
+// "act" tier this repo implements as responses:write, same as notes create/update.
+router.put("/:id/score", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "response" }) as any, scoreResponse);
+router.get("/:id/score", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, getResponseScore);
 
 export default router;

@@ -15,6 +15,7 @@ import teamRoutes from "./team.routes";
 import invitationRoutes from "./invitation.routes";
 import stageRoutes from "./stage.routes";
 import tagRoutes from "./tag.routes";
+import scoreCriterionRoutes from "./scoreCriterion.routes";
 
 import { listWorkspaceActivity, listWorkspaceAudit } from "../controllers/event.controller";
 
@@ -31,6 +32,9 @@ router.use("/:workspaceId/stages", stageRoutes);
 // Tags (Sprint 12, BE 0.2)
 router.use("/:id/tags", tagRoutes);
 router.use("/:workspaceId/tags", tagRoutes);
+// Scoring criteria (Sprint 12, BE 0.5 / B6.1, OQ-7 resolved 3 Oct 2026)
+router.use("/:id/score-criteria", scoreCriterionRoutes);
+router.use("/:workspaceId/score-criteria", scoreCriterionRoutes);
 
 // Activity Feed & Audit Log routes (BE 0.3 / BE 0.4)
 router.get("/:id/events", protect as any, blockSuspended as any, requirePermission("workspace:read", { resourceType: "workspace" }) as any, listWorkspaceActivity);

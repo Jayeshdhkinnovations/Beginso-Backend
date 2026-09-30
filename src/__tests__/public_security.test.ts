@@ -97,9 +97,15 @@ describe("Public Submit Security & Rate Limiting Integration Tests", () => {
   });
 
   it("should enforce rate limit threshold and return 429 shape when exceeded", async () => {
-    // Set low rate limit for this test
+    // Set low rate limit for this test.
+    // ponytail: the limiter is a real fixed-window (see rateLimiter.ts's `hit`), keyed by
+    // Math.floor(Date.now() / windowMs). With a 10s window, 3 sequential requests plus their DB
+    // round-trips could straddle a window boundary when the full suite runs under parallel-worker
+    // contention (all workers share one mongod — see globalSetup.ts), silently resetting the count
+    // mid-test and turning the expected 429 into a 200. A 10-minute window makes that boundary
+    // effectively unreachable within a single test's runtime, without touching the limiter itself.
     process.env.RATE_LIMIT_MAX = "2";
-    process.env.RATE_LIMIT_WINDOW_MS = "10000"; // 10 seconds
+    process.env.RATE_LIMIT_WINDOW_MS = "600000"; // 10 minutes
 
     const answers = { Email: "test@example.com" };
 

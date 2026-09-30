@@ -1,0 +1,27 @@
+meta {
+  name: V2 - Create Tag
+  type: http
+  seq: 211
+}
+
+post {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/tags
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "name": "Urgent",
+    "colour": "#DC2626"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.tag.name: eq Urgent
+}

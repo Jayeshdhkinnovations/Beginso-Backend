@@ -1,0 +1,25 @@
+meta {
+  name: V2 - Delete Stage
+  type: http
+  seq: 204
+}
+
+delete {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/stages/{{stageId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "reassignTo": null
+  }
+}
+
+assert {
+  res.status: eq 200
+}

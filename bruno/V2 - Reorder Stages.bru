@@ -1,0 +1,26 @@
+meta {
+  name: V2 - Reorder Stages
+  type: http
+  seq: 203
+}
+
+patch {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/stages/order
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "orderedIds": ["{{stageId}}"]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.stages: isArray
+}

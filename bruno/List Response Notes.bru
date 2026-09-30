@@ -1,0 +1,16 @@
+meta {
+  name: List Response Notes
+  type: http
+  seq: 240
+}
+
+get {
+  url: {{base_url}}/api/responses/{{responseId}}/notes
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.notes: isArray
+}

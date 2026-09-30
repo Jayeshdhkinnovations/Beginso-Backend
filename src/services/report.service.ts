@@ -6,6 +6,9 @@ import ReportModel, { IReport } from "../models/Report";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import { buildResponseFilterQuery } from "../utils/responseFilters";
+import { ScoreService } from "./score.service";
+
+const scoreService = new ScoreService();
 
 const UPLOADS_REPORTS_DIR = path.join(process.cwd(), "uploads", "reports");
 
@@ -167,20 +170,40 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
 
       // CSV Header. "Reference" (Sprint 12, BE 0.3 / B8.1) is the per-form sequential id (e.g.
       // "#142") — never a note, note count, or anything note-derived belongs in this export.
-      writeStream.write(`Response ID,Reference,Form ID,Form Title,Status,Submitted At,Answers\n`);
+      // "Score Average"/"Score Count" (Sprint 12, BE 0.5 / B6.1) mirror the same fields returned
+      // on the response read path — pooled mean across every reviewer's rows, distinct-reviewer count.
+      writeStream.write(`Response ID,Reference,Form ID,Form Title,Status,Submitted At,Score Average,Score Count,Answers\n`);
 
-      // Stream responses to prevent in-memory spikes
+      // Stream responses to prevent in-memory spikes. Scores are fetched in batches (not per-row)
+      // to avoid N+1 while still streaming — same filters-respecting pattern as the rest of the
+      // query above.
+      const SCORE_BATCH_SIZE = 200;
+      let batch: any[] = [];
+      const flushBatch = async () => {
+        if (batch.length === 0) return;
+        const scoreMap = await scoreService.aggregateForMany(batch.map((r) => r._id.toString()));
+        for (const r of batch) {
+          const formTitle = formMap.get(r.formId.toString())?.title || "Form Response";
+          const answersFormatted = escapeCsv(r.answers);
+          const agg = scoreMap.get(r._id.toString()) || { scoreAverage: null, scoreCount: 0 };
+          const line = `${escapeCsv(r._id.toString())},${escapeCsv(r.reference || "")},${escapeCsv(
+            r.formId.toString()
+          )},${escapeCsv(formTitle)},${escapeCsv(r.status || "new")},${escapeCsv(
+            r.submittedAt ? r.submittedAt.toISOString() : r.createdAt.toISOString()
+          )},${escapeCsv(agg.scoreAverage !== null ? agg.scoreAverage.toFixed(2) : "")},${escapeCsv(
+            agg.scoreCount
+          )},${answersFormatted}\n`;
+          writeStream.write(line);
+        }
+        batch = [];
+      };
+
       const cursor = ResponseModel.find(query).sort({ submittedAt: -1 }).cursor();
       for (let r = await cursor.next(); r != null; r = await cursor.next()) {
-        const formTitle = formMap.get(r.formId.toString())?.title || "Form Response";
-        const answersFormatted = escapeCsv(r.answers);
-        const line = `${escapeCsv(r._id.toString())},${escapeCsv(r.reference || "")},${escapeCsv(
-          r.formId.toString()
-        )},${escapeCsv(formTitle)},${escapeCsv(r.status || "new")},${escapeCsv(
-          r.submittedAt ? r.submittedAt.toISOString() : r.createdAt.toISOString()
-        )},${answersFormatted}\n`;
-        writeStream.write(line);
+        batch.push(r);
+        if (batch.length >= SCORE_BATCH_SIZE) await flushBatch();
       }
+      await flushBatch();
 
       await new Promise<void>((resolve, reject) => {
         writeStream.end();

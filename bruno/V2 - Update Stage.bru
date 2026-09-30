@@ -1,0 +1,26 @@
+meta {
+  name: V2 - Update Stage
+  type: http
+  seq: 202
+}
+
+patch {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/stages/{{stageId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "name": "In Review (Updated)",
+    "colour": "#6D28D9"
+  }
+}
+
+assert {
+  res.status: eq 200
+}

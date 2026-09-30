@@ -1,0 +1,20 @@
+meta {
+  name: V2 - List Saved Views
+  type: http
+  seq: 230
+}
+
+get {
+  url: {{base_url}}/api/views
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.views: isArray
+}

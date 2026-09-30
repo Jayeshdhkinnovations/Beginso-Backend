@@ -1,0 +1,15 @@
+meta {
+  name: Mark Response Read
+  type: http
+  seq: 222
+}
+
+post {
+  url: {{base_url}}/api/responses/{{responseId}}/read
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}

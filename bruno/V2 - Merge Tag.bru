@@ -1,0 +1,25 @@
+meta {
+  name: V2 - Merge Tag
+  type: http
+  seq: 213
+}
+
+post {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/tags/{{tagId}}/merge
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "into": "{{targetTagId}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+}

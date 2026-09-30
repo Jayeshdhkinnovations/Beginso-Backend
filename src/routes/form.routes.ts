@@ -21,6 +21,7 @@ import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
 import { listFormEvents } from "../controllers/event.controller";
+import { getScoreComparison } from "../controllers/score.controller";
 
 const router = Router();
 
@@ -45,5 +46,8 @@ router.delete("/:formId/grants/:userId", protect as any, blockSuspended as any, 
 
 router.post("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "form" }) as any, submitForm);
 router.get("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getSubmissions);
+
+// Score comparison (Sprint 12, BE 0.5 / B6.1)
+router.get("/:formId/score-comparison", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getScoreComparison);
 
 export default router;

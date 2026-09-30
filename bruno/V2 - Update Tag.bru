@@ -1,0 +1,26 @@
+meta {
+  name: V2 - Update Tag
+  type: http
+  seq: 212
+}
+
+patch {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/tags/{{tagId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "name": "Urgent (Updated)",
+    "colour": "#B91C1C"
+  }
+}
+
+assert {
+  res.status: eq 200
+}

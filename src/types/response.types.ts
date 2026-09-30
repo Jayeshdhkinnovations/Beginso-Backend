@@ -49,6 +49,11 @@ export interface IResponse {
   duplicateOfId?: string | null;
   // Sprint 12, BE 0.3 (B5.x): live count, never cached — recomputed on every list/detail read.
   noteCount?: number;
+  // Sprint 12, BE 0.5 (B6.1): pooled mean across every reviewer's ScoreEntry rows for every
+  // criterion (never averaged-per-criterion-then-averaged), and the count of distinct reviewers
+  // who have scored (not row count). Null/0 when nobody has scored yet.
+  scoreAverage?: number | null;
+  scoreCount?: number;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }

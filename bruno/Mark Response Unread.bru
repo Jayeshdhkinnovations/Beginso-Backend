@@ -1,0 +1,15 @@
+meta {
+  name: Mark Response Unread
+  type: http
+  seq: 223
+}
+
+post {
+  url: {{base_url}}/api/responses/{{responseId}}/unread
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}

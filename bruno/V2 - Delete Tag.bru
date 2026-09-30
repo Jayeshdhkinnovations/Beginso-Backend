@@ -1,0 +1,19 @@
+meta {
+  name: V2 - Delete Tag
+  type: http
+  seq: 214
+}
+
+delete {
+  url: {{base_url}}/api/workspaces/{{workspaceId}}/tags/{{tagId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+}

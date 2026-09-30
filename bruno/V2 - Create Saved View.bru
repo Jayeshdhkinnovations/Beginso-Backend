@@ -1,0 +1,30 @@
+meta {
+  name: V2 - Create Saved View
+  type: http
+  seq: 231
+}
+
+post {
+  url: {{base_url}}/api/views
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {
+    "name": "My Team's Open Items",
+    "visibility": "team",
+    "formId": "{{formId}}",
+    "filters": { "status": ["open"] },
+    "viewMode": "table"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.view.name: eq My Team's Open Items
+}

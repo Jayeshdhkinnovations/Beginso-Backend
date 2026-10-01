@@ -19,6 +19,7 @@
     "seed:templates": "ts-node src/scripts/seedTemplates.ts",
     "seed:form": "ts-node src/scripts/seedFullForm.ts",
     "seed:superadmin": "ts-node src/scripts/seedSuperAdmin.ts",
+    "seed:test-users": "ts-node src/scripts/seedTestUsers.ts",
     "seed:user-responses": "ts-node src/scripts/seedUserResponses.ts",
     "seed:v2a-volume": "ts-node src/scripts/seedV2aVolume.ts",
     "seed:pitch-template": "ts-node src/scripts/seedPitchTemplate.ts",

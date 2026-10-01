@@ -542,6 +542,47 @@ describe("Security & Injection Safety", () => {
     expect(statsRes.status).toBe(200);
     expect(statsRes.body.total).toBe(1);
   });
+
+  // Real bug (1 Oct 2026): changing the Stage of a PERSONAL response returned 400 "Invalid
+  // identifier". updateResponseStage checked ownership with `Form.exists({ workspaceId })`, and a
+  // personal request's workspaceId is "" — which Mongoose can't cast to an ObjectId — so it threw a
+  // CastError before ever reaching the personal-space branch. It now uses the same ownership rule
+  // as every other response-scoped method (createdBy for a form with no workspace).
+  it("lets the owner change the stage of a personal response, and refuses anyone else", async () => {
+    const personalForm = await Form.create({
+      title: "Personal form for stage change",
+      createdBy: userAId,
+      workspaceId: null,
+      fields: [],
+      status: "published",
+    });
+    const personalResponse = await ResponseModel.create({
+      formId: personalForm._id,
+      answers: { email: "stage@test.com" },
+      status: "new",
+    });
+
+    const ok = await request(app)
+      .patch(`/api/responses/${personalResponse._id}`)
+      .set("Authorization", `Bearer ${userAToken}`)
+      .set("x-workspace-slug", "personal")
+      .send({ status: "in_progress" });
+
+    expect(ok.status).toBe(200);
+    expect(ok.body.response.status).toBe("in_progress");
+    const stored = await ResponseModel.findById(personalResponse._id).lean();
+    expect(stored?.status).toBe("in_progress");
+
+    const forbidden = await request(app)
+      .patch(`/api/responses/${personalResponse._id}`)
+      .set("Authorization", `Bearer ${userBToken}`)
+      .set("x-workspace-slug", "personal")
+      .send({ status: "completed" });
+
+    expect(forbidden.status).not.toBe(200);
+    const unchanged = await ResponseModel.findById(personalResponse._id).lean();
+    expect(unchanged?.status).toBe("in_progress");
+  });
 });
 
 describe("Compound Index Verification", () => {

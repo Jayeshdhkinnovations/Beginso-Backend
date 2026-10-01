@@ -484,7 +484,8 @@ export class ResponseService {
   async updateResponseStage(
     workspaceId: string,
     responseId: string,
-    input: { status?: "new" | "in_progress" | "completed"; stageId?: string }
+    input: { status?: "new" | "in_progress" | "completed"; stageId?: string },
+    callerUserId?: string
   ): Promise<{ response: IResponse; fromStageId: string | null; toStageId: string }> {
     if (!mongoose.Types.ObjectId.isValid(responseId)) {
       const err: any = new Error("Response not found");
@@ -499,12 +500,14 @@ export class ResponseService {
       throw err;
     }
 
-    const ownedForm = await Form.exists({
-      _id: existingResponse.formId,
-      workspaceId: workspaceId,
-    });
+    // Same ownership rule as every other response-scoped method (see ownsResponseForm): a workspace
+    // form is owned by its workspace, a personal form by its creator. This used to query
+    // `Form.exists({ workspaceId })` directly — for a personal form `workspaceId` is "" and Mongoose
+    // can't cast that to an ObjectId, so changing the stage of a personal response failed with a
+    // CastError ("Invalid identifier", HTTP 400) before the personal branch below was ever reached.
+    const ownedForm = await this.formRepository.findById(existingResponse.formId.toString());
 
-    if (!ownedForm) {
+    if (!ownedForm || !ownsResponseForm(ownedForm, workspaceId, callerUserId)) {
       const err: any = new Error("Forbidden: You do not own this response's workspace");
       err.statusCode = 403;
       throw err;

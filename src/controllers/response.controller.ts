@@ -309,7 +309,8 @@ export const updateResponseStatus = async (
       const { response: stageResponse, fromStageId, toStageId } = await responseService.updateResponseStage(
         workspaceId,
         String(id),
-        parsed
+        parsed,
+        authReq.user._id.toString()
       );
       updatedResponse = stageResponse;
 

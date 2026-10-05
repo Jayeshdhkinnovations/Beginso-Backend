@@ -51,7 +51,7 @@ export const getResponses = async (
       return;
     }
 
-    const { formId, status, stageId, search, page, limit, duplicate } = req.query;
+    const { formId, status, stageId, search, page, limit, duplicate, includeTest } = req.query;
 
     const result = await responseService.getResponses({
       workspaceId,
@@ -64,6 +64,7 @@ export const getResponses = async (
       limit: limit ? Number(limit) : undefined,
       callerUserId: authReq.user._id.toString(),
       duplicate: duplicate === "true" || duplicate === "1",
+      includeTest: includeTest === "true" || includeTest === "1",
     });
 
     res.status(200).json({
@@ -383,7 +384,7 @@ export const deleteResponse = async (
     await responseService.deleteResponse(workspaceId, String(id), authReq.user._id.toString());
     await recordEvent(req, workspaceId, "response.delete", { id: String(id), type: "response", label: String(id) });
 
-    // Return HTTP 204 No Content on successful deletion
+    // Return HTTP 204 No Content (the response is now in Trash, not destroyed - Sprint 13).
     res.status(204).send();
   } catch (error: any) {
     if (error.statusCode) {
@@ -392,6 +393,34 @@ export const deleteResponse = async (
         message: error.message,
         error: { message: error.message },
       });
+      return;
+    }
+    next(error);
+  }
+};
+
+// PATCH /api/responses/:id/edited-after-review   body: { cleared: true }
+export const clearEditedAfterReview = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized", error: { message: "Not authorized" } });
+      return;
+    }
+    const workspaceId = await getVerifiedWorkspaceId(req);
+    const { id } = req.params;
+    const result = await responseService.clearEditedAfterReview(workspaceId, String(id), authReq.user._id.toString());
+    if (result.cleared) {
+      await recordEvent(req, workspaceId, "response.clear_edited_after_review", { id: String(id), type: "response", label: String(id) });
+    }
+    res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    if (error.statusCode) {
+      res.status(error.statusCode).json({ success: false, message: error.message, error: { message: error.message } });
       return;
     }
     next(error);

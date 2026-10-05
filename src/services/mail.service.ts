@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { recordMailLog } from "../models/MailLog";
+import { renderRespondentLinkEmail } from "./respondentMail";
 
 export type AuthMailType =
   | "verify_email"
@@ -9,7 +10,9 @@ export type AuthMailType =
   | "welcome_user"
   | "email_verified_success"
   | "password_changed_success"
-  | "workspace_invitation";
+  | "workspace_invitation"
+  // Sprint 13 (A5.5): the signed-link email a respondent gets. Contains no response data.
+  | "respondent_submission_link";
 
 export interface SendMailOptions {
   to: string;
@@ -22,6 +25,9 @@ export interface SendMailOptions {
   workspaceName?: string;
   inviterName?: string;
   role?: string;
+  // respondent_submission_link only
+  formName?: string;
+  expiresAt?: Date;
 }
 
 const EMAIL_LOGO_URL = process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-full-light.svg";
@@ -436,6 +442,16 @@ class MailService {
         </body>
         </html>
       `;
+    } else if (template === "respondent_submission_link") {
+      // Rendered by a pure function so the "no answers in the email" rule is provable (respondentMail.ts).
+      const rendered = renderRespondentLinkEmail({
+        formName: options.formName || "",
+        actionUrl: actionUrl || appUrl,
+        expiresAt: options.expiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      });
+      subject = rendered.subject;
+      textContent = rendered.text;
+      htmlContent = rendered.html;
     } else if (template === "email_verified_success") {
       subject = "Your email has been verified! ✅";
       const dashboardUrl = actionUrl || `${appUrl}/dashboard`;

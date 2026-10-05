@@ -97,8 +97,15 @@ describe("deleting a form or a response leaves no files or rows behind", () => {
     const { resp, up, abs, dir } = await mkResponseWithFile(form, owner._id);
     await FormAccessGrant.create({ formId: form._id, userId: member._id, role: "viewer", grantedBy: owner._id });
 
+    // Sprint 13: DELETE now moves the form to Trash - nothing is destroyed yet...
     const res = await as(request(app).delete(`/api/forms/${form._id}`), owner);
-    expect(res.status).toBe(204);
+    expect(res.status).toBe(200);
+    expect(await ResponseModel.findById(resp._id)).not.toBeNull();
+    expect(await Upload.findById(up._id)).not.toBeNull();
+    expect(fs.existsSync(abs)).toBe(true);
+    // ...and a permanent delete from Trash leaves no files or rows behind.
+    const purge = await as(request(app).delete(`/api/trash/form/${form._id}`).send({ confirm: "DELETE" }), owner);
+    expect(purge.status).toBe(200);
     expect(await ResponseModel.findById(resp._id)).toBeNull();
     expect(await Upload.findById(up._id)).toBeNull();
     expect(await FormAccessGrant.countDocuments({ formId: form._id })).toBe(0);
@@ -114,6 +121,10 @@ describe("deleting a form or a response leaves no files or rows behind", () => {
 
     const res = await as(request(app).delete(`/api/responses/${gone.resp._id}`), owner);
     expect(res.status).toBe(204);
+    // Sprint 13: the response is in Trash, files kept - until it is deleted permanently.
+    expect(await Upload.findById(gone.up._id)).not.toBeNull();
+    const purge = await as(request(app).delete(`/api/trash/response/${gone.resp._id}`).send({ confirm: "DELETE" }), owner);
+    expect(purge.status).toBe(200);
     expect(await Upload.findById(gone.up._id)).toBeNull();
     expect(fs.existsSync(gone.dir)).toBe(false);
     // a sibling response is untouched

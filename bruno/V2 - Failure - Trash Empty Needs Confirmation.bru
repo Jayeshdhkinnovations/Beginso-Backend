@@ -1,0 +1,23 @@
+meta {
+  name: V2 - Failure - Trash Empty Needs Confirmation
+  type: http
+  seq: 152
+}
+
+delete {
+  url: {{base_url}}/api/trash
+  body: json
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+body:json {
+  {}
+}
+
+assert {
+  res.status: eq 400
+}

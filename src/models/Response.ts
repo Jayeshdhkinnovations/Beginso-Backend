@@ -34,6 +34,19 @@ export interface IResponse extends Document {
   // respondentEmail matched (case-insensitive) at submission time. Flag only — never merged or
   // dropped. null = not a duplicate (or no email field on the form).
   duplicateOfId?: mongoose.Types.ObjectId | null;
+  // Sprint 13, BE 0.2 (CF2.6 / F15): a test submission sent from the builder's preview through the real
+  // pipeline. Absent = false. EVERY collection-level read (list, count, stats, analytics, dashboard,
+  // reports, bulk, scoring, duplicates) excludes these by default - see the query/aggregate hooks
+  // below, which are the single place the rule lives. A read that names `_id` is by id and is never
+  // filtered, so a test response stays openable once someone has its id.
+  isTest?: boolean;
+  // Sprint 13, BE 0.6/0.12 (D1.1 / A5.1): who submitted, for Modes 2 and 3. `respondentUserId` is set
+  // for Mode 3 submissions and when a respondent claims their tracked submissions.
+  respondentUserId?: mongoose.Types.ObjectId | null;
+  // Sprint 13, BE 0.12 (A5.2): set when the respondent edited after a reviewer had already looked.
+  editedAfterReviewAt?: Date | null;
+  lastEditedByRespondentAt?: Date | null;
+  deletedBy?: mongoose.Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -104,9 +117,34 @@ const ResponseSchema = new Schema<IResponse>(
       ref: "Response",
       default: null,
     },
+    isTest: { type: Boolean, default: false },
+    respondentUserId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    editedAfterReviewAt: { type: Date, default: null },
+    lastEditedByRespondentAt: { type: Date, default: null },
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );
+
+// F15 - exclude test submissions from every collection-level read. Opt in per query with
+// `.setOptions({ includeTest: true })` (or, for aggregate, `.option({ includeTest: true })`), or by
+// naming `isTest` / `_id` in the filter. Maintenance operations that must touch every row (updateMany,
+// deleteMany, the retention purge) are not hooked and are unaffected.
+ResponseSchema.pre(["find", "findOne", "countDocuments", "distinct"], function (this: any) {
+  if (this.getOptions?.().includeTest) return;
+  const filter = this.getFilter?.() ?? {};
+  if (Object.prototype.hasOwnProperty.call(filter, "_id") || Object.prototype.hasOwnProperty.call(filter, "isTest")) return;
+  this.where({ isTest: { $ne: true } });
+});
+
+ResponseSchema.pre("aggregate", function (this: any) {
+  const options = this.options ?? {};
+  if (options.includeTest) {
+    delete options.includeTest; // not a driver option - never forward it to MongoDB
+    return;
+  }
+  this.pipeline().unshift({ $match: { isTest: { $ne: true } } });
+});
 
 // Duplicate lookup at submission time: "earlier responses to this form with this email".
 ResponseSchema.index({ formId: 1, respondentEmail: 1 });

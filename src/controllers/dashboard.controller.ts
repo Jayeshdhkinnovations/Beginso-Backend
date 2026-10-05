@@ -49,7 +49,7 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
     const formMap = new Map(forms.map((f) => [f._id.toString(), f.title]));
 
     const totalForms = forms.length;
-    const publishedForms = forms.filter((f) => f.status === "published").length;
+    const publishedForms = forms.filter((f) => f.status === "published" && !f.archivedAt).length; // archived forms are not active (Sprint 13)
 
     // Start of current month
     const startOfMonth = new Date();

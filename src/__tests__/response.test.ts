@@ -469,6 +469,17 @@ describe("DELETE /api/responses/:id (Cascade Deletion & Sweep)", () => {
 
     expect(res.status).toBe(204);
 
+    // Sprint 13: the delete is a move to Trash - the row and its file are kept...
+    expect((await ResponseModel.findById(responseA1Id))!.deletedAt).toBeTruthy();
+    expect(fs.existsSync(physicalFilePath)).toBe(true);
+
+    // ...and a permanent delete from Trash removes the row, the metadata and the file.
+    const purge = await request(app)
+      .delete(`/api/trash/response/${responseA1Id}`)
+      .set("Authorization", `Bearer ${userAToken}`)
+      .send({ confirm: "DELETE" });
+    expect(purge.status).toBe(200);
+
     // Verify response is deleted from DB
     const dbResponse = await ResponseModel.findById(responseA1Id);
     expect(dbResponse).toBeNull();

@@ -553,14 +553,19 @@ describe("Form API Property-Based Testing", () => {
         const initialResponses = await ResponseModel.find({ formId });
         expect(initialResponses.length).toBe(1);
 
-        // Delete the form (204 No Content)
+        // Delete the form: Sprint 13 moves it to Trash (200), then a permanent delete removes it for good.
         const deleteRes = await request(app)
           .delete(`/api/forms/${formId}`)
           .set("Authorization", `Bearer ${tokenA}`);
-        expect(deleteRes.status).toBe(204);
+        expect(deleteRes.status).toBe(200);
+        const purgeRes = await request(app)
+          .delete(`/api/trash/form/${formId}`)
+          .set("Authorization", `Bearer ${tokenA}`)
+          .send({ confirm: "DELETE" });
+        expect(purgeRes.status).toBe(200);
 
         // Verify form is deleted
-        const dbForm = await Form.findById(formId);
+        const dbForm = await Form.findOne({ _id: formId }).setOptions({ includeDeleted: true });
         expect(dbForm).toBeNull();
 
         // Verify responses are deleted (cascade)

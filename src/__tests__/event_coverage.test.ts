@@ -106,7 +106,8 @@ describe("forms", () => {
     const [d] = await Event.find({ action: "form.duplicate", targetId: dup.body._id }).lean();
     expect(d.metadata?.sourceFormId).toBe(f._id.toString());
     await as(request(app).delete(`/api/forms/${f._id}`));
-    expect((await Event.find({ action: "form.delete", targetId: f._id.toString() })).length).toBe(1);
+    // Sprint 13: deleting a form moves it to Trash and is audited as form.trash.
+    expect((await Event.find({ action: "form.trash", targetId: f._id.toString() })).length).toBe(1);
   });
 
   it("move between workspaces and out to personal", async () => {

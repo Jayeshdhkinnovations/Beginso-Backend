@@ -63,6 +63,10 @@ export interface IResponse {
   // Sprint 12, BE 0.6 (B4.10/B8.3): id of the earlier response this one duplicates, or null.
   // Flag only — never merged or dropped. See duplicate.service.ts for the OQ-6 assumption.
   duplicateOfId?: string | null;
+  // Sprint 13 (F15 / A5.2): a test submission (only present when the list opted in with includeTest), and
+  // when a respondent edited this after a reviewer had already looked at it.
+  isTest?: boolean;
+  editedAfterReviewAt?: Date | string | null;
   // Sprint 12, BE 0.3 (B5.x): live count, never cached — recomputed on every list/detail read.
   noteCount?: number;
   // Sprint 12, BE 0.5 (B6.1): pooled mean across every reviewer's ScoreEntry rows for every

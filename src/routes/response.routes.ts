@@ -9,6 +9,7 @@ import {
   markResponseRead,
   markResponseUnread,
   getResponseActivity,
+  clearEditedAfterReview,
 } from "../controllers/response.controller";
 import { bulkUpdateResponses } from "../controllers/bulk.controller";
 import { listNotes, createNote, updateNote, deleteNote } from "../controllers/note.controller";
@@ -26,6 +27,8 @@ router.post("/bulk", protect as any, blockSuspended as any, requirePermission("r
 router.get("/:id", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, getResponseDetail);
 router.patch("/:id", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "response" }) as any, updateResponseStatus);
 router.put("/:id", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "response" }) as any, updateResponseStatus);
+// Sprint 13 (A5.2): "Mark as reviewed" clears the Edited-after-review flag.
+router.patch("/:id/edited-after-review", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "response" }) as any, clearEditedAfterReview);
 router.delete("/:id", protect as any, blockSuspended as any, requirePermission("responses:delete", { resourceType: "response" }) as any, deleteResponse);
 router.post("/:id/read", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, markResponseRead);
 router.post("/:id/unread", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, markResponseUnread);

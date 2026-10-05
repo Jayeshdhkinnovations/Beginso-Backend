@@ -1,0 +1,16 @@
+meta {
+  name: V2 - Failure - Respond Invalid Token
+  type: http
+  seq: 153
+}
+
+get {
+  url: {{base_url}}/api/respond/not-a-real-token-0000000000
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+  res.body.state: eq invalid
+}

@@ -1,0 +1,21 @@
+meta {
+  name: V2 - Trash List
+  type: http
+  seq: 151
+}
+
+get {
+  url: {{base_url}}/api/trash
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.storageBytes: isNumber
+}

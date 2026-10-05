@@ -13,6 +13,7 @@
     "migrate:v1": "ts-node src/scripts/migrateV1ToMemberships.ts",
     "migrate:theme": "ts-node src/scripts/migrateUserTheme.ts",
     "migrate:stages": "ts-node src/scripts/migrateStagesFromStatus.ts",
+    "migrate:access-mode": "ts-node src/scripts/migrateAccessMode.ts",
     "backfill:readstate": "ts-node src/scripts/backfillReadState.ts",
     "backfill:search": "ts-node src/scripts/backfillResponseSearchText.ts",
     "backfill:duplicates": "ts-node src/scripts/backfillDuplicateDetection.ts",

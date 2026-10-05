@@ -758,10 +758,18 @@ describe("Onboarding Platform Integration Tests", () => {
         .delete(`/api/forms/${formA._id}`)
         .set("Authorization", `Bearer ${tokenA}`);
 
-      expect(res.status).toBe(204);
-
-      // Confirm both form and its responses are deleted
+      // Sprint 13: DELETE moves the form to Trash - it vanishes from every normal read, nothing is destroyed...
+      expect(res.status).toBe(200);
       expect(await Form.findById(formA._id)).toBeNull();
+      expect(await ResponseModel.findById(sub._id)).not.toBeNull();
+
+      // ...and a permanent delete from Trash removes both the form and its responses.
+      const purge = await request(app)
+        .delete(`/api/trash/form/${formA._id}`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ confirm: "DELETE" });
+      expect(purge.status).toBe(200);
+      expect(await Form.findOne({ _id: formA._id }).setOptions({ includeDeleted: true })).toBeNull();
       expect(await ResponseModel.findById(sub._id)).toBeNull();
     });
 

@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
-  type: "welcome" | "password_reset" | "form_activity" | "assignment" | "mention";
+  type: "welcome" | "password_reset" | "form_activity" | "assignment" | "mention" | "response_edited";
   title: string;
   message: string;
   read: boolean;
@@ -27,7 +27,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     type: {
       type: String,
-      enum: ["welcome", "password_reset", "form_activity", "assignment", "mention"],
+      enum: ["welcome", "password_reset", "form_activity", "assignment", "mention", "response_edited"],
       required: true,
     },
     title: {

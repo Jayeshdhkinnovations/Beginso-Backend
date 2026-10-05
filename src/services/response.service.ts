@@ -1,5 +1,4 @@
 import { ResponseRepository } from "../repositories/response.repository";
-import { deleteResponseFiles } from "./cleanup.service";
 import { FormRepository } from "../repositories/form.repository";
 import Upload from "../models/Upload";
 import Form from "../models/Form";
@@ -102,6 +101,8 @@ export class ResponseService {
     callerUserId?: string;
     // Sprint 12, BE 0.6 (B4.10): "Show duplicates" filter — true = only flagged responses.
     duplicate?: boolean;
+    // Sprint 13 (F15): test submissions are excluded unless the caller opts in.
+    includeTest?: boolean;
   }): Promise<PaginatedResponsesResult> {
     const { workspaceId, personalUserId, formId, status, stageId, search } = params;
 
@@ -113,6 +114,9 @@ export class ResponseService {
     if (limit > 50) limit = 50; // Cap at 50 per page max
 
     const mongoQuery: any = { deletedAt: null };
+    // Naming `isTest` in the filter is what tells the Response query hook not to apply its default
+    // exclusion; matching true, false and absent returns every row.
+    if (params.includeTest) mongoQuery.isTest = { $in: [true, false, null] };
 
     // Scope to workspaceId (or the caller's personal forms) via form lookup
     if (formId) {
@@ -261,6 +265,8 @@ export class ResponseService {
       scoreAverage: scoreMap.get(r._id.toString())?.scoreAverage ?? null,
       scoreCount: scoreMap.get(r._id.toString())?.scoreCount ?? 0,
       duplicateOfId: r.duplicateOfId ? r.duplicateOfId.toString() : null,
+      ...(r.isTest ? { isTest: true } : {}),
+      editedAfterReviewAt: r.editedAfterReviewAt ?? null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -472,6 +478,8 @@ export class ResponseService {
       scoreAverage: scoreAggregate.scoreAverage,
       scoreCount: scoreAggregate.scoreCount,
       duplicateOfId: response.duplicateOfId ? response.duplicateOfId.toString() : null,
+      ...(response.isTest ? { isTest: true } : {}),
+      editedAfterReviewAt: response.editedAfterReviewAt ?? null,
       createdAt: response.createdAt,
       updatedAt: response.updatedAt,
     };
@@ -602,10 +610,35 @@ export class ResponseService {
       throw err;
     }
 
-    await deleteResponseFiles(responseId, form._id.toString());
-    await this.responseRepository.deleteById(responseId);
+    // Sprint 13 (CF5.5) - BREAKING: this used to destroy the response and its files. It now moves it to
+    // Trash (a soft delete); the retention sweep removes it for good after 30 days, or an Owner/Admin
+    // can do so sooner from Trash. Files are kept until then.
+    await ResponseModel.updateOne(
+      { _id: response._id },
+      { $set: { deletedAt: new Date(), deletedBy: callerUserId ? new mongoose.Types.ObjectId(callerUserId) : null } }
+    );
 
     return true;
+  }
+
+  // Sprint 13, BE 0.12 (A5.2). A member acknowledges a respondent's edit ("Mark as reviewed"), clearing the
+  // Edited-after-review flag. Same ownership rule as every other response-scoped write.
+  async clearEditedAfterReview(workspaceId: string, responseId: string, callerUserId?: string): Promise<{ cleared: boolean }> {
+    const response = await this.responseRepository.findById(responseId);
+    if (!response || response.deletedAt) {
+      const err: any = new Error("Response not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    const form = await this.formRepository.findById(response.formId.toString());
+    if (!form || !ownsResponseForm(form, workspaceId, callerUserId)) {
+      const err: any = new Error("Forbidden: You do not own this response's workspace");
+      err.statusCode = 403;
+      throw err;
+    }
+    const wasSet = !!response.editedAfterReviewAt;
+    if (wasSet) await ResponseModel.updateOne({ _id: response._id }, { $set: { editedAfterReviewAt: null } });
+    return { cleared: wasSet };
   }
 
   async getResponseFileUrl(

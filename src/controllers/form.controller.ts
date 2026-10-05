@@ -22,6 +22,12 @@ import { keyedHash } from "../utils/pepper";
 import { RateLimitBucket } from "../models/RateLimitBucket";
 import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
 import { logWorkspaceEvent } from "../services/event.service";
+import { ACCESS_MODE_VALUES } from "../models/Form";
+import { getAccessMode } from "../utils/accessMode";
+import { normaliseLayout } from "../utils/layout";
+import { redeemSubmitTicket, issueSubmitTicket } from "../services/submitTicket";
+import { sendSubmissionLink } from "../services/respondent.service";
+import { z } from "zod";
 
 const formService = new FormService();
 
@@ -37,7 +43,7 @@ const getWorkspaceIdFromUser = async (user: any): Promise<string> => {
   return workspace ? workspace._id.toString() : "";
 };
 
-const resolveFormAccess = async (
+export const resolveFormAccess = async (
   formId: string,
   user: any,
   formAccessGrant?: any
@@ -411,6 +417,7 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
       slug: form.status === "published" ? (form.publishedSlug || form.slug) : form.slug,
       publishedSlug: form.publishedSlug,
       publishedAt: form.publishedAt,
+      archivedAt: form.archivedAt ?? null,
       schemaVersion: form.schemaVersion,
       createdAt: form.createdAt,
       updatedAt: form.updatedAt,
@@ -467,6 +474,8 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
       status,
       page,
       limit,
+      // Sprint 13 (CF5.6): "false" (default) | "true" | "only"
+      archived: typeof req.query.archived === "string" ? req.query.archived : undefined,
       // C1.6: no active workspace or explicit personal context -> list caller's personal forms
       personalUserId: (isExplicitPersonal || !workspaceId) ? authReq.user._id.toString() : undefined,
     });
@@ -581,6 +590,11 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
 // PUT and PATCH share one validated path: the body is never passed to Mongo as-is.
 export const updateForm = patchForm;
 
+const publishBodySchema = z.object({
+  accessMode: z.enum(ACCESS_MODE_VALUES as ["open", "tracked", "login"]).optional(),
+  closeDate: z.string().trim().nullable().optional(),
+});
+
 export const publishForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
@@ -627,7 +641,9 @@ export const publishForm = async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    const form = await formService.publishForm(formId as string, workspaceId);
+    // Sprint 13 (CF6.5): the publish pre-flight commits its choices atomically with going live.
+    const commit = publishBodySchema.parse(req.body ?? {});
+    const form = await formService.publishForm(formId as string, workspaceId, undefined, commit);
     await recordEvent(req, form.workspaceId, "form.publish", { id: form._id, type: "form", label: form.title });
 
     res.status(200).json({
@@ -748,10 +764,17 @@ export const deleteForm = async (req: Request, res: Response, next: NextFunction
       return;
     }
 
-    await formService.deleteForm(formId as string, workspaceId);
-    await recordEvent(req, formDoc.workspaceId, "form.delete", { id: formDoc._id, type: "form", label: formDoc.title });
+    // Sprint 13 (CF5.5) - BREAKING: this now moves the form to Trash instead of destroying it. Nothing is
+    // removed; it can be restored for 30 days, after which the retention sweep purges it.
+    const trashed = await formService.trashForm(formId as string, workspaceId, authReq.user._id);
+    await recordEvent(req, formDoc.workspaceId, "form.trash", { id: formDoc._id, type: "form", label: formDoc.title });
 
-    res.status(204).send();
+    res.status(200).json({
+      success: true,
+      _id: trashed._id,
+      deletedAt: trashed.deletedAt,
+      purgeAt: new Date((trashed.deletedAt as Date).getTime() + 30 * 24 * 60 * 60 * 1000),
+    });
   } catch (error) {
     next(error);
   }
@@ -982,7 +1005,9 @@ export const getPublicFormBySlug = async (
     const settings = form.settings || {};
     const cleanSettings: any = {};
     if (settings.successMessage !== undefined) cleanSettings.successMessage = settings.successMessage;
-    if (settings.layout !== undefined) cleanSettings.layout = settings.layout;
+    // Sprint 13: the public form always sees a normalised preset (legacy values mapped) and its access mode.
+    cleanSettings.layout = normaliseLayout(settings.layout);
+    cleanSettings.accessMode = getAccessMode(form);
     if (settings.responseLimitEnabled !== undefined) cleanSettings.responseLimitEnabled = settings.responseLimitEnabled;
     if (settings.responseLimit !== undefined) cleanSettings.responseLimit = settings.responseLimit;
     if (settings.closeDate !== undefined) cleanSettings.closeDate = settings.closeDate;
@@ -1194,6 +1219,45 @@ export const submitPublicForm = async (
       return;
     }
 
+    // Sprint 13 (D1.1): who may submit is decided HERE, on the server - never trusted from the client.
+    //  open    - anyone, as before.
+    //  tracked - anyone, but they must give an address; it becomes the response's identity and the link
+    //            to view/correct the submission is emailed to it (a typo is harmless: the email carries
+    //            no response data).
+    //  login   - a signed-in Beginso account only, proven by a short-lived single-use ticket (the browser
+    //            never holds the session token). The address comes from the ACCOUNT, never the request.
+    const accessMode = getAccessMode(form);
+    let respondentEmail: string | null = null;
+    let respondentUserId: string | null = null;
+    if (accessMode === "login") {
+      const ticket = (req.headers["x-submit-ticket"] as string | undefined) ?? (req.body ? req.body.ticket : undefined);
+      const ticketUserId = await redeemSubmitTicket(ticket, form._id.toString());
+      const account = ticketUserId ? await User.findById(ticketUserId) : null;
+      if (!account || account.status === "suspended") {
+        res.status(401).json({
+          success: false,
+          message: "Sign in to submit this form",
+          error: { code: "LOGIN_REQUIRED", message: "Sign in to submit this form" },
+        });
+        return;
+      }
+      respondentUserId = account._id.toString();
+      respondentEmail = String(account.email).trim().toLowerCase();
+    } else if (accessMode === "tracked") {
+      const rawEmail = (parsed && typeof parsed === "object" ? (parsed as any).respondentEmail : undefined) ?? req.body?.respondentEmail;
+      const candidate = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) || candidate.length > 254) {
+        res.status(422).json({
+          success: false,
+          message: "A valid email address is required",
+          errors: [{ field: "respondentEmail", message: "A valid email address is required" }],
+          error: { code: "EMAIL_REQUIRED", message: "A valid email address is required" },
+        });
+        return;
+      }
+      respondentEmail = candidate;
+    }
+
     // Enforce 100 MB absolute limit on all uploaded files
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files as Express.Multer.File[]) {
@@ -1320,8 +1384,22 @@ export const submitPublicForm = async (
 
     // Call dynamic validation and persistence routine in formService
     const ctx = (req as any).uploadContext;
-    const submission = await formService.submitForm(form._id.toString(), answers, hashedIp, ctx?.responseId);
+    const submission = await formService.submitForm(form._id.toString(), answers, hashedIp, ctx?.responseId, {
+      respondentEmail,
+      respondentUserId,
+    });
     submissionSuccess = true;
+
+    // Tracked mode: email the respondent their link. Failure to send never fails the submission.
+    if (accessMode === "tracked" && respondentEmail) {
+      const sent = sendSubmissionLink({
+        responseId: submission._id,
+        formId: form._id,
+        formName: form.title,
+        email: respondentEmail,
+      });
+      if (process.env.NODE_ENV === "test") await sent; // deterministic for tests; fire-and-forget in production
+    }
 
     // Create form_activity notification for workspace owner
     try {
@@ -1372,6 +1450,28 @@ export const submitPublicForm = async (
     if (!submissionSuccess && req.files && Array.isArray(req.files) && req.files.length > 0) {
       await cleanupUploadedFiles(req.files as Express.Multer.File[], true);
     }
+  }
+};
+
+// POST /api/public/:slug/submit-ticket - authenticated (through the frontend proxy). Hands a signed-in
+// respondent a ticket for ONE Mode 3 form so the browser can send the multipart submission directly.
+export const issueFormSubmitTicket = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    const form = await formService.getPublicFormBySlug(String(req.params.slug), { readOnly: true });
+    if (getAccessMode(form) !== "login") {
+      res.status(409).json({
+        success: false,
+        message: "This form does not require sign-in",
+        error: { code: "LOGIN_NOT_REQUIRED", message: "This form does not require sign-in" },
+      });
+      return;
+    }
+    const { ticket, expiresInSeconds } = issueSubmitTicket(authReq.user._id.toString(), form._id.toString());
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ success: true, ticket, expiresInSeconds });
+  } catch (error) {
+    next(error);
   }
 };
 

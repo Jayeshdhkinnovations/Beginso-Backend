@@ -1,0 +1,15 @@
+meta {
+  name: V2 - Failure - My Submissions Needs Login
+  type: http
+  seq: 154
+}
+
+get {
+  url: {{base_url}}/api/my-submissions
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+}

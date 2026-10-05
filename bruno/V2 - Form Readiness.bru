@@ -1,0 +1,22 @@
+meta {
+  name: V2 - Form Readiness
+  type: http
+  seq: 150
+}
+
+get {
+  url: {{base_url}}/api/forms/{{formId}}/readiness
+  body: none
+  auth: inherit
+}
+
+headers {
+  x-workspace-id: {{workspaceId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.ready: isBoolean
+  res.body.blocking: isArray
+  res.body.warnings: isArray
+}

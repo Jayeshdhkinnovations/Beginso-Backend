@@ -11,5 +11,7 @@ delete {
 }
 
 assert {
-  res.status: eq 204
+  # Sprint 13: deleting a form moves it to Trash (200 with purgeAt); it no longer destroys it.
+  res.status: eq 200
+  res.body.purgeAt: isString
 }

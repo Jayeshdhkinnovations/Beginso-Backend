@@ -212,7 +212,8 @@ export const createWorkspaceExport = async (req: Request, res: Response, next: N
     // Asynchronously export workspace forms, responses, and file metadata
     setImmediate(async () => {
       try {
-        const forms = await Form.find({ workspaceId: workspace._id });
+        // includeDeleted: the export is everything the workspace still stores, Trash included.
+        const forms = await Form.find({ workspaceId: workspace._id }).setOptions({ includeDeleted: true });
         const formIds = forms.map((f) => f._id);
         const responses = await ResponseModel.find({ formId: { $in: formIds } });
         const uploads = await Upload.find({ workspaceId: workspace._id });

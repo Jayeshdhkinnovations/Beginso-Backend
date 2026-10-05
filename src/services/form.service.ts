@@ -16,8 +16,9 @@ import { asString, clampInt, escapeRegex } from "../utils/safeInput";
 import { allocateReference } from "./reference.service";
 import { logWorkspaceEvent } from "./event.service";
 import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
+import { evaluateReadiness } from "./readiness.service";
+import { defaultAccessModeForNewForms } from "../utils/accessMode";
 
-const CHOICE_FIELD_TYPES = ["dropdown", "multiple_choice"];
 const MAX_SLUG_ATTEMPTS = 5;
 
 export class FormValidationError extends Error {
@@ -153,6 +154,11 @@ export class FormService {
       formDetails.slug = `${base}-${randomSuffix}`.replace(/-+/g, "-");
     }
     formDetails.schemaVersion = 1;
+    // Sprint 13 (D1.1): an explicit mode wins; otherwise the configured default for NEW forms. Existing
+    // forms are never touched here - a form with no stored mode is read as "open".
+    if (!formDetails.settings?.accessMode) {
+      formDetails.settings = { ...(formDetails.settings as any), accessMode: defaultAccessModeForNewForms() };
+    }
     if (formDetails.status === "published") {
       formDetails.publishedSlug = await this.generateUniqueSlug();
       formDetails.publishedAt = new Date();
@@ -187,6 +193,9 @@ export class FormService {
       page?: number;
       limit?: number;
       personalUserId?: string;
+      // Sprint 13 (CF5.6): "false" (default) hides archived forms, "true" shows everything, "only" shows
+      // just the archived ones. Trashed forms are never listed here (Form query hook).
+      archived?: string;
     }
   ) {
     const page = clampInt(options.page, 1, 1, 100000);
@@ -201,6 +210,12 @@ export class FormService {
 
     if (options.status) {
       query.status = options.status;
+    }
+
+    if (options.archived === "only") {
+      query.archivedAt = { $ne: null };
+    } else if (options.archived !== "true") {
+      query.archivedAt = null; // matches forms that never had the field, too
     }
 
     if (options.search) {
@@ -236,6 +251,16 @@ export class FormService {
     };
   }
 
+  // PATCH replaces `settings` wholesale (that is how a client clears a closeDate by omitting it). A client
+  // that predates accessMode would therefore silently reset a form to Mode 1 on its next autosave, so
+  // the stored mode is carried over whenever the incoming settings do not name one.
+  private preserveAccessMode(existing: IForm, incoming: Partial<IForm>): void {
+    const stored = existing.settings?.accessMode;
+    if (incoming.settings && incoming.settings.accessMode === undefined && stored) {
+      incoming.settings = { ...incoming.settings, accessMode: stored };
+    }
+  }
+
   async updateForm(
     formId: string,
     workspaceId: string,
@@ -249,6 +274,7 @@ export class FormService {
 
     const existing = await this.getFormById(formId, workspaceId);
     const pages = updateDetails.pages || existing.pages || [];
+    this.preserveAccessMode(existing, updateDetails);
 
     if (updateDetails.fields) {
       const { fields, fieldsChanged } = this.processFieldsUpdate(existing.fields, updateDetails.fields);
@@ -283,6 +309,7 @@ export class FormService {
 
     const existing = await this.getFormById(formId, workspaceId);
     const pages = patchDetails.pages || existing.pages || [];
+    this.preserveAccessMode(existing, patchDetails);
 
     if (patchDetails.fields) {
       const { fields, fieldsChanged } = this.processFieldsUpdate(existing.fields, patchDetails.fields);
@@ -307,7 +334,9 @@ export class FormService {
   async publishForm(
     formId: string,
     workspaceId: string,
-    extraPatch?: Partial<IForm>
+    extraPatch?: Partial<IForm>,
+    // Sprint 13 (CF6.5): the publish pre-flight commits its choices atomically with going live.
+    commit?: { accessMode?: string; closeDate?: string | null }
   ): Promise<IForm> {
     if (extraPatch && extraPatch.pages && extraPatch.pages.length === 0) {
       const err = new Error("Pages array must not be empty");
@@ -316,6 +345,12 @@ export class FormService {
     }
 
     const existing = await this.getFormById(formId, workspaceId);
+    if (existing.archivedAt) {
+      const err = new Error("This form is archived - unarchive it before publishing");
+      (err as any).statusCode = 409;
+      (err as any).code = "FORM_ARCHIVED";
+      throw err;
+    }
     const pages = (extraPatch && extraPatch.pages) || existing.pages || [];
 
     let fields = existing.fields;
@@ -339,22 +374,29 @@ export class FormService {
 
     validateFieldsIntegrity(fields, pages);
 
-    const visibleFields = fields.filter((f) => !f.deleted);
-
-    if (visibleFields.length === 0) {
-      const err = new Error("Form must have at least one field to be published");
-      (err as any).statusCode = 400;
-      (err as any).code = "FORM_HAS_NO_FIELDS";
-      throw err;
+    // Settings the pre-flight chose (access mode, closing date) are applied on top of what is stored, so
+    // the readiness check below judges the form as it will actually go live.
+    const currentSettings: any = (existing.settings as any)?.toObject ? (existing.settings as any).toObject() : { ...(existing.settings as any) };
+    const settings = { ...currentSettings };
+    if (commit?.accessMode !== undefined) settings.accessMode = commit.accessMode;
+    if (commit?.closeDate !== undefined) {
+      if (commit.closeDate === null || commit.closeDate === "") delete settings.closeDate;
+      else settings.closeDate = commit.closeDate;
+    }
+    if (commit?.accessMode !== undefined || commit?.closeDate !== undefined) {
+      updateDetails.settings = settings;
     }
 
-    for (const field of visibleFields) {
-      if (CHOICE_FIELD_TYPES.includes(field.type) && (!field.options || field.options.length === 0)) {
-        const err = new Error(`Field "${field.label}" must have at least one option to be published`);
-        (err as any).statusCode = 400;
-        (err as any).code = "CHOICE_FIELD_HAS_NO_OPTIONS";
-        throw err;
-      }
+    // One readiness rule for the pre-flight screen and for the server (readiness.service.ts). Only the
+    // blocking issues stop a publish; the same two rules and codes as before Sprint 13.
+    const readiness = evaluateReadiness({ fields, settings });
+    if (!readiness.ready) {
+      const first = readiness.blocking[0];
+      const err = new Error(first.message);
+      (err as any).statusCode = 400;
+      (err as any).code = first.code;
+      (err as any).blocking = readiness.blocking;
+      throw err;
     }
 
     // Reuse existing slug on re-publish; only generate a new one on first publish
@@ -365,6 +407,82 @@ export class FormService {
     updateDetails.publishedSlug = publishedSlug;
 
     const updated = await this.formRepository.update(formId, workspaceId, updateDetails);
+    if (!updated) {
+      const err = new Error("Form not found for update");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    return updated;
+  }
+
+  // Sprint 13, BE 0.4 (CF6.5). Back to draft, KEEPING the public slug: re-publishing restores the very
+  // same link. Public GET is unavailable meanwhile (a draft is never public).
+  async unpublishForm(formId: string, workspaceId: string): Promise<IForm> {
+    const existing = await this.getFormById(formId, workspaceId);
+    if (existing.status === "draft") {
+      const err = new Error("This form is already a draft");
+      (err as any).statusCode = 409;
+      throw err;
+    }
+    const updated = await this.formRepository.update(formId, workspaceId, { status: "draft" });
+    if (!updated) {
+      const err = new Error("Form not found for update");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    return updated;
+  }
+
+  // Sprint 13, BE 0.4 (CF5.3). The one deliberate way to replace a public link. The old slug stops
+  // resolving immediately (the form is looked up by publishedSlug). Never called implicitly.
+  async regenerateLink(formId: string, workspaceId: string): Promise<{ form: IForm; previousSlug: string }> {
+    const existing = await this.getFormById(formId, workspaceId);
+    if (!existing.publishedSlug) {
+      const err = new Error("This form has never been published, so it has no link to replace");
+      (err as any).statusCode = 409;
+      throw err;
+    }
+    const previousSlug = existing.publishedSlug;
+    const publishedSlug = await this.generateUniqueSlug();
+    const updated = await this.formRepository.update(formId, workspaceId, { publishedSlug });
+    if (!updated) {
+      const err = new Error("Form not found for update");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    return { form: updated, previousSlug };
+  }
+
+  // Sprint 13, BE 0.8 (CF5.6). Archive keeps the form and every response indefinitely and takes the form
+  // out of the active list. It does not change `status`; availability and "active" counts treat an
+  // archived form as not live.
+  async archiveForm(formId: string, workspaceId: string, userId?: unknown): Promise<IForm> {
+    const existing = await this.getFormById(formId, workspaceId);
+    if (existing.archivedAt) {
+      const err = new Error("This form is already archived");
+      (err as any).statusCode = 409;
+      throw err;
+    }
+    const updated = await this.formRepository.update(formId, workspaceId, {
+      archivedAt: new Date(),
+      archivedBy: (userId as any) ?? null,
+    });
+    if (!updated) {
+      const err = new Error("Form not found for update");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    return updated;
+  }
+
+  async unarchiveForm(formId: string, workspaceId: string): Promise<IForm> {
+    const existing = await this.getFormById(formId, workspaceId);
+    if (!existing.archivedAt) {
+      const err = new Error("This form is not archived");
+      (err as any).statusCode = 409;
+      throw err;
+    }
+    const updated = await this.formRepository.update(formId, workspaceId, { archivedAt: null, archivedBy: null });
     if (!updated) {
       const err = new Error("Form not found for update");
       (err as any).statusCode = 404;
@@ -398,29 +516,45 @@ export class FormService {
     throw err;
   }
 
-  async deleteForm(formId: string, workspaceId: string): Promise<void> {
+  // Sprint 13, BE 0.8 (CF5.5) - BREAKING: DELETE /forms/:id used to remove the form, its responses and
+  // its files irreversibly. It now moves the form to Trash: nothing is removed, the public link goes
+  // down at once, and the form's responses are hidden with it (every response read path is scoped
+  // through forms, and a trashed form is invisible to them). It comes back with everything intact on
+  // restore, or is purged after 30 days (trash.service.ts).
+  async trashForm(formId: string, workspaceId: string, userId?: unknown): Promise<IForm> {
     await this.getFormById(formId, workspaceId);
-    await deleteFormData(formId);
-    await this.formRepository.delete(formId, workspaceId);
-  }
-
-  async submitForm(formId: string, answers: Record<string, any>, ipHash?: string, responseId?: string) {
-    const form = await this.formRepository.findById(formId);
-    if (!form) {
+    const updated = await this.formRepository.update(formId, workspaceId, {
+      deletedAt: new Date(),
+      deletedBy: (userId as any) ?? null,
+    });
+    if (!updated) {
       const err = new Error("Form not found");
       (err as any).statusCode = 404;
       throw err;
     }
+    return updated;
+  }
 
-    // Enforce close-date and response-limit availability check for all submission routes
-    await this.checkFormAvailability(form);
+  // Permanent removal: files, uploads, responses, grants, then the form itself. Only Trash (permanent
+  // delete / empty) and the retention sweep call this.
+  async purgeForm(formId: string): Promise<void> {
+    await deleteFormData(formId);
+    await Form.deleteOne({ _id: formId });
+  }
 
-    // Dynamic validation logic against form fields
+  // Sprint 13: the one place a set of answers is judged against a form's rules and normalised (hidden
+  // fields stripped). submitForm uses it for new submissions; a respondent correcting their own
+  // submission (respondent.service.ts) uses it for the merged answers, so an edit can never get past a
+  // rule a submission could not. `isTest` exempts file fields: a test submission is JSON-only.
+  validateAnswers(form: IForm, answers: Record<string, any>, options: { isTest?: boolean } = {}): void {
     const hiddenFieldIds = getHiddenFieldIds(form.fields, answers);
     const validationErrors: Array<{ field: string; message: string }> = [];
 
     for (const field of form.fields) {
       if (field.deleted) {
+        continue;
+      }
+      if (options.isTest && field.type === "file_upload") {
         continue;
       }
 
@@ -586,16 +720,41 @@ export class FormService {
       }
     }
 
-    // Sprint 12, BE 0.3 (B8.1): allocated atomically, per form, before the document is written —
-    // this is the single choke point every submission path (authenticated + public) goes through.
-    const reference = await allocateReference(formId);
+  }
 
-    // Sprint 12, BE 0.6 (B4.10/B8.3): flag-only duplicate detection at the same choke point every
-    // submission (authenticated + public) already goes through for reference allocation. See
-    // duplicate.service.ts for the OQ-6 assumption ("the email" = the form's first `type: "email"`
-    // field). Never blocks or alters the submission — a duplicate is still created normally.
-    const respondentEmail = extractRespondentEmail(form.fields as any, answers);
-    const duplicateOfId = await findDuplicateOf(formId, respondentEmail);
+  async submitForm(
+    formId: string,
+    answers: Record<string, any>,
+    ipHash?: string,
+    responseId?: string,
+    // Sprint 13: `isTest` = a builder test submission (CF2.6). `respondentEmail` / `respondentUserId`
+    // come from the access mode (D1.1) and win over the "first email field" heuristic.
+    options: { isTest?: boolean; respondentEmail?: string | null; respondentUserId?: unknown } = {}
+  ) {
+    const form = await this.formRepository.findById(formId);
+    if (!form) {
+      const err = new Error("Form not found");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+
+    // Enforce close-date and response-limit availability check for all submission routes. A test
+    // submission is the owner checking their own form, so it is allowed on a draft, closed or full form.
+    if (!options.isTest) await this.checkFormAvailability(form);
+
+    this.validateAnswers(form, answers, { isTest: options.isTest });
+
+    // Sprint 12, BE 0.3 (B8.1): allocated atomically, per form, before the document is written -
+    // this is the single choke point every submission path (authenticated + public) goes through.
+    // A test submission must not consume the public sequence (it would leave a hole at #142), so it
+    // gets no reference and is never compared against real responses for duplicates.
+    const reference = options.isTest ? undefined : await allocateReference(formId);
+
+    // Sprint 12, BE 0.6 (B4.10/B8.3): flag-only duplicate detection. See duplicate.service.ts for the
+    // OQ-6 assumption ("the email" = the form's first `type: "email"` field). Sprint 13: in Mode 2/3 the
+    // respondent's verified address is the identity, so it replaces that heuristic.
+    const respondentEmail = options.respondentEmail ?? extractRespondentEmail(form.fields as any, answers);
+    const duplicateOfId = options.isTest ? null : await findDuplicateOf(formId, respondentEmail);
 
     const newResponse = await ResponseModel.create({
       _id: responseId || new mongoose.Types.ObjectId(),
@@ -607,13 +766,15 @@ export class FormService {
       reference,
       respondentEmail,
       duplicateOfId,
+      isTest: !!options.isTest,
+      respondentUserId: (options.respondentUserId as any) ?? null,
     });
 
     // Sprint 12, BE 0.3: workspace activity feed entry for the activity endpoint's "submitted"
     // type. Personal (workspace-less) forms have no feed, same convention as every other event
     // write in this sprint (event.service.ts). The submitter is anonymous/unauthenticated, so the
     // actor is recorded the same way an unauthenticated invitee decline already is (null actorId).
-    if (form.workspaceId) {
+    if (form.workspaceId && !options.isTest) {
       await logWorkspaceEvent({
         workspaceId: form.workspaceId,
         actor: { id: null, email: "respondent@public", name: "Respondent" },
@@ -624,8 +785,9 @@ export class FormService {
       }).catch(() => undefined);
     }
 
-    // Check if response limit has been reached and flip status to closed
-    if (form.settings?.responseLimitEnabled && form.settings.responseLimit !== undefined) {
+    // Check if response limit has been reached and flip status to closed (tests never count - the
+    // countDocuments below already excludes them, and a test must never close a real form).
+    if (!options.isTest && form.settings?.responseLimitEnabled && form.settings.responseLimit !== undefined) {
       const currentCount = await ResponseModel.countDocuments({ formId });
       if (currentCount > form.settings.responseLimit) {
         // Concurrent submissions both passed the earlier check: undo this one instead of overshooting.
@@ -687,6 +849,13 @@ export class FormService {
 
   private async checkFormAvailability(form: IForm, isPublicRoute: boolean = false, allowWrite: boolean = true): Promise<void> {
     if (form.status === "closed") {
+      const err = new Error("Form not found");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    // An archived form is finished: its link is down (Sprint 13, CF5.6). Trashed forms never get here -
+    // the Form query hook hides them from every lookup.
+    if (isPublicRoute && form.archivedAt) {
       const err = new Error("Form not found");
       (err as any).statusCode = 404;
       throw err;

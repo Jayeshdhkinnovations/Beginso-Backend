@@ -2,7 +2,8 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { getPublicFormBySlug, submitPublicForm, recordFormView } from "../controllers/form.controller";
+import { getPublicFormBySlug, submitPublicForm, recordFormView, issueFormSubmitTicket } from "../controllers/form.controller";
+import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { getUploadDir } from "../controllers/upload.controller";
 import { submitRateLimiter, publicFormReadLimiter } from "../middleware/rateLimiter";
 import { MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
@@ -43,6 +44,8 @@ const uploadAny = (req: any, res: any, next: any) =>
 
 router.get("/:slug", publicFormReadLimiter, getPublicFormBySlug);
 router.post("/:slug/view", publicFormReadLimiter, recordFormView);
+// Sprint 13 (Mode 3, OQ-10): a signed-in respondent asks for a one-shot ticket, then submits directly.
+router.post("/:slug/submit-ticket", publicFormReadLimiter, protect as any, blockSuspended as any, issueFormSubmitTicket);
 router.post("/:slug/submit", submitRateLimiter, prepareUploadContext as any, uploadAny, submitPublicForm);
 
 export default router;

@@ -60,13 +60,15 @@ export const deleteResponseFiles = async (responseId: string, formId: string): P
 // Uploads made before files were stored under <owner>/<form>/... have a bare filename as their path
 // and are linked to the form only through branding URLs and response answers.
 const legacyFileNames = async (formId: string): Promise<string[]> => {
-  const form = await Form.findById(formId).select("fields branding").lean();
+  // includeDeleted: this runs when a form in Trash is purged, and the Form query hook hides trashed forms.
+  const form = await Form.findById(formId).setOptions({ includeDeleted: true }).select("fields branding").lean();
   const names = new Set<string>();
   if (form?.branding?.logoUrl) names.add(path.basename(form.branding.logoUrl));
   if (form?.branding?.coverImageUrl) names.add(path.basename(form.branding.coverImageUrl));
   const fileLabels = (form?.fields ?? []).filter((f: any) => f.type === "file_upload").map((f: any) => f.label);
   if (fileLabels.length) {
-    for await (const r of ResponseModel.find({ formId }).select("answers").lean().cursor()) {
+    // includeTest: a test submission's files are files too (Sprint 13) - deletion must not skip them.
+    for await (const r of ResponseModel.find({ formId }).setOptions({ includeTest: true }).select("answers").lean().cursor()) {
       for (const label of fileLabels) {
         const answer: any = (r.answers as any)?.[label];
         if (answer && typeof answer === "object" && answer.fileName) names.add(path.basename(answer.fileName));
@@ -86,7 +88,8 @@ export const deleteFormData = async (formId: string): Promise<void> => {
 };
 
 export const deleteWorkspaceData = async (workspaceId: mongoose.Types.ObjectId | string): Promise<void> => {
-  const forms = await Form.find({ workspaceId }).select("_id").lean();
+  // includeDeleted: forms sitting in Trash are still this workspace's data and must go with it.
+  const forms = await Form.find({ workspaceId }).setOptions({ includeDeleted: true }).select("_id").lean();
   for (const f of forms) await deleteFormData(String(f._id));
   await Form.deleteMany({ workspaceId });
 
@@ -136,6 +139,7 @@ export const deleteAccountData = async (user: any): Promise<void> => {
     createdBy: userId,
     $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }],
   })
+    .setOptions({ includeDeleted: true })
     .select("_id")
     .lean();
   for (const f of personalForms) await deleteFormData(String(f._id));

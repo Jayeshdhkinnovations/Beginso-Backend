@@ -162,7 +162,8 @@ export class StageService {
       );
     }
 
-    const responseCount = await ResponseModel.countDocuments({ stageId: stage!._id });
+    // includeTest: a test submission still sits on a stage, so deleting the stage must reassign it too.
+    const responseCount = await ResponseModel.countDocuments({ stageId: stage!._id }).setOptions({ includeTest: true });
 
     let reassignStage: IStage | null = null;
     if (responseCount > 0) {
@@ -182,6 +183,7 @@ export class StageService {
       await session.withTransaction(async () => {
         if (responseCount > 0 && reassignStage) {
           const affected = await ResponseModel.find({ stageId: stage!._id })
+            .setOptions({ includeTest: true })
             .select("_id")
             .session(session);
 

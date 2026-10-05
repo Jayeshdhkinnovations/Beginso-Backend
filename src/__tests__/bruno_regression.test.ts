@@ -209,7 +209,13 @@ describe("Bruno Regression Route Pass & Forms Lifecycle Tests", () => {
       .delete(`/api/forms/${formId}`)
       .set("Authorization", `Bearer ${tokenA}`);
     
-    expect(deleteRes.status).toBe(204);
+    // Sprint 13: DELETE moves the form to Trash (200), and a permanent delete removes everything.
+    expect(deleteRes.status).toBe(200);
+    const purgeRes = await request(app)
+      .delete(`/api/trash/form/${formId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ confirm: "DELETE" });
+    expect(purgeRes.status).toBe(200);
 
     // Verify cascade deletions completed successfully
     expect(await Form.findById(formId)).toBeNull();

@@ -122,7 +122,7 @@ export class TagService {
   // before delete so the caller can see what was affected.
   async deleteTag(workspaceId: string, tagId: string): Promise<{ usageCount: number }> {
     const tag = await this.getTagInWorkspace(workspaceId, tagId);
-    const usageCount = await ResponseModel.countDocuments({ tagIds: tag._id });
+    const usageCount = await ResponseModel.countDocuments({ tagIds: tag._id }).setOptions({ includeTest: true });
     await ResponseModel.updateMany({ tagIds: tag._id }, { $pull: { tagIds: tag._id } });
     await TagModel.deleteOne({ _id: tag._id });
     return { usageCount };
@@ -142,7 +142,7 @@ export class TagService {
     let mergedCount = 0;
     try {
       await session.withTransaction(async () => {
-        const affected = await ResponseModel.find({ tagIds: source._id }).select("_id").session(session);
+        const affected = await ResponseModel.find({ tagIds: source._id }).setOptions({ includeTest: true }).select("_id").session(session);
         mergedCount = affected.length;
 
         if (mergedCount > 0) {

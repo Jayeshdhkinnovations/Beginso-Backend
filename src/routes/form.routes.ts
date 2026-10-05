@@ -21,6 +21,14 @@ import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 
 import { listFormEvents } from "../controllers/event.controller";
+import {
+  getReadiness,
+  unpublishForm,
+  regenerateLink,
+  archiveForm,
+  unarchiveForm,
+  createTestSubmission,
+} from "../controllers/formLifecycle.controller";
 import { getScoreComparison } from "../controllers/score.controller";
 
 const router = Router();
@@ -37,6 +45,15 @@ router.patch("/:formId/move", protect as any, blockSuspended as any, requirePerm
 router.delete("/:formId", protect as any, blockSuspended as any, requirePermission("forms:delete", { resourceType: "form" }) as any, deleteForm);
 router.post("/:formId/duplicate", protect as any, blockSuspended as any, requirePermission("forms:create", { resourceType: "form" }) as any, duplicateForm);
 router.post("/:formId/publish", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, publishForm);
+// Sprint 13 (BE 0.3, 0.4, 0.8). Readiness is read-only (forms:read); changing what is public needs forms:publish;
+// archiving is the same Owner/Admin tier; a test submission is an edit-tier action (forms:write).
+router.get("/:formId/readiness", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, getReadiness);
+router.post("/:formId/unpublish", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, unpublishForm);
+router.post("/:formId/regenerate-link", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, regenerateLink);
+router.post("/:formId/archive", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, archiveForm);
+router.post("/:formId/unarchive", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, unarchiveForm);
+router.post("/:formId/test-submissions", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, createTestSubmission);
+
 router.post("/:formId/close", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, closeForm);
 
 // Per-form access panel routes (BE 0.6 / C2.7 / CF1.6)

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
-import { IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -197,7 +197,10 @@ const settingsSchema = z.object({
   responseLimit: z.number().int().positive("responseLimit must be a positive integer").optional(),
   closeDate: z.string().trim().optional(),
   honeypotEnabled: z.boolean().optional(),
-  layout: z.enum(["single_column", "two_column", "compact"]).optional(),
+  // Sprint 13 (CF2.7): six presets; the three V1 values stay valid and are normalised on read.
+  layout: z.enum(FORM_LAYOUT_VALUES as [FormLayout, ...FormLayout[]]).optional(),
+  // Sprint 13 (D1.1): who may respond.
+  accessMode: z.enum(ACCESS_MODE_VALUES as [AccessMode, ...AccessMode[]]).optional(),
 });
 
 const formPageSchema = z.object({

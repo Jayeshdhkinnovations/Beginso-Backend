@@ -3,6 +3,7 @@ import app from "./app";
 import connectDB from "./config/database";
 import { closeExpiredForms } from "./services/form.service";
 import { recoverReportQueue } from "./services/reportQueue";
+import { purgeExpiredTrash } from "./services/trash.service";
 
 if (!process.env.JWT_SECRET) {
     console.error("❌ JWT_SECRET environment variable is missing. Refusing to start.");
@@ -35,6 +36,12 @@ const startServer = async () => {
         sweep();
         recoverReportQueue().catch((e) => console.error("recoverReportQueue failed:", e));
         setInterval(sweep, 5 * 60 * 1000).unref();
+
+        // Sprint 13 (CF5.5): permanently remove anything that has sat in Trash for 30 days. Same cadence as
+        // the sweep above; bounded per run and idempotent, so it is safe on several instances at once.
+        const retention = () => purgeExpiredTrash().catch((e) => console.error("purgeExpiredTrash failed:", e));
+        retention();
+        setInterval(retention, 5 * 60 * 1000).unref();
 
         const server = app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

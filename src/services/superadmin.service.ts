@@ -662,7 +662,8 @@ export class SuperAdminService {
     const userDeleted = true;
 
     // 2. Find forms by workspace
-    const forms = wsId ? await Form.find({ workspaceId: wsId }) : [];
+    // includeDeleted: Trash is not a place data survives account deletion.
+    const forms = wsId ? await Form.find({ workspaceId: wsId }).setOptions({ includeDeleted: true }) : [];
     const formIds = forms.map((f) => f._id);
 
     // 3. Find file metadata by owner

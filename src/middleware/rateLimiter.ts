@@ -138,6 +138,23 @@ export const userActionRateLimiter = (name: string, max: number, windowMs = 60 *
     by: (req, ip) => (req as any).user?._id?.toString() ?? ip,
   });
 
+// Sprint 13 (A5.4). Signed-link endpoints, per IP and per link, so one address cannot hammer a single token
+// and one token cannot be probed from many addresses cheaply. Keyed on a hash of the token (never the token).
+export const respondLinkRateLimiter = createRateLimiter({
+  name: "respond-link",
+  limit: () => ({ max: intEnv("RESPOND_LINK_RATE_LIMIT_MAX", 60), windowMs: 60000 }),
+  by: (req, ip) => `${ip}:${String(req.params.token ?? "").slice(0, 64)}`,
+  log: true,
+});
+
+// "Send me a new link": per IP. (The per-address cap is emailTargetRateLimiter.)
+export const respondResendRateLimiter = createRateLimiter({
+  name: "respond-resend",
+  limit: () => ({ max: intEnv("RESPOND_RESEND_RATE_LIMIT_MAX", 10), windowMs: 60 * 60 * 1000 }),
+  by: (_req, ip) => ip,
+  log: true,
+});
+
 export const clearRateLimitStore = async (): Promise<void> => {
   await RateLimitBucket.deleteMany({});
 };

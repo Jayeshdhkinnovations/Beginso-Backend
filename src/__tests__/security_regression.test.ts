@@ -455,7 +455,9 @@ describe("B5 form access grants are an owner/admin decision", () => {
   it("deleting a form removes its access grants", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
     await FormAccessGrant.create({ formId: form._id, userId: outsider._id, role: "viewer", grantedBy: ownerB._id });
-    expect((await auth(request(app).delete(`/api/forms/${form._id}`), ownerB)).status).toBe(204);
+    // Sprint 13: DELETE is a move to Trash; the grants go when the form is permanently deleted.
+    expect((await auth(request(app).delete(`/api/forms/${form._id}`), ownerB)).status).toBe(200);
+    expect((await auth(request(app).delete(`/api/trash/form/${form._id}`).send({ confirm: "DELETE" }), ownerB)).status).toBe(200);
     expect(await FormAccessGrant.countDocuments({ formId: form._id })).toBe(0);
   });
 });

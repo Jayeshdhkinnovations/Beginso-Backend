@@ -64,13 +64,43 @@ export interface IBranding {
   coverImageUrl?: string;
 }
 
+// Sprint 13 (CF2.7): six layout presets. The three V1 values stay valid on read and write and are
+// normalised by utils/layout.ts - no data migration.
+export type FormLayout =
+  | "classic"
+  | "card_stack"
+  | "guided"
+  | "steps"
+  | "split_feature"
+  | "compact"
+  | "single_column"
+  | "two_column";
+
+export const FORM_LAYOUT_VALUES: FormLayout[] = [
+  "classic",
+  "card_stack",
+  "guided",
+  "steps",
+  "split_feature",
+  "compact",
+  "single_column",
+  "two_column",
+];
+
+// Sprint 13 (D1.1): who may respond. A form with no stored value is "open" (Mode 1) - that is what
+// every pre-Sprint-13 form is, which is why there is deliberately NO schema default: a Mongoose default
+// is applied when a document is read, and would silently turn every existing form into Mode 2.
+export type AccessMode = "open" | "tracked" | "login";
+export const ACCESS_MODE_VALUES: AccessMode[] = ["open", "tracked", "login"];
+
 export interface IFormSettings {
   successMessage?: string;
   responseLimitEnabled?: boolean;
   responseLimit?: number;
   closeDate?: string;
   honeypotEnabled?: boolean;
-  layout?: "single_column" | "two_column" | "compact";
+  layout?: FormLayout;
+  accessMode?: AccessMode;
 }
 
 export interface IForm extends Document {
@@ -85,6 +115,13 @@ export interface IForm extends Document {
   slug?: string;
   publishedSlug?: string;
   publishedAt?: Date;
+  // Sprint 13 (CF5.6): Archive - indefinite, intentional, never expires. Distinct from Trash.
+  archivedAt?: Date | null;
+  archivedBy?: mongoose.Types.ObjectId | null;
+  // Sprint 13 (CF5.5): Trash - reversible soft delete, purged after 30 days by the retention sweep.
+  // Every Form find/count excludes these unless the query sets `includeDeleted` (see the hook below).
+  deletedAt?: Date | null;
+  deletedBy?: mongoose.Types.ObjectId | null;
   viewsCount?: number;
   branding?: IBranding;
   settings?: IFormSettings;
@@ -180,8 +217,12 @@ export const FormSettingsSchema = new Schema<IFormSettings>(
     honeypotEnabled: { type: Boolean, default: false },
     layout: {
       type: String,
-      enum: ["single_column", "two_column", "compact"],
+      enum: FORM_LAYOUT_VALUES,
       default: "single_column",
+    },
+    accessMode: {
+      type: String,
+      enum: ACCESS_MODE_VALUES,
     },
   },
   { _id: false }
@@ -221,6 +262,10 @@ const FormSchema = new Schema<IForm>(
     slug: { type: String, unique: true, sparse: true, index: true },
     publishedSlug: { type: String, unique: true, sparse: true, index: true },
     publishedAt: { type: Date },
+    archivedAt: { type: Date, default: null, index: true },
+    archivedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    deletedAt: { type: Date, default: null, index: true },
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     viewsCount: { type: Number, default: 0 },
     branding: { type: BrandingSchema, default: {} },
     settings: { type: FormSettingsSchema, default: {} },
@@ -249,6 +294,18 @@ const FormSchema = new Schema<IForm>(
 // Form lists sort by newest first within one workspace, or within one creator's personal space.
 FormSchema.index({ workspaceId: 1, createdAt: -1 });
 FormSchema.index({ createdBy: 1, workspaceId: 1, createdAt: -1 });
+
+// Trash (CF5.5). A form in Trash must be invisible to every normal read path - lists, lookups by id,
+// the public slug, counts, permission resolution - so the exclusion lives in ONE place instead of
+// being remembered at every call site. Maintenance code that has to see trashed forms (Trash itself,
+// the retention sweep, workspace/account deletion) opts in with `.setOptions({ includeDeleted: true })`.
+// A query that names `deletedAt` itself is left alone.
+FormSchema.pre(["find", "findOne", "countDocuments", "findOneAndUpdate"], function (this: any) {
+  if (this.getOptions?.().includeDeleted) return;
+  const filter = this.getFilter?.() ?? {};
+  if (Object.prototype.hasOwnProperty.call(filter, "deletedAt")) return;
+  this.where({ deletedAt: null });
+});
 
 const Form = mongoose.model<IForm>("Form", FormSchema);
 export default Form;

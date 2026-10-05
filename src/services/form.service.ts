@@ -18,6 +18,7 @@ import { logWorkspaceEvent } from "./event.service";
 import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
 import { evaluateReadiness } from "./readiness.service";
 import { defaultAccessModeForNewForms } from "../utils/accessMode";
+import Workspace from "../models/Workspace";
 
 const MAX_SLUG_ATTEMPTS = 5;
 
@@ -49,6 +50,29 @@ export const closeExpiredForms = async (): Promise<number> => {
   if (!expired.length) return 0;
   const result = await Form.updateMany({ _id: { $in: expired }, status: "published" }, { $set: { status: "closed" } });
   return result.modifiedCount;
+};
+
+// The only branding keys a workspace default may carry into a form. Anything else in the (free-form) workspace
+// record is ignored rather than copied.
+const BRANDING_DEFAULT_KEYS = [
+  "primaryColor",
+  "logoUrl",
+  "coverImageUrl",
+  "buttonStyle",
+  "buttonRadius",
+  "coverPosition",
+  "showProgress",
+  "spacing",
+] as const;
+
+const pickBrandingDefaults = (branding: unknown): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  if (!branding || typeof branding !== "object") return out;
+  for (const key of BRANDING_DEFAULT_KEYS) {
+    const value = (branding as any)[key];
+    if (value !== undefined && value !== null && value !== "") out[key] = value;
+  }
+  return out;
 };
 
 export class FormService {
@@ -154,6 +178,15 @@ export class FormService {
       formDetails.slug = `${base}-${randomSuffix}`.replace(/-+/g, "-");
     }
     formDetails.schemaVersion = 1;
+    // A new workspace form starts from the workspace's branding defaults (Settings > Branding says so). Anything the
+    // caller sent explicitly wins; existing forms are never touched. Personal forms have no workspace defaults.
+    if (workspaceId) {
+      const ws = await Workspace.findById(workspaceId).select("branding").lean();
+      const defaults = pickBrandingDefaults(ws?.branding);
+      if (Object.keys(defaults).length > 0) {
+        formDetails.branding = { ...defaults, ...(formDetails.branding as any) };
+      }
+    }
     // Sprint 13 (D1.1): an explicit mode wins; otherwise the configured default for NEW forms. Existing
     // forms are never touched here - a form with no stored mode is read as "open".
     if (!formDetails.settings?.accessMode) {

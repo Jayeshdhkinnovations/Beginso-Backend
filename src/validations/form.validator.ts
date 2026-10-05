@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
-import { ACCESS_MODE_VALUES, AccessMode, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, BUTTON_RADII, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -189,6 +189,11 @@ const brandingSchema = z.object({
     .optional(),
   logoUrl: z.string().trim().optional(),
   coverImageUrl: z.string().trim().optional(),
+  buttonStyle: z.enum(BUTTON_STYLES).optional(),
+  buttonRadius: z.enum(BUTTON_RADII).optional(),
+  coverPosition: z.enum(COVER_POSITIONS).optional(),
+  showProgress: z.boolean().optional(),
+  spacing: z.enum(FORM_SPACINGS).optional(),
 });
 
 const settingsSchema = z.object({

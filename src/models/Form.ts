@@ -58,10 +58,22 @@ export interface IFormField {
   logicRules?: ILogicRule[];
 }
 
+// Sprint 13 (CF2.3, wireframe "Branding controls"): a curated set of theme choices - a handful of good options
+// rather than a free-form editor, so every form looks professional. All optional; absent = the default.
+export const BUTTON_STYLES = ["solid", "outline"] as const;
+export const BUTTON_RADII = ["4px", "8px", "16px"] as const;
+export const COVER_POSITIONS = ["center", "top", "bottom"] as const;
+export const FORM_SPACINGS = ["compact", "comfortable", "spacious"] as const;
+
 export interface IBranding {
   primaryColor?: string;
   logoUrl?: string;
   coverImageUrl?: string;
+  buttonStyle?: (typeof BUTTON_STYLES)[number];
+  buttonRadius?: (typeof BUTTON_RADII)[number];
+  coverPosition?: (typeof COVER_POSITIONS)[number];
+  showProgress?: boolean;
+  spacing?: (typeof FORM_SPACINGS)[number];
 }
 
 // Sprint 13 (CF2.7): six layout presets. The three V1 values stay valid on read and write and are
@@ -204,6 +216,11 @@ const BrandingSchema = new Schema<IBranding>(
     primaryColor: { type: String },
     logoUrl: { type: String },
     coverImageUrl: { type: String },
+    buttonStyle: { type: String, enum: BUTTON_STYLES },
+    buttonRadius: { type: String, enum: BUTTON_RADII },
+    coverPosition: { type: String, enum: COVER_POSITIONS },
+    showProgress: { type: Boolean },
+    spacing: { type: String, enum: FORM_SPACINGS },
   },
   { _id: false }
 );

@@ -161,7 +161,12 @@ export const patchCurrentWorkspace = async (req: Request, res: Response, next: N
       workspace.logo = logoUrl || "";
     }
     if (branding) {
-      workspace.branding = { ...workspace.branding, ...branding };
+      // Shallow merge, but a key sent as null is REMOVED - that is how a client clears a logo, a cover or a style
+      // choice back to its default (an omitted key is simply left as it was).
+      const merged: Record<string, any> = { ...(workspace.branding || {}), ...branding };
+      for (const key of Object.keys(merged)) if (merged[key] === null) delete merged[key];
+      workspace.branding = merged;
+      workspace.markModified("branding");
     }
     if (notificationPreferences) {
       workspace.notificationPreferences = {

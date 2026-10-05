@@ -1000,6 +1000,12 @@ export const getPublicFormBySlug = async (
       primaryColor: branding.primaryColor,
       logoUrl: branding.logoUrl,
       coverImageUrl: branding.coverImageUrl,
+      // Sprint 13: the form's own theme choices - respondents see the owner's design, never the admin theme.
+      buttonStyle: branding.buttonStyle,
+      buttonRadius: branding.buttonRadius,
+      coverPosition: branding.coverPosition,
+      showProgress: branding.showProgress,
+      spacing: branding.spacing,
     };
 
     const settings = form.settings || {};

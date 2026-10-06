@@ -174,7 +174,9 @@ describe("GET /api/analytics/overview", () => {
     expect(data.completed).toBe(2);
     expect(data.in_progress).toBe(1);
     expect(data.new).toBe(1);
-    expect(data.completionRate).toBe(50); // 2 completed / 4 total = 50%
+    // Sprint 14 (OQ-3): the stage-based figure is now `reviewedRate`; `completionRate` is submissions / views (null: no views).
+    expect(data.reviewedRate).toBe(50); // 2 completed / 4 total = 50%
+    expect(data.completionRate).toBeNull();
     expect(Array.isArray(data.statusDistribution)).toBe(true);
   });
 });

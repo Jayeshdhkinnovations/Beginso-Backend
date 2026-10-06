@@ -104,34 +104,18 @@ const buildTrendBuckets = (start: Date, end: Date, countsByDay: Map<string, numb
 };
 
 /**
- * Background Asynchronous Generator for CSV and PDF Reports.
+ * The response query a report exports. Shared by generation and by the row count recorded on `report.create`
+ * (Sprint 14, B1.4), so the number in the audit trail is the number of rows the file will hold.
  */
-export const generateReportAsync = async (reportId: string): Promise<void> => {
-  try {
-    ensureReportsDir();
-
-    const report = await ReportModel.findById(reportId);
-    if (!report || report.status === "completed" || report.status === "failed") {
-      return;
-    }
-
-    report.status = "processing";
-    await report.save();
-
-    // Resolve workspace forms
-    const forms = await Form.find({ workspaceId: report.workspaceId });
-    const formMap = new Map(forms.map((f) => [f._id.toString(), f]));
-    const workspaceFormIds = forms.map((f) => f._id);
-
-    const filters = report.filters || {};
-
+export const buildReportQuery = async (report: any, workspaceFormIds: any[]): Promise<any> => {
+  const filters: any = report.filters || {};
     // Sprint 12, BE 0.2 (B2.11): the export IS the list — same filter shape, same permission
     // scoping (workspace forms only), same deletedAt exclusion — built via the one shared helper
     // the bulk endpoint's filter target also uses, so the two never drift apart. `ids` bypasses
     // the filter entirely in favour of an explicit id list (still scoped to workspace forms below).
     let query: any;
     if (filters.ids && filters.ids.length > 0) {
-      const validIds = filters.ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+      const validIds = filters.ids.filter((id: string) => mongoose.Types.ObjectId.isValid(id));
       query = { _id: { $in: validIds }, formId: { $in: workspaceFormIds }, deletedAt: null };
     } else {
       query = await buildResponseFilterQuery(
@@ -153,6 +137,37 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
         query.status = filters.status;
       }
     }
+  return query;
+};
+
+export const countReportRows = async (report: any): Promise<number> => {
+  const forms = await Form.find({ workspaceId: report.workspaceId }).select("_id");
+  const query = await buildReportQuery(report, forms.map((f) => f._id));
+  return ResponseModel.countDocuments(query);
+};
+
+/**
+ * Background Asynchronous Generator for CSV and PDF Reports.
+ */
+export const generateReportAsync = async (reportId: string): Promise<void> => {
+  try {
+    ensureReportsDir();
+
+    const report = await ReportModel.findById(reportId);
+    if (!report || report.status === "completed" || report.status === "failed") {
+      return;
+    }
+
+    report.status = "processing";
+    await report.save();
+
+    // Resolve workspace forms
+    const forms = await Form.find({ workspaceId: report.workspaceId });
+    const formMap = new Map(forms.map((f) => [f._id.toString(), f]));
+    const workspaceFormIds = forms.map((f) => f._id);
+
+    const filters = report.filters || {};
+    const query = await buildReportQuery(report, workspaceFormIds);
 
     // Kept for the PDF's trend-chart range below.
     const fromDateObj: Date | null =

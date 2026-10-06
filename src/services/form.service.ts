@@ -19,6 +19,7 @@ import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
 import { evaluateReadiness } from "./readiness.service";
 import { defaultAccessModeForNewForms } from "../utils/accessMode";
 import Workspace from "../models/Workspace";
+import { queueActivityEmails } from "./notificationEmail.service";
 
 const MAX_SLUG_ATTEMPTS = 5;
 
@@ -831,6 +832,11 @@ export class FormService {
       if (currentCount >= form.settings.responseLimit) {
         await Form.updateOne({ _id: form._id }, { status: "closed" });
       }
+    }
+
+    // Sprint 14 (R1): email members who asked for new-response emails. Non-blocking; never for a test submission.
+    if (form.workspaceId && !options.isTest) {
+      queueActivityEmails({ kind: "new_response", formId: form._id, responseId: newResponse._id, eventKey: newResponse._id.toString() });
     }
 
     return newResponse;

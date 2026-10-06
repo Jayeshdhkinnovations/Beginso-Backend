@@ -21,7 +21,11 @@ export interface IAnalyticsOverviewData {
   completed: number;
   in_progress: number;
   new: number;
-  completionRate: number;
+  // Sprint 14: submissions / views (0-100), null when the form has no counted views.
+  completionRate: number | null;
+  // Sprint 14: the previous stage-based figure (completed / total).
+  reviewedRate: number;
+  views: number | null;
   statusDistribution: IStatusCount[];
   stageDistribution: IStageCount[];
   dateRange: {
@@ -95,7 +99,11 @@ export interface IFormSummaryRow {
   title: string;
   status: string;
   totalResponses: number;
-  completionRate: number;
+  completionRate: number | null;
+  reviewedRate: number;
+  views: number | null;
+  templateCategory: string | null;
+  templateId: string | null;
   sparkline: number[];
   updatedAt: string | Date;
 }

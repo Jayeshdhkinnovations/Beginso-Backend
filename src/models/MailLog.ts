@@ -2,12 +2,23 @@ import mongoose, { Schema, Document } from "mongoose";
 import crypto from "crypto";
 import { keyedHash } from "../utils/pepper";
 
+export type MailLogTemplate =
+  | "verification"
+  | "password_reset"
+  | "welcome"
+  // Sprint 14 (R1): in-product activity emails. Never contain answers, attachments or questions.
+  | "new_response"
+  | "mention"
+  | "assignment";
+
 export interface IMailLog extends Document {
-  template: "verification" | "password_reset" | "welcome";
+  template: MailLogTemplate;
   outcome: "sent" | "failed" | "queued" | "rate_limited";
   emailHash: string;
   firebaseUid?: string;
   requestId: string;
+  // Sprint 14: idempotency key for notification emails (one row per event + recipient). Unique when present.
+  dedupeKey?: string;
   provider: "resend" | "sendgrid" | "ses" | "postmark" | "smtp";
   errorCode?: string;
   latencyMs?: number;
@@ -18,7 +29,7 @@ const MailLogSchema = new Schema<IMailLog>(
   {
     template: {
       type: String,
-      enum: ["verification", "password_reset", "welcome"],
+      enum: ["verification", "password_reset", "welcome", "new_response", "mention", "assignment"],
       required: true,
       index: true,
     },
@@ -42,6 +53,7 @@ const MailLogSchema = new Schema<IMailLog>(
       required: true,
       index: true,
     },
+    dedupeKey: { type: String },
     provider: {
       type: String,
       enum: ["resend", "sendgrid", "ses", "postmark", "smtp"],
@@ -65,6 +77,8 @@ const MailLogSchema = new Schema<IMailLog>(
   }
 );
 
+MailLogSchema.index({ dedupeKey: 1 }, { unique: true, partialFilterExpression: { dedupeKey: { $type: "string" } } });
+
 export const MailLog = mongoose.model<IMailLog>("MailLog", MailLogSchema);
 
 export const computeEmailHash = (email: string): string => {
@@ -73,7 +87,7 @@ export const computeEmailHash = (email: string): string => {
 };
 
 export const recordMailLog = async (data: {
-  template: "verification" | "password_reset" | "welcome";
+  template: MailLogTemplate;
   outcome: "sent" | "failed" | "queued" | "rate_limited";
   email: string;
   firebaseUid?: string;

@@ -14,6 +14,7 @@
     "migrate:theme": "ts-node src/scripts/migrateUserTheme.ts",
     "migrate:stages": "ts-node src/scripts/migrateStagesFromStatus.ts",
     "migrate:access-mode": "ts-node src/scripts/migrateAccessMode.ts",
+    "migrate:sprint14": "ts-node src/scripts/migrateSprint14.ts",
     "backfill:readstate": "ts-node src/scripts/backfillReadState.ts",
     "backfill:search": "ts-node src/scripts/backfillResponseSearchText.ts",
     "backfill:duplicates": "ts-node src/scripts/backfillDuplicateDetection.ts",

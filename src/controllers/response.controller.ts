@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { queueActivityEmails } from "../services/notificationEmail.service";
 import { recordEvent } from "../services/event.service";
 import { ZodError } from "zod";
 import { ResponseService } from "../services/response.service";
@@ -257,13 +258,22 @@ export const updateResponseStatus = async (
       // Self-assignment writes no notification.
       const actorId = authReq.user._id.toString();
       if (assigneeParsed.assigneeId && assigneeParsed.assigneeId !== actorId && workspaceId) {
-        await Notification.create({
+        const notification = await Notification.create({
           userId: assigneeParsed.assigneeId,
           workspaceId,
           type: "assignment",
           title: "Response assigned to you",
           message: `${authReq.user.fullName || authReq.user.email} assigned a response to you`,
-        }).catch(() => undefined);
+        }).catch(() => null);
+        if (notification) {
+          queueActivityEmails({
+            kind: "assignment",
+            formId: updatedResponse?.formId ?? (assignedResponse as any)?.formId,
+            responseId: String(id),
+            eventKey: notification._id.toString(),
+            recipientUserId: assigneeParsed.assigneeId,
+          });
+        }
       }
     }
 

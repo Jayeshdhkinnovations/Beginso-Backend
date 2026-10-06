@@ -29,6 +29,7 @@ import {
   unarchiveForm,
   createTestSubmission,
 } from "../controllers/formLifecycle.controller";
+import { listCharts, createChart, updateChart, deleteChart, getChartData, previewChart } from "../controllers/chart.controller";
 import { getScoreComparison } from "../controllers/score.controller";
 
 const router = Router();
@@ -66,5 +67,15 @@ router.get("/:formId/submissions", protect as any, blockSuspended as any, requir
 
 // Score comparison (Sprint 12, BE 0.5 / B6.1)
 router.get("/:formId/score-comparison", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getScoreComparison);
+
+// Saved charts (Sprint 14, BE 0.3 / B5.5 pt 2). Read = analytics:read, change = forms:write; both honour per-form grants.
+// `preview` is a POST only because it carries a definition; it reads, so it needs analytics:read.
+const formResource = { resourceType: "form" as const };
+router.get("/:formId/charts", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, listCharts);
+router.post("/:formId/charts/preview", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, previewChart);
+router.post("/:formId/charts", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, createChart);
+router.get("/:formId/charts/:chartId/data", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, getChartData);
+router.patch("/:formId/charts/:chartId", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, updateChart);
+router.delete("/:formId/charts/:chartId", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, deleteChart);
 
 export default router;

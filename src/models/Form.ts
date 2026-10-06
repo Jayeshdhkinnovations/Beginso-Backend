@@ -135,6 +135,10 @@ export interface IForm extends Document {
   deletedAt?: Date | null;
   deletedBy?: mongoose.Types.ObjectId | null;
   viewsCount?: number;
+  // Sprint 14 (B1.2): set only when the form was created from a template (POST /api/templates/:id/use). Null
+  // for every other form, and for forms made before Sprint 14 - there is no backfill (OQ-4).
+  templateId?: mongoose.Types.ObjectId | null;
+  templateCategory?: string | null;
   branding?: IBranding;
   settings?: IFormSettings;
   createdAt: Date;
@@ -284,6 +288,8 @@ const FormSchema = new Schema<IForm>(
     deletedAt: { type: Date, default: null, index: true },
     deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     viewsCount: { type: Number, default: 0 },
+    templateId: { type: Schema.Types.ObjectId, ref: "Template", default: null },
+    templateCategory: { type: String, default: null },
     branding: { type: BrandingSchema, default: {} },
     settings: { type: FormSettingsSchema, default: {} },
   },

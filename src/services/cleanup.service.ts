@@ -6,6 +6,7 @@ import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import Upload from "../models/Upload";
 import FormAccessGrant from "../models/FormAccessGrant";
+import SavedChart from "../models/SavedChart";
 import Invitation from "../models/Invitation";
 import Report from "../models/Report";
 import Notification from "../models/Notification";
@@ -85,6 +86,7 @@ export const deleteFormData = async (formId: string): Promise<void> => {
   await removeUploads({ path: { $regex: segmentPattern(id) } }, id);
   await ResponseModel.deleteMany({ formId: id });
   await FormAccessGrant.deleteMany({ formId: id });
+  await SavedChart.deleteMany({ formId: id });
 };
 
 export const deleteWorkspaceData = async (workspaceId: mongoose.Types.ObjectId | string): Promise<void> => {

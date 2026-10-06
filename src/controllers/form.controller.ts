@@ -1074,6 +1074,11 @@ const cleanupUploadedFiles = async (files: Express.Multer.File[], deleteFromDb =
 // a form that is not open for responses counts nothing. Always 204: it must never disturb the page.
 export const recordFormView = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Sprint 14 (F15): a preview load (builder / owner checking the page) is never a view.
+    if (["1", "true"].includes(String(req.query.preview ?? "").toLowerCase())) {
+      res.status(204).end();
+      return;
+    }
     const slug = String(req.params.slug || "");
     const form = await formService.getPublicFormBySlug(slug, { readOnly: true });
     const hourWindow = Math.floor(Date.now() / 3_600_000);
@@ -1894,6 +1899,9 @@ export const getFormOverview = async (req: Request, res: Response, next: NextFun
         responseCount: totalResponses,
         responseCountThisWeek: responseCountThisWeek,
         completionRate: completionRate,
+        views: typeof views === "number" && views > 0 ? views : null,
+        templateId: formDoc.templateId ? formDoc.templateId.toString() : null,
+        templateCategory: formDoc.templateCategory ?? null,
         createdAt: formDoc.createdAt,
         updatedAt: formDoc.updatedAt
       }

@@ -228,6 +228,9 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
       ...(template.workspaceId
         ? { settings: (template.toObject() as any).settings, branding: (template.toObject() as any).branding }
         : {}),
+      // Sprint 14 (B1.2): remember where the form came from so Insights can pick a template-shaped dashboard.
+      templateId: template._id,
+      templateCategory: template.category ?? null,
       status: "draft" as const, // Default to draft, or active as per project standard (Form default is draft/active, let's keep draft since "a duplicate always starts as a draft" in duplicate controller)
     };
 

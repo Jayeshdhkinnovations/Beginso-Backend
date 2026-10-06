@@ -167,7 +167,7 @@ export const requirePermission = (
 
       // Check for Per-Form Access Grant (BE 0.6) before workspace checks
       // Works identically whether form's workspaceId is set or null (personal form)
-      if (options?.resourceType === "form" || options?.resourceType === "response") {
+      if (options?.resourceType === "form" || options?.resourceType === "response" || options?.resourceType === "report") {
         const rawParam = req.params.formId || req.params.responseId || req.params.id;
         const paramId = Array.isArray(rawParam) ? rawParam[0] : rawParam;
 
@@ -180,6 +180,15 @@ export const requirePermission = (
             const resp = await ResponseModel.findById(paramId).select("formId").lean();
             if (resp && resp.formId) {
               targetForm = await Form.findById(resp.formId).select("_id workspaceId").lean();
+            }
+          } else if (options.resourceType === "report") {
+            // A report on one form is reachable through that form's grant (same BE 0.6 mechanism);
+            // the controller then re-checks the form. Workspace-wide reports never take this path.
+            const rep = await Report.findById(paramId).select("workspaceId filters").lean();
+            const rf = rep?.filters?.formId;
+            if (rep && rf && mongoose.Types.ObjectId.isValid(rf)) {
+              const f: any = await Form.findById(rf).select("_id workspaceId").lean();
+              if (f && String(f.workspaceId ?? "") === rep.workspaceId.toString()) targetForm = f;
             }
           }
 

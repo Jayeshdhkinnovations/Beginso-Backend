@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { recordMailLog } from "../models/MailLog";
 import { renderRespondentLinkEmail } from "./respondentMail";
+import { renderActivityEmail, ActivityEmailInput } from "./notificationMail";
 
 export type AuthMailType =
   | "verify_email"
@@ -12,7 +13,9 @@ export type AuthMailType =
   | "password_changed_success"
   | "workspace_invitation"
   // Sprint 13 (A5.5): the signed-link email a respondent gets. Contains no response data.
-  | "respondent_submission_link";
+  | "respondent_submission_link"
+  // Sprint 14 (R1): new response / mention / assignment. Contains no response data (notificationMail.ts).
+  | "activity_notification";
 
 export interface SendMailOptions {
   to: string;
@@ -28,6 +31,8 @@ export interface SendMailOptions {
   // respondent_submission_link only
   formName?: string;
   expiresAt?: Date;
+  // activity_notification only
+  activity?: ActivityEmailInput;
 }
 
 const EMAIL_LOGO_URL = process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-full-light.svg";
@@ -61,7 +66,8 @@ class MailService {
     return this.transporter;
   }
 
-  async sendMail(options: SendMailOptions): Promise<void> {
+  // Resolves true when the provider accepted the message, false when it failed (never throws).
+  async sendMail(options: SendMailOptions): Promise<boolean | void> {
     const startTime = Date.now();
     const reqId = options.requestId || `req_${crypto.randomBytes(8).toString("hex")}`;
     const fromName = process.env.SMTP_FROM_NAME || "Beginso";
@@ -442,6 +448,11 @@ class MailService {
         </body>
         </html>
       `;
+    } else if (template === "activity_notification" && options.activity) {
+      const rendered = renderActivityEmail(options.activity);
+      subject = rendered.subject;
+      textContent = rendered.text;
+      htmlContent = rendered.html;
     } else if (template === "respondent_submission_link") {
       // Rendered by a pure function so the "no answers in the email" rule is provable (respondentMail.ts).
       const rendered = renderRespondentLinkEmail({
@@ -626,6 +637,7 @@ class MailService {
           latencyMs: Date.now() - startTime,
         });
       }
+      return true;
     } catch (err: any) {
       console.error(`❌ Failed to send ${template} email to ${to}:`, err.message);
 
@@ -642,6 +654,7 @@ class MailService {
         });
       }
     }
+    return false;
   }
 }
 

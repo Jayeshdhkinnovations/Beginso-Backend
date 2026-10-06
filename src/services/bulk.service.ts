@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { queueActivityEmails } from "./notificationEmail.service";
 import ResponseModel, { IResponse as IResponseDoc } from "../models/Response";
 import Form from "../models/Form";
 import TagModel from "../models/Tag";
@@ -200,13 +201,16 @@ export class BulkService {
           { $set: { assigneeId: action.assigneeId ? new mongoose.Types.ObjectId(action.assigneeId) : null } }
         );
         if (action.assigneeId && action.assigneeId !== context.actor.id && form.workspaceId) {
-          await Notification.create({
+          const notification = await Notification.create({
             userId: action.assigneeId,
             workspaceId: form.workspaceId,
             type: "assignment",
             title: "Response assigned to you",
             message: `${context.actor.name} assigned a response to you`,
-          }).catch(() => undefined);
+          }).catch(() => null);
+          if (notification) {
+            queueActivityEmails({ kind: "assignment", formId: form._id, responseId: response._id, eventKey: notification._id.toString(), recipientUserId: action.assigneeId });
+          }
         }
         return { id, assigneeId: prevAssigneeId };
       }

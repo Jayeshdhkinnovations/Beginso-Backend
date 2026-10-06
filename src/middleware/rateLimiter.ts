@@ -155,6 +155,15 @@ export const respondResendRateLimiter = createRateLimiter({
   log: true,
 });
 
+// Sprint 14 (B2.4): GET /api/search, per signed-in user. The palette sends one request per pause in typing, so
+// the default is generous; SEARCH_RATE_LIMIT_MAX tunes it (0 disables, for tests and load runs).
+export const searchRateLimiter = createRateLimiter({
+  name: "search",
+  limit: () => ({ max: intEnv("SEARCH_RATE_LIMIT_MAX", 120), windowMs: 60000 }),
+  by: (req, ip) => (req as any).user?._id?.toString() ?? ip,
+  log: true,
+});
+
 export const clearRateLimitStore = async (): Promise<void> => {
   await RateLimitBucket.deleteMany({});
 };

@@ -32,6 +32,8 @@ export interface IReport extends Document {
   errorMessage?: string;
   filePath?: string;
   fileSize?: number;
+  // Sprint 14 (B1.4): rows the export holds, counted when the job was created. Audit only.
+  rowCount?: number;
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -71,6 +73,9 @@ const ReportSchema = new Schema<IReport>(
       type: String,
     },
     fileSize: {
+      type: Number,
+    },
+    rowCount: {
       type: Number,
     },
     expiresAt: {

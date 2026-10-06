@@ -8,6 +8,8 @@ import ReportModel from "../models/Report";
 import Form from "../models/Form";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { kickReportQueue } from "../services/reportQueue";
+import { countReportRows } from "../services/report.service";
+import { userHasAccessToForm } from "../utils/formAccess";
 
 const reportCreateSchema = z.object({
   format: z.enum(["csv", "pdf"]),
@@ -125,7 +127,15 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       updatedAt: report.updatedAt,
     };
 
-    await recordEvent(req, userWorkspaceId, "report.create", { id: report._id, type: "report", label: `${format} report` }, { format, formId: formId ?? null });
+    // Sprint 14 (B1.4): who / which form / how many rows / when. The count uses the same query the job will run.
+    let rows: number | null = null;
+    try {
+      rows = await countReportRows(report);
+      await ReportModel.updateOne({ _id: report._id }, { $set: { rowCount: rows } });
+    } catch {
+      // the audit row is still written, just without a count
+    }
+    await recordEvent(req, userWorkspaceId, "report.create", { id: report._id, type: "report", label: `${format} report` }, { reportId: report._id.toString(), format, formId: formId ?? null, rows });
 
     res.status(202).json({
       success: true,
@@ -211,6 +221,44 @@ export const getReports = async (req: Request, res: Response, next: NextFunction
 };
 
 /**
+ * Shared by getReportById and getReportFile (Sprint 14, P5: the download path runs the same per-form
+ * check as the read path). Sends the error response and returns null unless the caller may read the
+ * report. Workspace-wide reports (no formId) rely on requirePermission: workspace membership + reports:read.
+ * A report whose form is trashed/removed, or belongs to another workspace, is a 404.
+ */
+const loadReadableReport = async (req: Request, res: Response, workspaceId: string): Promise<any | null> => {
+  const reportId = req.params.id as string;
+  if (!mongoose.Types.ObjectId.isValid(reportId)) {
+    res.status(400).json({ success: false, message: "Invalid report ID" });
+    return null;
+  }
+  const report = await ReportModel.findById(reportId);
+  if (!report) {
+    res.status(404).json({ success: false, message: "Report not found" });
+    return null;
+  }
+  if (report.workspaceId.toString() !== workspaceId) {
+    res.status(403).json({ success: false, message: "Access denied to report from another workspace" });
+    return null;
+  }
+  const formId = report.filters?.formId;
+  if (formId) {
+    // Form's default query hook hides trashed forms.
+    const form = mongoose.Types.ObjectId.isValid(formId) ? await Form.findById(formId).select("workspaceId").lean() : null;
+    if (!form || String(form.workspaceId ?? "") !== workspaceId) {
+      res.status(404).json({ success: false, message: "Report not found" });
+      return null;
+    }
+    const user = (req as any).user;
+    if (user.role !== "super_admin" && !(await userHasAccessToForm(String(user._id), formId, workspaceId))) {
+      res.status(403).json({ success: false, message: "You do not have access to this report's form" });
+      return null;
+    }
+  }
+  return report;
+};
+
+/**
  * GET /api/reports/:id
  * Workspace-scoped report detail
  */
@@ -222,22 +270,8 @@ export const getReportById = async (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    const reportId = req.params.id as string;
-    if (!mongoose.Types.ObjectId.isValid(reportId)) {
-      res.status(400).json({ success: false, message: "Invalid report ID" });
-      return;
-    }
-
-    const report = await ReportModel.findById(reportId);
-    if (!report) {
-      res.status(404).json({ success: false, message: "Report not found" });
-      return;
-    }
-
-    if (report.workspaceId.toString() !== userWorkspaceId) {
-      res.status(403).json({ success: false, message: "Access denied to report from another workspace" });
-      return;
-    }
+    const report = await loadReadableReport(req, res, userWorkspaceId);
+    if (!report) return;
 
     const now = new Date();
     let currentStatus = report.status;
@@ -287,22 +321,8 @@ export const getReportFile = async (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    const reportId = req.params.id as string;
-    if (!mongoose.Types.ObjectId.isValid(reportId)) {
-      res.status(400).json({ success: false, message: "Invalid report ID" });
-      return;
-    }
-
-    const report = await ReportModel.findById(reportId);
-    if (!report) {
-      res.status(404).json({ success: false, message: "Report not found" });
-      return;
-    }
-
-    if (report.workspaceId.toString() !== userWorkspaceId) {
-      res.status(403).json({ success: false, message: "Access denied to report from another workspace" });
-      return;
-    }
+    const report = await loadReadableReport(req, res, userWorkspaceId);
+    if (!report) return;
 
     const now = new Date();
     if (report.status === "expired" || (report.expiresAt && report.expiresAt < now)) {
@@ -340,7 +360,22 @@ export const getReportFile = async (req: Request, res: Response, next: NextFunct
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
+    // Sprint 14 (B1.4): record the download once the file has actually gone out; an aborted or failed
+    // transfer never fires "finish", so it is never logged as a success.
+    res.on("finish", () => {
+      recordEvent(
+        req,
+        userWorkspaceId,
+        "report.download",
+        { id: report._id, type: "report", label: `${report.format} report` },
+        { reportId: report._id.toString(), formId: report.filters?.formId ?? null, format: report.format, rows: report.rowCount ?? null }
+      ).catch(() => undefined);
+    });
     const readStream = fs.createReadStream(resolvedPath);
+    readStream.on("error", (err) => {
+      if (!res.headersSent) next(err);
+      else res.destroy(err);
+    });
     readStream.pipe(res);
   } catch (error) {
     next(error);

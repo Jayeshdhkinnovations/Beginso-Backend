@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { queueActivityEmails } from "./notificationEmail.service";
 import Note, { INote } from "../models/Note";
 import ResponseModel from "../models/Response";
 import Form from "../models/Form";
@@ -123,18 +124,23 @@ export class NoteService {
     authorId: string;
     authorName: string;
     workspaceId: string | null;
+    formId: string;
+    responseId: string;
   }): Promise<void> {
-    const { mentionIds, previouslyMentionedIds, authorId, authorName, workspaceId } = params;
+    const { mentionIds, previouslyMentionedIds, authorId, authorName, workspaceId, formId, responseId } = params;
     if (!workspaceId) return; // no workspace feed/notification target for personal-form responses
     const newlyMentioned = mentionIds.filter((id) => id !== authorId && !previouslyMentionedIds.has(id));
     for (const userId of newlyMentioned) {
-      await Notification.create({
+      const notification = await Notification.create({
         userId,
         workspaceId,
         type: "mention",
         title: "You were mentioned in a note",
         message: `${authorName} mentioned you in a note`,
-      }).catch(() => undefined);
+      }).catch(() => null);
+      if (notification) {
+        queueActivityEmails({ kind: "mention", formId, responseId, eventKey: notification._id.toString(), recipientUserId: userId });
+      }
     }
   }
 
@@ -161,6 +167,8 @@ export class NoteService {
       authorId: actor.id,
       authorName: actor.name,
       workspaceId,
+      formId: form._id.toString(),
+      responseId,
     });
 
     if (workspaceId) {
@@ -214,6 +222,8 @@ export class NoteService {
       authorId: actorId,
       authorName: note!.authorName,
       workspaceId,
+      formId: form._id.toString(),
+      responseId,
     });
 
     return this.toDTO(note!, form._id.toString(), workspaceId);

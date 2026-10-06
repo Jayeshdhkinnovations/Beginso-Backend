@@ -5,6 +5,8 @@ import Form from "../models/Form";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import ResponseModel from "../models/Response";
 import StageModel from "../models/Stage";
+import { parseToDate } from "../utils/dateRange";
+import { computeCompletionRate, lifetimeSubmissionCounts } from "../utils/completionRate";
 import {
   AnalyticsOverviewResponse,
   AnalyticsQuestionsResponse,
@@ -84,7 +86,7 @@ export const getOverview = async (req: Request, res: Response, next: NextFunctio
     }
 
     if (toStr && toStr !== "all") {
-      toDate = new Date(toStr);
+      toDate = parseToDate(toStr);
       if (!isNaN(toDate.getTime())) {
         matchStage.submittedAt = matchStage.submittedAt || {};
         matchStage.submittedAt.$lte = toDate;
@@ -115,7 +117,12 @@ export const getOverview = async (req: Request, res: Response, next: NextFunctio
       else if (item._id === "new") newCount = cnt;
     }
 
-    const completionRate = total > 0 ? Number(((completed / total) * 100).toFixed(2)) : 0;
+    // Sprint 14 (OQ-3): the stage-based figure (completed / total) is `reviewedRate`. `completionRate` is
+    // submissions / views, null until the form has a counted view.
+    const reviewedRate = total > 0 ? Number(((completed / total) * 100).toFixed(2)) : 0;
+    const views = typeof form.viewsCount === "number" ? form.viewsCount : 0;
+    const lifetime = (await lifetimeSubmissionCounts([form._id])).get(form._id.toString()) ?? 0;
+    const completionRate = computeCompletionRate(lifetime, views);
 
     // Stage breakdown (Sprint 12): same match window as statusDistribution above, grouped by stageId.
     const stageStats = await ResponseModel.aggregate([
@@ -166,6 +173,8 @@ export const getOverview = async (req: Request, res: Response, next: NextFunctio
         in_progress,
         new: newCount,
         completionRate,
+        reviewedRate,
+        views: views > 0 ? views : null,
         statusDistribution,
         stageDistribution,
         dateRange: {
@@ -210,7 +219,7 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
     }
 
     if (toStr && toStr !== "all") {
-      toDate = new Date(toStr);
+      toDate = parseToDate(toStr);
       if (!isNaN(toDate.getTime())) {
         matchStage.submittedAt = matchStage.submittedAt || {};
         matchStage.submittedAt.$lte = toDate;
@@ -231,6 +240,9 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
       }
       if (field.label && answers[field.label] !== undefined) {
         return answers[field.label];
+      }
+      if (field.label && answers[String(field.label).trim()] !== undefined) {
+        return answers[String(field.label).trim()];
       }
       const altId = field.id || (field._id ? field._id.toString() : undefined);
       if (altId && answers[altId] !== undefined) {
@@ -376,7 +388,7 @@ export const getTrends = async (req: Request, res: Response, next: NextFunction)
     }
 
     if (toStr && toStr !== "all") {
-      toDate = new Date(toStr);
+      toDate = parseToDate(toStr);
       if (!isNaN(toDate.getTime())) {
         matchStage.submittedAt = matchStage.submittedAt || {};
         matchStage.submittedAt.$lte = toDate;
@@ -460,7 +472,7 @@ export const getForms = async (req: Request, res: Response, next: NextFunction):
       }
     }
     if (toStr && toStr !== "all") {
-      const toDate = new Date(toStr);
+      const toDate = parseToDate(toStr);
       if (!isNaN(toDate.getTime())) {
         matchStage.submittedAt = matchStage.submittedAt || {};
         matchStage.submittedAt.$lte = toDate;
@@ -513,10 +525,15 @@ export const getForms = async (req: Request, res: Response, next: NextFunction):
       sparklineMap.get(fId)!.push(sg.count || 0);
     }
 
+    const lifetimeCounts = await lifetimeSubmissionCounts(formIds);
+
     const formsSummaryRows = forms.map((form) => {
       const fId = form._id.toString();
       const st = statsMap.get(fId) || { total: 0, completed: 0 };
-      const completionRate = st.total > 0 ? Number(((st.completed / st.total) * 100).toFixed(2)) : 0;
+      // Sprint 14: reviewedRate = the old stage-based figure; completionRate = submissions / views (nullable).
+      const reviewedRate = st.total > 0 ? Number(((st.completed / st.total) * 100).toFixed(2)) : 0;
+      const views = form.viewsCount || 0;
+      const completionRate = computeCompletionRate(lifetimeCounts.get(fId) ?? 0, views);
       const sparkline = sparklineMap.get(fId) || [0, 0, 0, 0, 0, 0, 0];
       return {
         formId: fId,
@@ -524,6 +541,10 @@ export const getForms = async (req: Request, res: Response, next: NextFunction):
         status: form.status,
         totalResponses: st.total,
         completionRate,
+        reviewedRate,
+        views: views > 0 ? views : null,
+        templateCategory: form.templateCategory ?? null,
+        templateId: form.templateId ? form.templateId.toString() : null,
         sparkline,
         updatedAt: form.updatedAt,
       };

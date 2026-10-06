@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import mongoose from "mongoose";
 import { Logger } from "../utils/logger";
+import { getRealClientIp, hashIp } from "../utils/ip";
 import { MAX_UPLOAD_MB, MAX_UPLOAD_FILES } from "../utils/uploadLimits";
 
 // Bug fix: Multer's own default messages ("File too large", "Too many files", "Field value too
@@ -35,7 +36,7 @@ export const errorHandler = (
   if (err.name === "MulterError") statusCode = 400;
 
   // Never log headers, query or body: they hold cookies, OTP codes, emails and public-form answers.
-  const context = { method: req.method, ip: req.ip || "unknown" };
+  const context = { method: req.method, ipHash: hashIp(getRealClientIp(req)) };
   if (statusCode >= 500) {
     Logger.error("Global Error Interceptor", err, context, req.originalUrl, statusCode);
   } else {

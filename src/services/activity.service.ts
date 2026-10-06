@@ -75,15 +75,28 @@ const toActivityType = (action: string, metadata: Record<string, any> | undefine
 export class ActivityService {
   async forResponse(responseId: string, workspaceId: string | null): Promise<ActivityItem[]> {
     if (!mongoose.Types.ObjectId.isValid(responseId)) notFound("Response not found");
-    const response = await ResponseModel.findById(responseId).select("formId").lean();
+    const response = await ResponseModel.findById(responseId).select("formId submittedAt createdAt").lean();
     if (!response) notFound("Response not found");
 
     const form = await Form.findById(response!.formId).select("workspaceId").lean();
     const scopeWorkspaceId = workspaceId || (form?.workspaceId ? form.workspaceId.toString() : null);
 
     // Personal (workspace-less) responses have no workspace event feed (event.service.ts's own
-    // convention — see recordEvent's comment), so there is simply nothing to read.
-    if (!scopeWorkspaceId) return [];
+    // convention), so the only fact derivable is the submission itself, taken from the response row.
+    // ponytail: stage/note/score history of personal responses is not recorded anywhere; add a
+    // personal event store if the owner wants it.
+    if (!scopeWorkspaceId) {
+      return [
+        {
+          id: `submitted-${responseId}`,
+          type: "submitted",
+          actorName: "Respondent",
+          actorRemoved: false,
+          at: (response as any).submittedAt || (response as any).createdAt,
+          detail: undefined,
+        },
+      ];
+    }
 
     // Newest first (Sprint 12 close-out change — the most recent activity is what a reviewer
     // opening the sidebar actually wants to see without scrolling).

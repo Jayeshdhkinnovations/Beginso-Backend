@@ -167,21 +167,26 @@ export const requirePermission = (
 
       // Check for Per-Form Access Grant (BE 0.6) before workspace checks
       // Works identically whether form's workspaceId is set or null (personal form)
-      if (options?.resourceType === "form" || options?.resourceType === "response" || options?.resourceType === "report") {
-        const rawParam = req.params.formId || req.params.responseId || req.params.id;
+      // List/aggregate endpoints (GET /api/responses?formId=, /api/analytics/*?formId=) carry no resource type or
+      // URL param but name one form in the query: a per-form grant must open them too, or a grantee sees
+      // the form yet every data call 403s. Only a single, valid ?formId is honoured, and only via a grant.
+      const queryFormId = typeof req.query.formId === "string" ? req.query.formId : undefined;
+      const grantByQuery = !options?.resourceType && !!queryFormId;
+      if (options?.resourceType === "form" || options?.resourceType === "response" || options?.resourceType === "report" || grantByQuery) {
+        const rawParam = grantByQuery ? queryFormId : req.params.formId || req.params.responseId || req.params.id;
         const paramId = Array.isArray(rawParam) ? rawParam[0] : rawParam;
 
         if (paramId && typeof paramId === "string" && mongoose.Types.ObjectId.isValid(paramId)) {
           let targetForm: any = null;
 
-          if (options.resourceType === "form") {
+          if (options?.resourceType === "form" || grantByQuery) {
             targetForm = await Form.findById(paramId).select("_id workspaceId").lean();
-          } else if (options.resourceType === "response") {
+          } else if (options?.resourceType === "response") {
             const resp = await ResponseModel.findById(paramId).select("formId").lean();
             if (resp && resp.formId) {
               targetForm = await Form.findById(resp.formId).select("_id workspaceId").lean();
             }
-          } else if (options.resourceType === "report") {
+          } else if (options?.resourceType === "report") {
             // A report on one form is reachable through that form's grant (same BE 0.6 mechanism);
             // the controller then re-checks the form. Workspace-wide reports never take this path.
             const rep = await Report.findById(paramId).select("workspaceId filters").lean();
@@ -273,6 +278,10 @@ export const requirePermission = (
       // earlier today (design.md OQ-1's "no silent default-workspace fallback"), just reachable
       // from routes that never send `x-workspace-slug` at all, not only ones that omit it.
       let resourceConfirmedPersonal = false;
+      // Creator of that personal form. A personal form has no workspace, so ownership (or a
+      // per-form grant, handled above) is the ONLY access rule: enforced here once, for every
+      // form/response route, rather than in each controller.
+      let personalOwnerId: string | null = null;
 
       if (options?.extractWorkspaceId) {
         targetWorkspaceId = await options.extractWorkspaceId(req);
@@ -318,18 +327,24 @@ export const requirePermission = (
             }
           } else if (mongoose.Types.ObjectId.isValid(paramId)) {
             if (options.resourceType === "form") {
-              const form = await Form.findById(paramId).select("workspaceId").lean();
+              const form = await Form.findById(paramId).select("workspaceId createdBy").lean();
               if (form) {
                 if (form.workspaceId) targetWorkspaceId = form.workspaceId.toString();
-                else resourceConfirmedPersonal = true;
+                else {
+                  resourceConfirmedPersonal = true;
+                  personalOwnerId = form.createdBy ? String(form.createdBy) : null;
+                }
               }
             } else if (options.resourceType === "response") {
               const resp = await ResponseModel.findById(paramId).select("formId").lean();
               if (resp && resp.formId) {
-                const form = await Form.findById(resp.formId).select("workspaceId").lean();
+                const form = await Form.findById(resp.formId).select("workspaceId createdBy").lean();
                 if (form) {
                   if (form.workspaceId) targetWorkspaceId = form.workspaceId.toString();
-                  else resourceConfirmedPersonal = true;
+                  else {
+                    resourceConfirmedPersonal = true;
+                    personalOwnerId = form.createdBy ? String(form.createdBy) : null;
+                  }
                 }
               }
             } else if (options.resourceType === "report") {
@@ -347,6 +362,14 @@ export const requirePermission = (
       // caller happens to belong to. Distinct from `hasExplicitPersonalSignal` below (caller
       // intent) — this is a fact about the resource being acted on.
       if (!targetWorkspaceId && resourceConfirmedPersonal) {
+        if (personalOwnerId !== String(user._id)) {
+          res.status(403).json({
+            success: false,
+            message: "Forbidden: Insufficient permissions for this action",
+            error: { code: "FORBIDDEN_INSUFFICIENT_PERMISSIONS", message: "Forbidden: Insufficient permissions" },
+          });
+          return;
+        }
         authReq.workspaceId = null;
         authReq.explicitPersonalContext = true;
         authReq.membership = null;

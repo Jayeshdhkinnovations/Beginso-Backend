@@ -53,7 +53,18 @@ export const protect = async (
       process.env.JWT_SECRET as string
     ) as { id: string; email: string; role: string; sessionId?: string };
 
-    // Session Revocation Enforcement (closing the stateless logout gap)
+    // Session Revocation Enforcement (closing the stateless logout gap).
+    // The only issuer of tokens (POST /api/auth/session) always embeds a sessionId, so a token
+    // without one cannot be revoked and is rejected. ALLOW_SESSIONLESS_TOKENS=true exists solely so
+    // the test suite can mint bare tokens (src/__tests__/setup.ts); never set it in a deployment.
+    if (!decoded.sessionId && process.env.ALLOW_SESSIONLESS_TOKENS !== "true") {
+      res.status(401).json({
+        success: false,
+        message: "Session has been revoked or expired",
+        error: { message: "Session has been revoked or expired" }
+      });
+      return;
+    }
     if (decoded.sessionId) {
       const session = await SessionModel.findById(decoded.sessionId);
       if (!session || session.revokedAt) {

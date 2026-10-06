@@ -404,6 +404,7 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
 
     const form = await formService.getFormById(formId as string, workspaceId, !workspaceId || !!authReq.formAccessGrant);
 
+    const myRole = authReq.formAccessGrant?.role ?? authReq.workspaceRole ?? "owner";
     res.status(200).json({
       _id: form._id,
       title: form.title,
@@ -421,9 +422,12 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
       schemaVersion: form.schemaVersion,
       createdAt: form.createdAt,
       updatedAt: form.updatedAt,
+      // The caller's own role on THIS form: a per-form grant's role, else their workspace role, else
+      // owner (a personal form they created). The UI uses it to show only the pages that role can use.
+      myRole,
       // For compatibility
       success: true,
-      form,
+      form: { ...((form as any).toObject ? (form as any).toObject() : form), myRole },
     });
   } catch (error) {
     next(error);
@@ -1776,6 +1780,19 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
 
     const grantForm = await Form.findById(rawId).select("workspaceId title").lean();
     await recordEvent(req, grantForm?.workspaceId, "access_grant.create", { id: targetUserId, type: "access_grant", label: userEmail }, { formId: String(rawId), formTitle: grantForm?.title, role: assignedRole });
+
+    // Tell the grantee. Personal context (no workspaceId), so it shows in their personal bell and drives the
+    // "Shared with me" badge. Never blocks or fails the grant.
+    if (String(targetUserId) !== String(authReq.user._id)) {
+      await Notification.create({
+        userId: targetUserId,
+        workspaceId: null,
+        formId: String(rawId),
+        type: "form_shared",
+        title: "A form was shared with you",
+        message: `${authReq.user.fullName || authReq.user.name || "Someone"} shared "${grantForm?.title || "a form"}" with you`,
+      }).catch(() => null);
+    }
 
     res.status(201).json({
       success: true,

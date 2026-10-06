@@ -66,6 +66,7 @@ export const getResponses = async (
       callerUserId: authReq.user._id.toString(),
       duplicate: duplicate === "true" || duplicate === "1",
       includeTest: includeTest === "true" || includeTest === "1",
+      isGrant: !!authReq.formAccessGrant && !!formId && String(authReq.formAccessGrant.formId) === String(formId),
     });
 
     res.status(200).json({

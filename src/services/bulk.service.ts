@@ -65,7 +65,14 @@ export class BulkService {
 
     // filter target: re-evaluated server-side against the caller's own workspace forms, never
     // trusted from the client beyond the filter shape itself.
-    const workspaceForms = await Form.find({ workspaceId: callerWorkspaceId }).select("_id").lean();
+    // Personal context (no workspace): only the caller's own personal forms.
+    const workspaceForms = await Form.find(
+      callerWorkspaceId
+        ? { workspaceId: callerWorkspaceId }
+        : { createdBy: callerUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] }
+    )
+      .select("_id")
+      .lean();
     const workspaceFormIds = workspaceForms.map((f) => f._id);
 
     const query = await buildResponseFilterQuery(
@@ -161,6 +168,8 @@ export class BulkService {
     ) {
       return true;
     }
+    // A personal form has no workspace role to check: its creator is its owner (full access).
+    if (!form.workspaceId && form.createdBy && form.createdBy.toString() === actorUserId) return true;
     const grant = await FormAccessGrant.findOne({ formId: form._id, userId: actorUserId }).lean();
     if (grant && hasPermission(grant.role, requiredPermission)) return true;
     return false;

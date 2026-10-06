@@ -14,6 +14,7 @@ const format = (n: any) => ({
   title: n.title,
   message: n.message,
   read: n.read,
+  ...(n.formId ? { formId: String(n.formId) } : {}),
   createdAt: n.createdAt,
 });
 
@@ -118,7 +119,8 @@ export const getUnreadCount = async (req: Request, res: Response, next: NextFunc
     }
     const ctx = await contextOrRespond(req, res);
     if (!ctx) return;
-    const count = await Notification.countDocuments({ ...(await contextFilter(authReq.user._id, ctx)), read: false });
+    const type: Record<string, any> = typeof req.query.type === "string" && req.query.type ? { type: req.query.type } : {};
+    const count = await Notification.countDocuments({ ...(await contextFilter(authReq.user._id, ctx)), ...type, read: false });
     res.status(200).json({ success: true, count });
   } catch (error) {
     next(error);
@@ -138,7 +140,8 @@ export const markAllRead = async (req: Request, res: Response, next: NextFunctio
     }
     const ctx = await contextOrRespond(req, res);
     if (!ctx) return;
-    const result = await Notification.updateMany({ ...(await contextFilter(authReq.user._id, ctx)), read: false }, { $set: { read: true } });
+    const type: Record<string, any> = typeof req.query.type === "string" && req.query.type ? { type: req.query.type } : {};
+    const result = await Notification.updateMany({ ...(await contextFilter(authReq.user._id, ctx)), ...type, read: false }, { $set: { read: true } });
     res.status(200).json({ success: true, updated: result.modifiedCount });
   } catch (error) {
     next(error);

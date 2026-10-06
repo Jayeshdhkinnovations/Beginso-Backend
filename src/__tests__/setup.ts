@@ -2,6 +2,9 @@
 // no real SMTP connection, no real Firebase/Google call, and a readable log.
 // A test file can still override any mock below with its own jest.mock().
 
+// Tests mint bare JWTs without a Session row; production protect() rejects those (auth.middleware).
+process.env.ALLOW_SESSIONLESS_TOKENS = "true";
+
 // Never let a test open a socket to the real mail server.
 jest.mock("nodemailer", () => {
   const transport = {

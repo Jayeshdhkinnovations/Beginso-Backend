@@ -26,7 +26,7 @@ router.post("/confirm-password-reset", authRateLimiter, emailTargetRateLimiter, 
 router.post("/password-changed", authRateLimiter, emailTargetRateLimiter, notifyPasswordChanged);
 router.post("/notify-password-changed", authRateLimiter, emailTargetRateLimiter, notifyPasswordChanged);
 router.post("/logout", protect as any, blockSuspended as any, logout);
-router.get("/me", protect as any, getMe);
+router.get("/me", protect as any, blockSuspended as any, getMe);
 router.get("/sessions", protect as any, blockSuspended as any, requirePermission("sessions:read") as any, getSessions);
 router.delete("/sessions/:id", protect as any, blockSuspended as any, requirePermission("sessions:manage", { resourceType: "session" }) as any, revokeSession);
 

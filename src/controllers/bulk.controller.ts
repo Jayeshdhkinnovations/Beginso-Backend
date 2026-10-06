@@ -19,10 +19,8 @@ export const bulkUpdateResponses = async (req: Request, res: Response, next: Nex
 
     const parsed = bulkRequestSchema.parse(req.body);
     const callerWorkspaceId = await getVerifiedWorkspaceId(req);
-    if (!callerWorkspaceId) {
-      res.status(403).json({ success: false, message: "Workspace not found or access denied" });
-      return;
-    }
+    // No verified workspace = personal context: the service then only lets the caller act on
+    // personal forms they created (BulkService.canAct), so nothing is exposed.
 
     const result = await bulkService.run(parsed.target, parsed.action, {
       callerWorkspaceId,

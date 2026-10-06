@@ -560,7 +560,7 @@ export const acceptInvitation = async (req: Request, res: Response, next: NextFu
         userId: authReq.user._id,
         workspaceId: invitation.workspaceId,
         role: invitation.role,
-        notificationPreference: "mine",
+        notificationPreference: "none",
         timezoneOverride: null,
       });
     } catch (err: any) {

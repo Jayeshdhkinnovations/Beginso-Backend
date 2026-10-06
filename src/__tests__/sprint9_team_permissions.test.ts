@@ -748,6 +748,22 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
       expect(res.body.success).toBe(true);
     });
 
+    it("Grantee can load the form's responses, stats and analytics via ?formId= (the form pages)", async () => {
+      const auth = { Authorization: `Bearer ${outsiderToken}` };
+      const q = `formId=${personalForm._id}`;
+      expect((await request(app).get(`/api/responses?${q}`).set(auth)).status).toBe(200);
+      expect((await request(app).get(`/api/responses/stats?${q}`).set(auth)).status).toBe(200);
+      expect((await request(app).get(`/api/analytics/overview?${q}`).set(auth)).status).toBe(200);
+      expect((await request(app).get(`/api/analytics/trends?${q}&bucket=day`).set(auth)).status).toBe(200);
+      expect((await request(app).get(`/api/analytics/questions?${q}`).set(auth)).status).toBe(200);
+    });
+
+    it("A grant on one form does not open another form's data via ?formId=", async () => {
+      const other = await Form.create({ title: "Not shared", workspaceId: null, createdBy: ownerUser._id, fields: [] });
+      const auth = { Authorization: `Bearer ${outsiderToken}` };
+      expect((await request(app).get(`/api/analytics/overview?formId=${other._id}`).set(auth)).status).toBe(403);
+    });
+
     it("GET /api/shared-with-me returns forms shared with caller without leaking others", async () => {
       const res = await request(app)
         .get("/api/shared-with-me")

@@ -50,7 +50,10 @@ const validateFormAccess = async (
     ? !!userWorkspaceId && form.workspaceId.toString() === userWorkspaceId
     : !!callerUserId && form.createdBy?.toString() === callerUserId;
 
-  if (!isOwned) {
+  // A per-form grant (already permission-checked by requirePermission) opens this one form's analytics.
+  const granted = !isOwned && !!(req as any).formAccessGrant && String((req as any).formAccessGrant.formId) === String(form._id);
+
+  if (!isOwned && !granted) {
     res.status(403).json({ success: false, message: "Access denied to form from another workspace" });
     return null;
   }

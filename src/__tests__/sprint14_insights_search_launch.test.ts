@@ -118,6 +118,102 @@ describe("BE 0.1 - B5.6 question breakdown returns real counts (seeded through t
   });
 });
 
+describe("BE 0.1 - question breakdown: other plausible 'zeros' shapes", () => {
+  const ask = async (form: any) =>
+    (await request(app).get(`/api/analytics/questions?formId=${form._id}`).set(as(tOwner, "ws-a"))).body.data;
+  const opts = (q: any) => Object.fromEntries(q.summary.options.map((o: any) => [o.label, o.count]));
+
+  it("counts answers keyed by label only (the shape public submit really stores), fieldId-only, and mixed-case/whitespace values", async () => {
+    const form = await mkForm({ title: "Shapes" });
+    await mkResp(form, { answers: { Plan: "Pro", Features: ["Analytics", "Reports"] } }); // stored shape: label keys
+    await mkResp(form, { answers: { "f-plan": " pro ", "f-feat": ["analytics"] } }); // legacy fieldId keys, sloppy values
+    await mkResp(form, { answers: { Plan: "Free" } });
+    const d = await ask(form);
+    expect(opts(d.questions.find((q: any) => q.fieldId === "f-plan"))).toEqual({ Free: 1, Pro: 2, Team: 0 });
+    expect(opts(d.questions.find((q: any) => q.fieldId === "f-feat"))).toEqual({ Analytics: 2, Reports: 1 });
+  });
+
+  it("number fields never report zero answered when answers exist (0 is a real answer), and multi-page forms are covered", async () => {
+    const form = await mkForm({
+      title: "Rating",
+      fields: [
+        { fieldId: "f-r", pageId: "p2", label: "Rating", type: "number", required: false },
+        { fieldId: "f-n", pageId: "p1", label: "Age", type: "number", required: false },
+      ],
+      pages: [{ id: "p1", order: 0, title: "One" }, { id: "p2", order: 1, title: "Two" }],
+    });
+    await mkResp(form, { answers: { Rating: 5, Age: 0 } });
+    await mkResp(form, { answers: { Rating: 3, Age: 31 } });
+    const d = await ask(form);
+    expect(d.questions.find((q: any) => q.fieldId === "f-r").totalAnswered).toBe(2);
+    expect(d.questions.find((q: any) => q.fieldId === "f-n").totalAnswered).toBe(2);
+  });
+
+  it("excludes test and soft-deleted responses and soft-deleted fields, and counts every other row", async () => {
+    const form = await mkForm({ title: "Excl" });
+    await mkResp(form, { answers: { Plan: "Pro" } });
+    await mkResp(form, { answers: { Plan: "Pro" }, isTest: true });
+    await mkResp(form, { answers: { Plan: "Pro" }, deletedAt: new Date() });
+    const d = await ask(form);
+    expect(d.totalResponses).toBe(1);
+    expect(opts(d.questions.find((q: any) => q.fieldId === "f-plan")).Pro).toBe(1);
+  });
+
+  it("a field renamed AFTER responses came in orphans earlier label-keyed answers (documented limitation)", async () => {
+    // Known limitation, not a regression: submit stores label-keyed answers only, so a rename
+    // orphans earlier answers (they show under no question). Pinned so a change is deliberate.
+    const form = await mkForm({ title: "Renamed" });
+    await mkResp(form, { answers: { Plan: "Pro" } });
+    await Form.updateOne({ _id: form._id, "fields.fieldId": "f-plan" }, { $set: { "fields.$.label": "Subscription" } });
+    const q = (await ask(form)).questions.find((x: any) => x.fieldId === "f-plan");
+    expect(q.totalAnswered).toBe(0);
+  });
+});
+
+describe("BE 0.5b - multi-page PDF export has no trailing blank page", () => {
+  it("a 75-row export spans several pages, the footer total equals the real page count, and the LAST page holds data rows", async () => {
+    const form = await mkForm({ title: "Long export" });
+    await ResponseModel.insertMany(Array.from({ length: 75 }, (_, i) => ({ formId: form._id, answers: {}, status: "new", submittedAt: new Date(Date.now() - i * 1000) })));
+    const created = await request(app).post("/api/reports").set(as(tOwner, "ws-a")).send({ format: "pdf", formId: String(form._id) });
+    expect(created.status).toBe(202);
+    const id = created.body.report._id;
+    let report: any;
+    for (let i = 0; i < 150; i++) {
+      report = await ReportModel.findById(id);
+      if (report.status === "completed" || report.status === "failed") break;
+      await wait(100);
+    }
+    expect(report.status).toBe("completed");
+    const file = await request(app).get(`/api/reports/${id}/file`).set(as(tOwner, "ws-a")).buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(file.status).toBe(200);
+    const buf = file.body as Buffer;
+    const pageCount = (buf.toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+    expect(pageCount).toBeGreaterThan(1);
+
+    // Inflate every content stream; pdfkit emits one stream per page, in page order.
+    const zlib = require("zlib");
+    const streams: string[] = [];
+    const re = /stream\r?\n/g;
+    const raw = buf.toString("latin1");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(raw))) {
+      const end = raw.indexOf("endstream", m.index);
+      try { streams.push(zlib.inflateSync(Buffer.from(raw.slice(m.index + m[0].length, end), "latin1")).toString("latin1")); } catch { /* not a flate stream */ }
+    }
+    // pdfkit writes text as kerned hex strings: join them back into readable text per page.
+    const text = (t: string) => [...t.matchAll(/<([0-9a-f]+)>/g)].map((x) => Buffer.from(x[1], "hex").toString("latin1")).join("");
+    const pageStreams = streams.filter((t) => /Page \d+ of \d+/.test(text(t)));
+    expect(pageStreams).toHaveLength(pageCount);
+    const last = text(pageStreams[pageStreams.length - 1]);
+    expect(last).toContain(`Page ${pageCount} of ${pageCount}`);
+    expect(last).toMatch(/[0-9a-f]{24}/); // a response id row sits on the last page: not a blank trailer
+  });
+});
+
 // ---------------------------------------------------------------------------------------------------
 describe("BE 0.2 / 0.4 - completionRate has one meaning (views based), reviewedRate keeps the old one, F15 exclusions", () => {
   it("is submissions / views, null with no views, excludes test + deleted responses and preview loads", async () => {

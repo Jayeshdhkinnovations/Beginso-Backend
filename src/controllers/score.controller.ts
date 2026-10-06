@@ -5,6 +5,7 @@ import { ScoreService } from "../services/score.service";
 import { scoreResponseSchema } from "../validations/score.validator";
 import ResponseModel from "../models/Response";
 import Form from "../models/Form";
+import ScoreCriterionModel from "../models/ScoreCriterion";
 
 const scoreService = new ScoreService();
 
@@ -50,7 +51,14 @@ export const scoreResponse = async (req: Request, res: Response): Promise<void> 
 
     const { id } = req.params;
     const parsed = scoreResponseSchema.parse(req.body);
-    await scoreService.resolveResponseForm(String(id)); // 404s if the response doesn't exist
+    const { workspaceId: formWorkspaceId } = await scoreService.resolveResponseForm(String(id)); // 404s if the response doesn't exist
+    // The criterion must belong to the response's own workspace: otherwise a caller could write
+    // rows keyed on another tenant's (or a made-up) criterion id into this response's aggregate.
+    if (!mongoose.Types.ObjectId.isValid(parsed.criterionId) || !formWorkspaceId ||
+        !(await ScoreCriterionModel.exists({ _id: parsed.criterionId, workspaceId: formWorkspaceId }))) {
+      res.status(404).json({ success: false, message: "Criterion not found", error: { message: "Criterion not found" } });
+      return;
+    }
 
     await scoreService.upsertScore(String(id), String(authReq.membershipId), parsed.criterionId, parsed.value);
 

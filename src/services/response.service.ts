@@ -103,6 +103,8 @@ export class ResponseService {
     duplicate?: boolean;
     // Sprint 13 (F15): test submissions are excluded unless the caller opts in.
     includeTest?: boolean;
+    // A per-form access grant (verified by requirePermission) opens this one form for a non-owner.
+    isGrant?: boolean;
   }): Promise<PaginatedResponsesResult> {
     const { workspaceId, personalUserId, formId, status, stageId, search } = params;
 
@@ -137,7 +139,7 @@ export class ResponseService {
       const belongsToCaller =
         !!personalUserId && !form.workspaceId && String(form.createdBy) === personalUserId;
 
-      if (!belongsToWorkspace && !belongsToCaller) {
+      if (!params.isGrant && !belongsToWorkspace && !belongsToCaller) {
         const err: any = new Error("Forbidden: You do not own this form's workspace");
         err.statusCode = 403;
         throw err;

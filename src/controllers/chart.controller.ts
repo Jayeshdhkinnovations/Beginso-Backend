@@ -1,26 +1,48 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import SavedChart, { CHART_TYPES, CHART_GROUP_BYS, ChartType, ChartGroupBy } from "../models/SavedChart";
-import ResponseModel from "../models/Response";
+import SavedChart, { CHART_TYPES, CHART_GROUP_BYS, CHART_SIZES, CHART_VISIBILITIES, IChartOptions } from "../models/SavedChart";
+import User from "../models/User";
 import { resolveFormAccess } from "./form.controller";
-import { submittedAtRange } from "../utils/dateRange";
 import { recordEvent } from "../services/event.service";
+import { aggregateField, fieldKind, CHART_TYPES_BY_KIND, parseGranularity, SegmentError, FieldAggregate, Granularity } from "../utils/fieldSegments";
 
-// Sprint 14 (B1.3, OQ-1, cut line #1). User-added charts on a form's Insights page.
-// Permission: the ROUTE runs requirePermission (analytics:read to read, forms:write to change), which also
-// honours per-form grants; this file adds the personal-form ownership check the middleware deliberately skips.
+// Sprint 14 (B1.3, OQ-1) + charts v2. Charts are per form AND per user: `private` (default) = only the owner,
+// `workspace` = everyone who can read analytics on the form. Read = analytics:read, create/change = forms:write
+// (both enforced by the route, which also honours per-form grants); this file adds the personal-form ownership
+// check the middleware skips, plus the per-chart rule: edit = the owner, or an admin/owner of the workspace
+// for a workspace-visible chart. Someone else's private chart does not exist as far as the caller can tell (404).
 
-const CHOICE_TYPES = ["dropdown", "multiple_choice", "checkbox"];
+const MAX_CHARTS_PER_OWNER = 20;
+const DEFAULT_OPTIONS: IChartOptions = { valueMode: "count", legend: true, sort: "order" };
 
-const definitionSchema = z.object({
-  fieldId: z.string().min(1).max(100),
-  chartType: z.enum(CHART_TYPES),
-  groupBy: z.enum(CHART_GROUP_BYS),
+const optionsSchema = z.object({
+  valueMode: z.enum(["count", "percent"]).optional(),
+  legend: z.boolean().optional(),
+  sort: z.enum(["value", "order"]).optional(),
 });
+const baseShape = {
+  chartType: z.enum(CHART_TYPES),
+  groupBy: z.enum(CHART_GROUP_BYS).optional(), // legacy Sprint 14 clients
+  granularity: z.enum(["day", "week", "month"]).optional(),
+  size: z.enum(CHART_SIZES).optional(),
+  title: z.string().trim().max(120).optional(),
+  options: optionsSchema.optional(),
+  visibility: z.enum(CHART_VISIBILITIES).optional(),
+};
+const createSchema = z.object({ fieldId: z.string().min(1).max(100), ...baseShape });
+const patchSchema = z
+  .object({ fieldId: z.string().min(1).max(100), ...baseShape, position: z.number().int().min(0).max(100000), order: z.number().int().min(0).max(100000) })
+  .partial();
+const previewSchema = z.object({ fieldId: z.string().min(1).max(100), chartType: baseShape.chartType, groupBy: baseShape.groupBy, granularity: baseShape.granularity });
 
 const httpError = (res: Response, status: number, message: string, code?: string): void => {
   res.status(status).json({ success: false, message, error: { ...(code ? { code } : {}), message } });
+};
+const segmentError = (res: Response, e: unknown): boolean => {
+  if (!(e instanceof SegmentError)) return false;
+  httpError(res, e.statusCode, e.message, e.code);
+  return true;
 };
 
 // Resolves the form and confirms the caller may reach it. Writes the error response itself and returns null.
@@ -46,104 +68,113 @@ const loadForm = async (req: Request, res: Response): Promise<any | null> => {
 const findField = (form: any, fieldId: string): any =>
   (form.fields || []).find((f: any) => f.fieldId === fieldId && !f.deleted);
 
-// Only choice fields (bar/donut by value) and date fields (line by day/week) can be charted, and only in
-// those combinations. Returns an error message, or null when valid.
-const validateDefinition = (field: any, chartType: ChartType, groupBy: ChartGroupBy): string | null => {
+type Def = { chartType: string; granularity: Granularity | null; groupBy: "value" | "day" | "week" };
+
+// Validates a chart definition against its field and works out the stored granularity. Returns an error message or the def.
+const resolveDef = (field: any, chartType: string, granularity?: string | null, groupBy?: string): string | Def => {
   if (!field) return "That question is not on this form";
-  if (CHOICE_TYPES.includes(field.type)) {
-    if (chartType === "line") return "A choice question can be shown as a bar or donut chart";
-    if (groupBy !== "value") return "A choice question is grouped by value";
+  const kind = fieldKind(field);
+  if (!kind) return "That question type cannot be charted";
+  if (!CHART_TYPES_BY_KIND[kind].includes(chartType)) return `A ${field.type} question can be shown as: ${CHART_TYPES_BY_KIND[kind].join(", ")}`;
+  // Legacy `groupBy` (only consulted when the client sent no granularity): value for choice/number, day|week for date.
+  if (groupBy && !granularity) {
+    if (kind !== "date" && groupBy !== "value") return "That question is grouped by value";
+    if (kind === "date" && groupBy === "value") return "A date question is grouped by day or week";
+  }
+  if (kind !== "date") return { chartType, granularity: null, groupBy: "value" };
+  const g = (granularity as Granularity | undefined) ?? (groupBy === "week" ? "week" : "day");
+  return { chartType, granularity: g, groupBy: g === "week" ? "week" : "day" };
+};
+
+const ownerOf = (c: any): string => String(c.ownerId ?? c.createdBy ?? "");
+
+// A stored chart (v2 or Sprint 14) as the v2 shape. Sprint 14 rows: owner = createdBy, visibility = workspace.
+const normalise = (c: any, form: any, me: string, isAdmin: boolean, ownerNames: Map<string, string>) => {
+  const field = findField(form, c.fieldId);
+  const visibility = c.visibility ?? "workspace";
+  const owner = ownerOf(c);
+  const granularity = c.granularity ?? (c.groupBy === "week" ? "week" : c.groupBy === "day" ? "day" : null);
+  const position = c.position ?? c.order ?? 0;
+  return {
+    _id: String(c._id),
+    formId: String(c.formId),
+    fieldId: c.fieldId,
+    fieldType: field?.type ?? null,
+    chartType: c.chartType,
+    granularity,
+    groupBy: granularity === null ? "value" : granularity === "week" ? "week" : "day", // legacy
+    size: c.size ?? "medium",
+    title: c.title || field?.label || "Untitled chart",
+    options: { ...DEFAULT_OPTIONS, ...(c.options ?? {}) },
+    visibility,
+    ownerId: owner || null,
+    ownerName: ownerNames.get(owner) ?? null,
+    isOwner: owner === me,
+    canEdit: owner === me || (isAdmin && visibility !== "private"),
+    position,
+    order: position, // legacy
+    // The question was deleted from the form after the chart was made: say so instead of failing.
+    fieldMissing: !field,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  };
+};
+
+const ctx = (req: Request) => {
+  const authReq = req as any;
+  const me = String(authReq.user._id);
+  const isAdmin = authReq.user.role === "super_admin" || ["owner", "admin"].includes(authReq.workspaceRole);
+  return { me, isAdmin };
+};
+
+const visibleToMe = (me: string): any => ({ $or: [{ visibility: { $ne: "private" } }, { ownerId: new mongoose.Types.ObjectId(me) }] });
+
+const present = async (docs: any[], form: any, req: Request) => {
+  const { me, isAdmin } = ctx(req);
+  const ids = [...new Set(docs.map(ownerOf).filter(Boolean))];
+  const users = ids.length ? await User.find({ _id: { $in: ids } }).select("fullName").lean() : [];
+  const names = new Map(users.map((u: any) => [String(u._id), u.fullName as string]));
+  return docs.map((d) => normalise(d, form, me, isAdmin, names));
+};
+
+// The caller's own charts first (they control that order), then everyone else's workspace charts.
+const listFor = async (form: any, req: Request) => {
+  const { me } = ctx(req);
+  const docs = await SavedChart.find({ formId: form._id, ...visibleToMe(me) }).limit(500).lean();
+  const out = await present(docs, form, req);
+  const key = (c: any) => [c.isOwner ? 0 : 1, c.position, new Date(c.createdAt).getTime()];
+  return out.sort((a, b) => {
+    const [ka, kb] = [key(a), key(b)];
+    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2];
+  });
+};
+
+// Loads a chart the caller can see (404 otherwise). `edit` additionally requires edit rights (403).
+const loadChart = async (req: Request, res: Response, form: any, edit: boolean): Promise<any | null> => {
+  const { me, isAdmin } = ctx(req);
+  const chartId = String(req.params.chartId);
+  const chart = mongoose.Types.ObjectId.isValid(chartId) ? await SavedChart.findOne({ _id: chartId, formId: form._id, ...visibleToMe(me) }) : null;
+  if (!chart) {
+    httpError(res, 404, "Chart not found");
     return null;
   }
-  if (field.type === "date") {
-    if (chartType !== "line") return "A date question can be shown as a line chart";
-    if (groupBy === "value") return "A date question is grouped by day or week";
+  if (edit && ownerOf(chart) !== me && !(isAdmin && (chart.visibility ?? "workspace") !== "private")) {
+    httpError(res, 403, "Only the chart's owner or a workspace admin can change this chart", "FORBIDDEN_CHART");
     return null;
   }
-  return "That question type cannot be charted";
+  return chart;
 };
 
-const serialise = (chart: any, form: any) => ({
-  _id: chart._id.toString(),
-  fieldId: chart.fieldId,
-  chartType: chart.chartType,
-  groupBy: chart.groupBy,
-  order: chart.order,
-  // The question was deleted from the form after the chart was made: say so instead of failing.
-  fieldMissing: !findField(form, chart.fieldId),
-});
-
-const readAnswer = (answers: Record<string, any> | undefined, field: any): any => {
-  if (!answers || typeof answers !== "object") return undefined;
-  const keys = [field.fieldId, field.label, field.label && String(field.label).trim(), field._id && String(field._id)];
-  for (const key of keys) {
-    if (key && answers[key] !== undefined) return answers[key];
-  }
-  return undefined;
-};
-
-// ISO week label, same shape the trends endpoint uses ("2026-W41").
-const isoWeekLabel = (d: Date): string => {
-  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const dayNum = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-};
-
-const buildSeries = async (
-  form: any,
-  def: { fieldId: string; groupBy: ChartGroupBy },
-  from: unknown,
-  to: unknown
-): Promise<{ series: { label: string; value: number }[]; total: number }> => {
-  const field = findField(form, def.fieldId);
-  if (!field) return { series: [], total: 0 };
-
-  const match: any = { formId: form._id, deletedAt: null }; // the Response hook drops isTest
-  const range = submittedAtRange(from, to);
-  if (range) match.submittedAt = range;
-
-  const counts = new Map<string, number>();
-  const isChoice = CHOICE_TYPES.includes(field.type);
-  if (isChoice) for (const opt of field.options || []) counts.set(String(opt), 0);
-
-  let total = 0;
-  // ponytail: streams every matching response's answers through Node; move to a $group on a stored per-field
-  // projection if a single form ever holds enough responses for this to show up in the load test.
-  for await (const r of ResponseModel.find(match).select({ answers: 1 }).lean().cursor()) {
-    const val = readAnswer((r as any).answers, field);
-    if (val === undefined || val === null || val === "") continue;
-    if (isChoice) {
-      const items = Array.isArray(val) ? val : [val];
-      for (const item of items) {
-        const str = String(item).trim();
-        if (!str) continue;
-        const key = [...counts.keys()].find((k) => k.toLowerCase() === str.toLowerCase()) ?? str;
-        counts.set(key, (counts.get(key) || 0) + 1);
-        total++;
-      }
-    } else {
-      const d = new Date(String(val));
-      if (isNaN(d.getTime())) continue;
-      const label = def.groupBy === "week" ? isoWeekLabel(d) : d.toISOString().slice(0, 10);
-      counts.set(label, (counts.get(label) || 0) + 1);
-      total++;
-    }
-  }
-
-  const entries = [...counts.entries()];
-  if (!isChoice) entries.sort((a, b) => a[0].localeCompare(b[0]));
-  return { series: entries.map(([label, value]) => ({ label, value })), total };
+const nextPosition = async (form: any, me: string): Promise<{ count: number; next: number }> => {
+  const own = await SavedChart.find({ formId: form._id, $or: [{ ownerId: me }, { ownerId: { $exists: false }, createdBy: me }] }).select("position order").lean();
+  return { count: own.length, next: own.reduce((m: number, c: any) => Math.max(m, (c.position ?? c.order ?? 0) + 1), 0) };
 };
 
 export const listCharts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const form = await loadForm(req, res);
     if (!form) return;
-    const charts = await SavedChart.find({ formId: form._id }).sort({ order: 1, createdAt: 1 });
-    res.status(200).json({ success: true, charts: charts.map((c) => serialise(c, form)) });
+    res.status(200).json({ success: true, charts: await listFor(form, req) });
   } catch (error) {
     next(error);
   }
@@ -153,26 +184,37 @@ export const createChart = async (req: Request, res: Response, next: NextFunctio
   try {
     const form = await loadForm(req, res);
     if (!form) return;
-    const parsed = definitionSchema.safeParse(req.body);
+    const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return httpError(res, 400, "Invalid chart definition", "VALIDATION_ERROR");
-    const { fieldId, chartType, groupBy } = parsed.data;
-    const bad = validateDefinition(findField(form, fieldId), chartType, groupBy);
-    if (bad) return httpError(res, 400, bad, "INVALID_CHART");
+    const d = parsed.data;
+    const field = findField(form, d.fieldId);
+    const def = resolveDef(field, d.chartType, d.granularity, d.groupBy);
+    if (typeof def === "string") return httpError(res, 400, def, "INVALID_CHART");
 
-    const count = await SavedChart.countDocuments({ formId: form._id });
-    if (count >= 20) return httpError(res, 400, "A form can have at most 20 saved charts", "CHART_LIMIT");
+    const { me } = ctx(req);
+    const { count, next: position } = await nextPosition(form, me);
+    if (count >= MAX_CHARTS_PER_OWNER) return httpError(res, 400, `You can have at most ${MAX_CHARTS_PER_OWNER} charts on a form`, "CHART_LIMIT");
 
-    const chart = await SavedChart.create({
+    const chart: any = await SavedChart.create({
       formId: form._id,
       workspaceId: form.workspaceId ?? null,
-      fieldId,
-      chartType,
-      groupBy,
-      createdBy: (req as any).user._id,
-      order: count,
-    });
-    await recordEvent(req, form.workspaceId, "chart.create", { id: chart._id, type: "chart", label: form.title }, { formId: String(form._id), fieldId });
-    res.status(201).json({ success: true, chart: serialise(chart, form) });
+      fieldId: d.fieldId,
+      chartType: def.chartType,
+      groupBy: def.groupBy,
+      granularity: def.granularity,
+      createdBy: me,
+      ownerId: me,
+      // Sprint 14 clients (they send `groupBy`, never `visibility`) always made charts everyone could see.
+      visibility: d.visibility ?? (d.groupBy ? "workspace" : "private"),
+      size: d.size ?? "medium",
+      title: d.title || field.label,
+      options: { ...DEFAULT_OPTIONS, ...(d.options ?? {}) },
+      position,
+      order: position,
+    } as any);
+    await recordEvent(req, form.workspaceId, "chart.create", { id: chart._id, type: "chart", label: form.title }, { formId: String(form._id), fieldId: d.fieldId });
+    const [out] = await present([chart.toObject()], form, req);
+    res.status(201).json({ success: true, chart: out });
   } catch (error) {
     next(error);
   }
@@ -182,54 +224,131 @@ export const updateChart = async (req: Request, res: Response, next: NextFunctio
   try {
     const form = await loadForm(req, res);
     if (!form) return;
-    const chartId = String(req.params.chartId);
-    const chart = mongoose.Types.ObjectId.isValid(chartId) ? await SavedChart.findOne({ _id: chartId, formId: form._id }) : null;
-    if (!chart) return httpError(res, 404, "Chart not found");
-
-    const parsed = definitionSchema.partial().extend({ order: z.number().int().min(0).max(1000).optional() }).safeParse(req.body);
+    const chart = await loadChart(req, res, form, true);
+    if (!chart) return;
+    const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return httpError(res, 400, "Invalid chart definition", "VALIDATION_ERROR");
-    const merged = {
-      fieldId: parsed.data.fieldId ?? chart.fieldId,
-      chartType: parsed.data.chartType ?? chart.chartType,
-      groupBy: parsed.data.groupBy ?? chart.groupBy,
-    };
-    const bad = validateDefinition(findField(form, merged.fieldId), merged.chartType, merged.groupBy);
-    if (bad) return httpError(res, 400, bad, "INVALID_CHART");
+    const d = parsed.data;
 
-    chart.set(merged);
-    if (parsed.data.order !== undefined) chart.order = parsed.data.order;
+    const fieldId = d.fieldId ?? chart.fieldId;
+    const field = findField(form, fieldId);
+    // Only a change to the definition is re-validated: a title/size/visibility edit must still work on a chart
+    // whose question was later deleted.
+    const defChanged = d.fieldId !== undefined || d.chartType !== undefined || d.granularity !== undefined || d.groupBy !== undefined;
+    if (defChanged) {
+      const def = resolveDef(field, d.chartType ?? chart.chartType, d.granularity ?? (d.fieldId ? undefined : chart.granularity ?? (chart.groupBy === "week" ? "week" : undefined)), d.groupBy);
+      if (typeof def === "string") return httpError(res, 400, def, "INVALID_CHART");
+      chart.set({ fieldId, chartType: def.chartType, granularity: def.granularity, groupBy: def.groupBy });
+    }
+    if (d.size !== undefined) chart.size = d.size;
+    if (d.title !== undefined) chart.title = d.title || field?.label || chart.title;
+    if (d.options !== undefined) chart.options = { ...DEFAULT_OPTIONS, ...((chart.options as any)?.toObject?.() ?? chart.options ?? {}), ...d.options };
+    if (d.visibility !== undefined) chart.visibility = d.visibility;
+    const position = d.position ?? d.order;
+    if (position !== undefined) {
+      chart.position = position;
+      chart.order = position;
+    }
+    // Sprint 14 rows get their v2 identity written down the first time anyone edits them.
+    if (!chart.ownerId) chart.ownerId = chart.createdBy;
+    if (!chart.visibility) chart.visibility = "workspace";
     await chart.save();
-    res.status(200).json({ success: true, chart: serialise(chart, form) });
+    const [out] = await present([chart.toObject()], form, req);
+    res.status(200).json({ success: true, chart: out });
   } catch (error) {
     next(error);
   }
 };
 
+// PUT /charts/order { ids }: the caller's own charts, in the order they should appear. 400 on any id that is not
+// one of the caller's own charts on this form (someone else's, another form's, unknown, duplicated).
+export const reorderCharts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const form = await loadForm(req, res);
+    if (!form) return;
+    const parsed = z.object({ ids: z.array(z.string()).max(200) }).safeParse(req.body);
+    if (!parsed.success) return httpError(res, 400, "ids must be an array of chart ids", "VALIDATION_ERROR");
+    const { ids } = parsed.data;
+    const { me } = ctx(req);
+    const own = await SavedChart.find({ formId: form._id, $or: [{ ownerId: me }, { ownerId: { $exists: false }, createdBy: me }] }).sort({ position: 1, order: 1, createdAt: 1 }).lean();
+    const ownIds = new Set(own.map((c: any) => String(c._id)));
+    if (new Set(ids).size !== ids.length || ids.some((id) => !ownIds.has(id))) {
+      return httpError(res, 400, "ids must be your own charts on this form, each listed once", "FOREIGN_CHART_IDS");
+    }
+    const sequence = [...ids, ...own.map((c: any) => String(c._id)).filter((id) => !ids.includes(id))];
+    await SavedChart.bulkWrite(sequence.map((id, i) => ({ updateOne: { filter: { _id: id }, update: { $set: { position: i, order: i } } } })));
+    res.status(200).json({ success: true, charts: await listFor(form, req) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const duplicateChart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const form = await loadForm(req, res);
+    if (!form) return;
+    const src = await loadChart(req, res, form, false);
+    if (!src) return;
+    const { me } = ctx(req);
+    const { count, next: position } = await nextPosition(form, me);
+    if (count >= MAX_CHARTS_PER_OWNER) return httpError(res, 400, `You can have at most ${MAX_CHARTS_PER_OWNER} charts on a form`, "CHART_LIMIT");
+    const [view] = await present([src.toObject()], form, req);
+    const chart: any = await SavedChart.create({
+      formId: form._id,
+      workspaceId: form.workspaceId ?? null,
+      fieldId: src.fieldId,
+      chartType: src.chartType,
+      groupBy: view.groupBy,
+      granularity: view.granularity,
+      createdBy: me,
+      ownerId: me,
+      visibility: "private", // a copy is the copier's own until they choose to share it
+      size: view.size,
+      title: `${view.title} (copy)`.slice(0, 120),
+      options: view.options,
+      position,
+      order: position,
+    } as any);
+    await recordEvent(req, form.workspaceId, "chart.create", { id: chart._id, type: "chart", label: form.title }, { formId: String(form._id), fieldId: src.fieldId, duplicatedFrom: String(src._id) });
+    const [out] = await present([chart.toObject()], form, req);
+    res.status(201).json({ success: true, chart: out });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Hard delete. Undo is the client re-creating the chart from the payload it still holds (POST /charts).
 export const deleteChart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const form = await loadForm(req, res);
     if (!form) return;
-    const chartId = String(req.params.chartId);
-    const removed = mongoose.Types.ObjectId.isValid(chartId)
-      ? await SavedChart.findOneAndDelete({ _id: chartId, formId: form._id })
-      : null;
-    if (!removed) return httpError(res, 404, "Chart not found");
-    await recordEvent(req, form.workspaceId, "chart.delete", { id: removed._id, type: "chart", label: form.title }, { formId: String(form._id) });
+    const chart = await loadChart(req, res, form, true);
+    if (!chart) return;
+    await chart.deleteOne();
+    await recordEvent(req, form.workspaceId, "chart.delete", { id: chart._id, type: "chart", label: form.title }, { formId: String(form._id) });
     res.status(200).json({ success: true });
   } catch (error) {
     next(error);
   }
 };
 
+// Legacy `series` ({label,value}[]) derived from the aggregate; `total` there is the sum of the series (selections).
+const legacy = (agg: FieldAggregate) => {
+  const series = agg.buckets.map((b) => ({ label: b.label, value: b.count }));
+  return { series, total: series.reduce((s, x) => s + x.value, 0), aggregate: agg };
+};
+
 export const getChartData = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const form = await loadForm(req, res);
     if (!form) return;
-    const chartId = String(req.params.chartId);
-    const chart = mongoose.Types.ObjectId.isValid(chartId) ? await SavedChart.findOne({ _id: chartId, formId: form._id }) : null;
-    if (!chart) return httpError(res, 404, "Chart not found");
-    const result = await buildSeries(form, chart, req.query.from, req.query.to);
-    res.status(200).json({ success: true, fieldMissing: !findField(form, chart.fieldId), ...result });
+    const chart = await loadChart(req, res, form, false);
+    if (!chart) return;
+    const [view] = await present([chart.toObject()], form, req);
+    const field = findField(form, chart.fieldId);
+    if (!field || !fieldKind(field)) return void res.status(200).json({ success: true, fieldMissing: true, series: [], total: 0, aggregate: null });
+    const agg = await aggregateField(form, field, { from: req.query.from, to: req.query.to, granularity: (view.granularity ?? "day") as Granularity, includeTest: req.query.includeTest === "true" });
+    res.status(200).json({ success: true, fieldMissing: false, ...legacy(agg) });
   } catch (error) {
     next(error);
   }
@@ -239,15 +358,30 @@ export const previewChart = async (req: Request, res: Response, next: NextFuncti
   try {
     const form = await loadForm(req, res);
     if (!form) return;
-    const parsed = definitionSchema.safeParse(req.body);
+    const parsed = previewSchema.safeParse(req.body);
     if (!parsed.success) return httpError(res, 400, "Invalid chart definition", "VALIDATION_ERROR");
-    const bad = validateDefinition(findField(form, parsed.data.fieldId), parsed.data.chartType, parsed.data.groupBy);
-    if (bad) return httpError(res, 400, bad, "INVALID_CHART");
-    const from = req.body?.from ?? req.query.from;
-    const to = req.body?.to ?? req.query.to;
-    const result = await buildSeries(form, parsed.data, from, to);
-    res.status(200).json({ success: true, fieldMissing: false, ...result });
+    const field = findField(form, parsed.data.fieldId);
+    const def = resolveDef(field, parsed.data.chartType, parsed.data.granularity, parsed.data.groupBy);
+    if (typeof def === "string") return httpError(res, 400, def, "INVALID_CHART");
+    const agg = await aggregateField(form, field, { from: req.body?.from ?? req.query.from, to: req.body?.to ?? req.query.to, granularity: def.granularity ?? "day" });
+    res.status(200).json({ success: true, fieldMissing: false, ...legacy(agg) });
   } catch (error) {
     next(error);
+  }
+};
+
+// GET /api/forms/:formId/analytics/field/:fieldId?from=&to=&granularity=&includeTest=
+export const getFieldAnalytics = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const form = await loadForm(req, res);
+    if (!form) return;
+    const field = findField(form, String(req.params.fieldId));
+    if (!field) return httpError(res, 404, "That question is not on this form", "FIELD_NOT_FOUND");
+    if (!fieldKind(field)) return httpError(res, 400, "That question type cannot be charted", "FIELD_NOT_CHARTABLE");
+    const granularity = parseGranularity(req.query.granularity);
+    const agg = await aggregateField(form, field, { from: req.query.from, to: req.query.to, granularity, includeTest: req.query.includeTest === "true" });
+    res.status(200).json({ success: true, ...agg });
+  } catch (error) {
+    if (!segmentError(res, error)) next(error);
   }
 };

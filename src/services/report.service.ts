@@ -128,6 +128,9 @@ export const buildReportQuery = async (report: any, workspaceFormIds: any[]): Pr
           from: filters.from && filters.from !== "all" ? filters.from : undefined,
           to: filters.to && filters.to !== "all" ? filters.to : undefined,
           q: filters.search,
+          field: filters.field,
+          value: filters.value,
+          granularity: filters.granularity,
         },
         workspaceFormIds,
         report.requestedBy ? report.requestedBy.toString() : undefined

@@ -72,6 +72,14 @@ describe("view counting", () => {
     expect(await views()).toBe(2);
   });
 
+  it("tolerates ?embed=1: still 204 and counts exactly once", async () => {
+    process.env.PROXY_SHARED_SECRET = "views-secret";
+    const h = { "x-proxy-secret": "views-secret", "x-client-ip": "203.0.113.9" };
+    expect((await request(app).post("/api/public/views-form/view?embed=1").set(h)).status).toBe(204);
+    await request(app).post("/api/public/views-form/view?embed=1").set(h);
+    expect(await views()).toBe(1);
+  });
+
   it("always answers 204 and counts nothing for an unknown, draft or closed form", async () => {
     expect((await view({}, "no-such-form")).status).toBe(204);
     await Form.updateOne({ _id: form._id }, { status: "closed" });

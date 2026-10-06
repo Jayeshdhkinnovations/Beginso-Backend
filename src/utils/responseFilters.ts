@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
 import ResponseModel from "../models/Response";
 import ResponseReadState from "../models/ResponseReadState";
+import Form from "../models/Form";
 import { escapeRegex } from "./safeInput";
+import { submittedAtRange } from "./dateRange";
+import { fieldSegmentFilter, SegmentError } from "./fieldSegments";
 
 // Shared filter shape (Sprint 12, BE 0.2) consumed by the bulk endpoint's `filter` target and by
 // the filtered export (POST /api/reports). Kept in one place so both build the exact same query
@@ -17,6 +20,10 @@ export interface ResponseFilters {
   from?: string;
   to?: string;
   q?: string;
+  // Charts v2: one chart segment of one question (needs formId). See utils/fieldSegments.ts.
+  field?: string;
+  value?: string;
+  granularity?: string;
 }
 
 // `workspaceFormIds` scopes the query to forms the caller is allowed to see (workspace forms,
@@ -57,17 +64,14 @@ export const buildResponseFilterQuery = async (
     query.assigneeId = new mongoose.Types.ObjectId(filters.assigneeId);
   }
 
-  if (filters.from || filters.to) {
-    const submittedAtQuery: any = {};
-    if (filters.from) {
-      const d = new Date(filters.from);
-      if (!isNaN(d.getTime())) submittedAtQuery.$gte = d;
-    }
-    if (filters.to) {
-      const d = new Date(filters.to);
-      if (!isNaN(d.getTime())) submittedAtQuery.$lte = d;
-    }
-    if (Object.keys(submittedAtQuery).length > 0) query.submittedAt = submittedAtQuery;
+  // Same range rule as analytics (a date-only `to` runs to the end of that day).
+  const range = submittedAtRange(filters.from, filters.to);
+  if (range) query.submittedAt = range;
+
+  if (filters.field !== undefined || filters.value !== undefined) {
+    const form = filters.formId && mongoose.Types.ObjectId.isValid(filters.formId) ? await Form.findById(filters.formId).select("fields").lean() : null;
+    if (!form) throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "field/value filtering needs a formId (question ids are per form)");
+    query.$and = [fieldSegmentFilter(form, filters.field, filters.value, filters.granularity)];
   }
 
   if (filters.q && filters.q.trim() !== "") {

@@ -25,6 +25,8 @@ import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
 import { escapeRegex } from "../utils/safeInput";
+import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
+import { buildResponseFilterQuery } from "../utils/responseFilters";
 
 const toStageSummary = (stage: IStage | null | undefined): IResponseStageSummary | null => {
   if (!stage) return null;
@@ -105,6 +107,16 @@ export class ResponseService {
     includeTest?: boolean;
     // A per-form access grant (verified by requirePermission) opens this one form for a non-owner.
     isGrant?: boolean;
+    // Charts v2: segment filter (needs formId) - field=<fieldId>&value=<bucket value>[&granularity=] - plus the
+    // filters the Inbox sends that this route used to ignore. See utils/fieldSegments.ts.
+    field?: string;
+    value?: string;
+    granularity?: string;
+    tagIds?: string[];
+    assigneeId?: string;
+    unread?: boolean;
+    from?: string;
+    to?: string;
   }): Promise<PaginatedResponsesResult> {
     const { workspaceId, personalUserId, formId, status, stageId, search } = params;
 
@@ -146,6 +158,11 @@ export class ResponseService {
       }
 
       mongoQuery.formId = form._id;
+      if (params.field !== undefined || params.value !== undefined) {
+        mongoQuery.$and = [fieldSegmentFilter(form, params.field, params.value, params.granularity)];
+      }
+    } else if (params.field !== undefined || params.value !== undefined) {
+      throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "field/value filtering needs formId (question ids are per form)");
     } else if (personalUserId) {
       const forms = await this.formRepository.findWithPagination(
         { createdBy: personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] },
@@ -183,6 +200,18 @@ export class ResponseService {
     // Duplicate filter (Sprint 12, BE 0.6 / B4.10)
     if (params.duplicate) {
       mongoQuery.duplicateOfId = { $ne: null };
+    }
+
+    // Tags / assignee / unread / date range: same builder the bulk + export paths use, so the three cannot drift.
+    // (Only its non-scope parts are taken; scope and soft-delete are already set above.)
+    if (params.tagIds?.length || params.assigneeId || params.unread || params.from || params.to) {
+      const ids = mongoQuery.formId?.$in ?? [mongoQuery.formId];
+      const f = await buildResponseFilterQuery(
+        { tagIds: params.tagIds, assigneeId: params.assigneeId, unread: params.unread, from: params.from, to: params.to },
+        ids,
+        params.callerUserId
+      );
+      for (const k of ["tagIds", "assigneeId", "submittedAt", "_id"]) if (f[k] !== undefined) mongoQuery[k] = f[k];
     }
 
     // Search filter against answers content

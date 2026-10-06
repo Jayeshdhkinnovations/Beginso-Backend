@@ -10,6 +10,7 @@ import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { kickReportQueue } from "../services/reportQueue";
 import { countReportRows } from "../services/report.service";
 import { userHasAccessToForm } from "../utils/formAccess";
+import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
 
 const reportCreateSchema = z.object({
   format: z.enum(["csv", "pdf"]),
@@ -26,6 +27,10 @@ const reportCreateSchema = z.object({
   unread: z.boolean().optional(),
   duplicate: z.boolean().optional(),
   ids: z.array(z.string()).optional(),
+  // Charts v2: export one chart segment (needs formId).
+  field: z.string().optional(),
+  value: z.string().optional(),
+  granularity: z.string().optional(),
 });
 
 const getWorkspaceId = async (req: Request): Promise<string | null> => {
@@ -69,7 +74,19 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { format, formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids } = parseResult.data;
+    const { format, formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity } = parseResult.data;
+
+    if (field !== undefined || value !== undefined) {
+      const segForm = formId && mongoose.Types.ObjectId.isValid(formId) ? await Form.findOne({ _id: formId, workspaceId: userWorkspaceId }).select("fields").lean() : null;
+      try {
+        if (!segForm) throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "field/value filtering needs a formId in this workspace");
+        fieldSegmentFilter(segForm, field, value, granularity);
+      } catch (e) {
+        if (!(e instanceof SegmentError)) throw e;
+        res.status(e.statusCode).json({ success: false, message: e.message, error: { code: e.code, message: e.message } });
+        return;
+      }
+    }
 
     // PDF/CSV generation runs inside this process: refuse new jobs while this workspace already
     // has several in flight, and drop files of expired reports while we are here.
@@ -95,7 +112,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       workspaceId: new mongoose.Types.ObjectId(userWorkspaceId),
       requestedBy: (req as any).user?._id,
       format,
-      filters: { formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids },
+      filters: { formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity },
       status: "queued",
       expiresAt,
     });

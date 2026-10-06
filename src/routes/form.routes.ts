@@ -29,7 +29,7 @@ import {
   unarchiveForm,
   createTestSubmission,
 } from "../controllers/formLifecycle.controller";
-import { listCharts, createChart, updateChart, deleteChart, getChartData, previewChart } from "../controllers/chart.controller";
+import { listCharts, createChart, updateChart, deleteChart, getChartData, previewChart, reorderCharts, duplicateChart, getFieldAnalytics } from "../controllers/chart.controller";
 import { getScoreComparison } from "../controllers/score.controller";
 
 const router = Router();
@@ -74,6 +74,10 @@ const formResource = { resourceType: "form" as const };
 router.get("/:formId/charts", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, listCharts);
 router.post("/:formId/charts/preview", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, previewChart);
 router.post("/:formId/charts", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, createChart);
+// Charts v2: reorder (declared before /:chartId), duplicate, and the single-field aggregate behind every chart.
+router.put("/:formId/charts/order", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, reorderCharts);
+router.post("/:formId/charts/:chartId/duplicate", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, duplicateChart);
+router.get("/:formId/analytics/field/:fieldId", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, getFieldAnalytics);
 router.get("/:formId/charts/:chartId/data", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, getChartData);
 router.patch("/:formId/charts/:chartId", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, updateChart);
 router.delete("/:formId/charts/:chartId", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, deleteChart);

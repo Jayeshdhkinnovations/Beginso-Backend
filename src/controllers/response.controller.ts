@@ -52,7 +52,10 @@ export const getResponses = async (
       return;
     }
 
-    const { formId, status, stageId, search, page, limit, duplicate, includeTest } = req.query;
+    const { formId, status, stageId, search, q, page, limit, duplicate, includeTest, field, value, granularity, assigneeId, unread, from, to } = req.query;
+    // tagIds arrives as ?tagIds=a,b, ?tagIds=a&tagIds=b or ?tagIds[]=a
+    const tagIds = ([] as unknown[]).concat(req.query.tagIds ?? []).flatMap((t) => String(t).split(",")).filter(Boolean);
+    const flag = (v: unknown) => v === "true" || v === "1";
 
     const result = await responseService.getResponses({
       workspaceId,
@@ -60,7 +63,15 @@ export const getResponses = async (
       formId: formId ? String(formId) : undefined,
       status: status ? String(status) : undefined,
       stageId: stageId ? String(stageId) : undefined,
-      search: search ? String(search) : undefined,
+      search: search || q ? String(search || q) : undefined,
+      field: typeof field === "string" ? field : undefined,
+      value: typeof value === "string" ? value : undefined,
+      granularity: typeof granularity === "string" ? granularity : undefined,
+      tagIds,
+      assigneeId: typeof assigneeId === "string" ? assigneeId : undefined,
+      unread: flag(unread),
+      from: typeof from === "string" ? from : undefined,
+      to: typeof to === "string" ? to : undefined,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       callerUserId: authReq.user._id.toString(),
@@ -78,7 +89,7 @@ export const getResponses = async (
       res.status(error.statusCode).json({
         success: false,
         message: error.message,
-        error: { message: error.message },
+        error: { ...(error.code ? { code: error.code } : {}), message: error.message },
       });
       return;
     }

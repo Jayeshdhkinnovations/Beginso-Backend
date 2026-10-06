@@ -19,6 +19,9 @@ export interface IReportFilters {
   unread?: boolean;
   duplicate?: boolean;
   ids?: string[];
+  field?: string;
+  value?: string;
+  granularity?: string;
 }
 
 export interface IReport extends Document {

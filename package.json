@@ -15,6 +15,7 @@
     "migrate:stages": "ts-node src/scripts/migrateStagesFromStatus.ts",
     "migrate:access-mode": "ts-node src/scripts/migrateAccessMode.ts",
     "migrate:sprint14": "ts-node src/scripts/migrateSprint14.ts",
+    "migrate:charts-v2": "ts-node src/scripts/migrateChartsV2.ts",
     "time:sprint14": "ts-node src/scripts/timeSearchAndAnalytics.ts",
     "backfill:readstate": "ts-node src/scripts/backfillReadState.ts",
     "backfill:search": "ts-node src/scripts/backfillResponseSearchText.ts",

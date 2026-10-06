@@ -292,7 +292,7 @@ describe("BE 0.3 - saved charts", () => {
     const post = (b: any) => request(app).post(url()).set(as(tOwner, "ws-a")).send(b);
     expect((await post({ fieldId: "f-plan", chartType: "line", groupBy: "value" })).status).toBe(400);
     expect((await post({ fieldId: "f-plan", chartType: "bar", groupBy: "day" })).status).toBe(400);
-    expect((await post({ fieldId: "f-when", chartType: "bar", groupBy: "day" })).status).toBe(400);
+    expect((await post({ fieldId: "f-when", chartType: "pie", groupBy: "day" })).status).toBe(400); // charts v2 allows bar on a date; pie stays invalid
     expect((await post({ fieldId: "f-when", chartType: "line", groupBy: "value" })).status).toBe(400);
     expect((await post({ fieldId: "f-name", chartType: "bar", groupBy: "value" })).status).toBe(400); // free text
     expect((await post({ fieldId: "nope", chartType: "bar", groupBy: "value" })).status).toBe(400);

@@ -576,7 +576,7 @@ export class ResponseService {
         response: {
           _id: updated._id.toString(),
           formId: updated.formId.toString(),
-          answers: updated.answers,
+          answers: cleanAnswers(updated.answers),
           stageId: undefined,
           stage: null,
           status: updated.status,
@@ -612,7 +612,7 @@ export class ResponseService {
       response: {
         _id: updated._id.toString(),
         formId: updated.formId.toString(),
-        answers: updated.answers,
+        answers: cleanAnswers(updated.answers),
         stageId: updated.stageId!.toString(),
         stage: toStageSummary(targetStage),
         status: updated.status || targetStage.category,
@@ -771,7 +771,7 @@ export class ResponseService {
       response: {
         _id: updated._id.toString(),
         formId: updated.formId.toString(),
-        answers: updated.answers,
+        answers: cleanAnswers(updated.answers),
         assigneeId: updated.assigneeId ? updated.assigneeId.toString() : null,
         assignee: toAssigneeSummary(assigneeUser),
         status: updated.status,
@@ -843,7 +843,7 @@ export class ResponseService {
       response: {
         _id: updated._id.toString(),
         formId: updated.formId.toString(),
-        answers: updated.answers,
+        answers: cleanAnswers(updated.answers),
         tagIds: uniqueTagIds,
         tags: toTagSummaries(updated.tagIds, tagsById),
         status: updated.status,

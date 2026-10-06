@@ -30,12 +30,17 @@ import {
   createTestSubmission,
 } from "../controllers/formLifecycle.controller";
 import { listCharts, createChart, updateChart, deleteChart, getChartData, previewChart, reorderCharts, duplicateChart, getFieldAnalytics } from "../controllers/chart.controller";
+import { pinFormHandler, unpinFormHandler } from "../controllers/pin.controller";
 import { getScoreComparison } from "../controllers/score.controller";
 
 const router = Router();
 
 router.post("/", protect as any, blockSuspended as any, requirePermission("forms:create") as any, createForm);
 router.get("/", protect as any, blockSuspended as any, requirePermission("forms:read") as any, listForms);
+// Pinned forms: a private per-user bookmark, not a write to the form. Pinning needs read access only;
+// unpinning touches just the caller's own row, so it needs no form permission.
+router.put("/:formId/pin", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, pinFormHandler);
+router.delete("/:formId/pin", protect as any, blockSuspended as any, unpinFormHandler);
 router.get("/:formId/overview", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, getFormOverview);
 router.get("/:formId/events", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, listFormEvents);
 router.get("/:formId", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, getForm);

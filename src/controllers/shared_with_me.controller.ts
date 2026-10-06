@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import FormAccessGrant from "../models/FormAccessGrant";
 import Form from "../models/Form";
 import Workspace from "../models/Workspace";
+import { pinsFor } from "../services/pin.service";
 import User from "../models/User";
 
 export const getSharedWithMe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -73,6 +74,7 @@ export const getSharedWithMe = async (req: Request, res: Response, next: NextFun
       sharerMap.set(u._id.toString(), u);
     }
 
+    const pinned = await pinsFor(String(userId), formIds);
     const result = grants
       .map((g) => {
         const form = formMap.get(g.formId.toString());
@@ -116,6 +118,8 @@ export const getSharedWithMe = async (req: Request, res: Response, next: NextFun
           responseCount: form.responseCount || 0,
           workspaceId: form.workspaceId ? form.workspaceId.toString() : null,
           workspaceName: wsName,
+          pinned: pinned.has(form._id.toString()),
+          ...(pinned.has(form._id.toString()) ? { pinnedAt: pinned.get(form._id.toString()) } : {}),
           sharedAt: g.createdAt,
           createdAt: form.createdAt,
           updatedAt: form.updatedAt,

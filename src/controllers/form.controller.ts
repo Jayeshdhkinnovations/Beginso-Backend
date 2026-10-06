@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { reconcilePinsAfterMove } from "../services/pin.service";
 import { recordEvent } from "../services/event.service";
 import crypto from "crypto";
 import { FormService } from "../services/form.service";
@@ -480,6 +481,9 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
       limit,
       // Sprint 13 (CF5.6): "false" (default) | "true" | "only"
       archived: typeof req.query.archived === "string" ? req.query.archived : undefined,
+      // Pinned forms: the caller's private pins decorate every row; pinned=true lists only those.
+      userId: authReq.user._id.toString(),
+      pinned: req.query.pinned === "true",
       // C1.6: no active workspace or explicit personal context -> list caller's personal forms
       personalUserId: (isExplicitPersonal || !workspaceId) ? authReq.user._id.toString() : undefined,
     });
@@ -1567,6 +1571,7 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
       form.createdBy = userId;
       await FormAccessGrant.deleteMany({ formId: form._id });
       await form.save();
+      await reconcilePinsAfterMove(form);
       await recordEvent(req, fromWs, "form.move", { id: form._id, type: "form", label: form.title }, { to: "personal" });
 
       res.status(200).json({
@@ -1636,6 +1641,7 @@ export const moveForm = async (req: Request, res: Response, next: NextFunction):
     // Per-form shares were granted in the old context; they do not carry into a new one.
     await FormAccessGrant.deleteMany({ formId: form._id });
     await form.save();
+    await reconcilePinsAfterMove(form);
     await recordEvent(req, fromWorkspace ?? targetWs._id, "form.move", { id: form._id, type: "form", label: form.title }, { to: targetWs._id.toString() });
 
     res.status(200).json({

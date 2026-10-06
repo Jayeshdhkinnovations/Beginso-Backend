@@ -1,5 +1,7 @@
 import { FormRepository } from "../repositories/form.repository";
 import { deleteFormData } from "./cleanup.service";
+import FormPin from "../models/FormPin";
+import { PIN_LIMIT, pinsFor } from "./pin.service";
 import Form, { IForm, IFormField } from "../models/Form";
 import ResponseModel from "../models/Response";
 import Upload from "../models/Upload";
@@ -230,6 +232,8 @@ export class FormService {
       // Sprint 13 (CF5.6): "false" (default) hides archived forms, "true" shows everything, "only" shows
       // just the archived ones. Trashed forms are never listed here (Form query hook).
       archived?: string;
+      userId?: string;
+      pinned?: boolean;
     }
   ) {
     const page = clampInt(options.page, 1, 1, 100000);
@@ -257,10 +261,24 @@ export class FormService {
       if (search) query.title = { $regex: escapeRegex(search), $options: "i" };
     }
 
-    const [forms, total] = await Promise.all([
-      this.formRepository.findWithPagination(query, skip, limit, workspaceId),
-      this.formRepository.count(query, workspaceId),
-    ]);
+    let forms: IForm[];
+    let total: number;
+    let pinnedAt = new Map<string, Date>();
+    if (options.pinned && options.userId) {
+      // At most PIN_LIMIT pins, so intersect with the context-scoped query, then order by pin time in memory.
+      const pins = await FormPin.find({ userId: options.userId }).select("formId pinnedAt").lean();
+      pinnedAt = new Map(pins.map((p) => [String(p.formId), p.pinnedAt]));
+      const matched = await this.formRepository.findWithPagination({ ...query, _id: { $in: pins.map((p) => p.formId) } }, 0, PIN_LIMIT, workspaceId);
+      matched.sort((a, b) => +pinnedAt.get(String(b._id))! - +pinnedAt.get(String(a._id))!);
+      total = matched.length;
+      forms = matched.slice(skip, skip + limit);
+    } else {
+      [forms, total] = await Promise.all([
+        this.formRepository.findWithPagination(query, skip, limit, workspaceId),
+        this.formRepository.count(query, workspaceId),
+      ]);
+      if (options.userId) pinnedAt = await pinsFor(options.userId, forms.map((f) => f._id));
+    }
 
     // One grouped count for the whole page instead of one query per form.
     const counts = await ResponseModel.aggregate([
@@ -270,7 +288,8 @@ export class FormService {
     const countByForm = new Map(counts.map((c: any) => [String(c._id), c.n]));
     const formsWithCount = forms.map((f) => {
       const doc = f.toObject ? f.toObject() : f;
-      return { ...doc, responseCount: countByForm.get(String(doc._id)) ?? 0 };
+      const at = pinnedAt.get(String(doc._id));
+      return { ...doc, responseCount: countByForm.get(String(doc._id)) ?? 0, pinned: !!at, ...(at ? { pinnedAt: at } : {}) };
     });
 
     const pages = Math.ceil(total / limit);

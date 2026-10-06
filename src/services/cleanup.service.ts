@@ -6,6 +6,7 @@ import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import Upload from "../models/Upload";
 import FormAccessGrant from "../models/FormAccessGrant";
+import FormPin from "../models/FormPin";
 import SavedChart from "../models/SavedChart";
 import Invitation from "../models/Invitation";
 import Report from "../models/Report";
@@ -87,6 +88,7 @@ export const deleteFormData = async (formId: string): Promise<void> => {
   await ResponseModel.deleteMany({ formId: id });
   await FormAccessGrant.deleteMany({ formId: id });
   await SavedChart.deleteMany({ formId: id });
+  await FormPin.deleteMany({ formId: id });
 };
 
 export const deleteWorkspaceData = async (workspaceId: mongoose.Types.ObjectId | string): Promise<void> => {
@@ -149,6 +151,7 @@ export const deleteAccountData = async (user: any): Promise<void> => {
 
   await Membership.deleteMany({ userId });
   await FormAccessGrant.deleteMany({ userId });
+  await FormPin.deleteMany({ userId });
   await Invitation.deleteMany({ email: String(user.email).toLowerCase(), status: "pending" });
   await SessionModel.deleteMany({ userId });
   await Notification.deleteMany({ userId });

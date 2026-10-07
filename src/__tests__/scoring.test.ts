@@ -126,14 +126,17 @@ describe("score criteria CRUD", () => {
 describe("PUT/GET /api/responses/:id/score", () => {
   const put = (who: string, id: any, body: any) => request(app).put(`/api/responses/${id}/score`).set(auth(who)).send(body);
 
-  it("owner/admin/editor/member can score; reviewer/viewer cannot (responses:write); outsider is 403", async () => {
+  it("owner/admin/editor/member can score; reviewer/viewer can too (they hold responses:write, no delete); outsider is 403", async () => {
     for (const who of ["owner", "admin", "editor", "member"]) {
       const res = await put(who, respHigh._id, { criterionId: criterionA, value: 5 });
       expect([who, res.status]).toEqual([who, 200]);
     }
-    // Current role matrix: reviewer has no responses:write. See the audit report (decision pending).
-    expect((await put("reviewer", respHigh._id, { criterionId: criterionA, value: 5 })).status).toBe(403);
-    expect((await put("viewer", respHigh._id, { criterionId: criterionA, value: 5 })).status).toBe(403);
+    // Reviewer/viewer hold responses:write (tag, note, score, stage), so they may score. Scored on a
+    // throwaway response so the aggregates checked in later tests stay as they were.
+    const scratch = await ResponseModel.create({ formId: form._id, answers: {}, reference: "#9", submittedAt: new Date() });
+    expect((await put("reviewer", scratch._id, { criterionId: criterionA, value: 5 })).status).toBe(200);
+    expect((await put("viewer", scratch._id, { criterionId: criterionA, value: 5 })).status).toBe(200);
+    await ResponseModel.deleteOne({ _id: scratch._id });
     expect((await put("outsider", respHigh._id, { criterionId: criterionA, value: 5 })).status).toBe(403);
     expect((await request(app).get(`/api/responses/${respHigh._id}/score`).set(auth("outsider"))).status).toBe(403);
   });

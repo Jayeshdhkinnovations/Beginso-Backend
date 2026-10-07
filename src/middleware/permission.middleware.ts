@@ -88,7 +88,10 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "forms:read",
     // No forms:create, forms:write, forms:publish, forms:delete
     "responses:read",
-    // No responses:write, responses:delete
+    // Reviewers act on responses (tag, assign, note, score, change stage) but never delete them.
+    // The UI's roles page promises this; it was previously only enforced as a 403.
+    "responses:write",
+    // No responses:delete
     // No reports:create (cannot export per C2.1 role matrix)
     "dashboard:read",
     "analytics:read",
@@ -101,6 +104,9 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "workspace:read",
     "forms:read",
     "responses:read",
+    // The app labels this wire role "Reviewer" (it is the only non-editor role the UI assigns), so it
+    // carries the same act-on-responses tier as `reviewer`. No responses:delete.
+    "responses:write",
     "dashboard:read",
     "analytics:read",
     "reports:read",
@@ -180,18 +186,18 @@ export const requirePermission = (
           let targetForm: any = null;
 
           if (options?.resourceType === "form" || grantByQuery) {
-            targetForm = await Form.findById(paramId).select("_id workspaceId").lean();
+            targetForm = await Form.findById(paramId).select("_id workspaceId createdBy").lean();
           } else if (options?.resourceType === "response") {
             const resp = await ResponseModel.findById(paramId).select("formId").lean();
             if (resp && resp.formId) {
-              targetForm = await Form.findById(resp.formId).select("_id workspaceId").lean();
+              targetForm = await Form.findById(resp.formId).select("_id workspaceId createdBy").lean();
             }
           } else if (options?.resourceType === "report") {
             // A report on one form is reachable through that form's grant (same BE 0.6 mechanism);
             // the controller then re-checks the form. Workspace-wide reports never take this path.
             const rep = await Report.findById(paramId).select("workspaceId filters").lean();
             const rf = rep?.filters?.formId;
-            if (rep && rf && mongoose.Types.ObjectId.isValid(rf)) {
+            if (rep && rep.workspaceId && rf && mongoose.Types.ObjectId.isValid(rf)) {
               const f: any = await Form.findById(rf).select("_id workspaceId").lean();
               if (f && String(f.workspaceId ?? "") === rep.workspaceId.toString()) targetForm = f;
             }
@@ -199,10 +205,26 @@ export const requirePermission = (
 
           if (targetForm) {
             // Check if user has direct per-form grant
-            const grant = await FormAccessGrant.findOne({
+            let grant: any = await FormAccessGrant.findOne({
               formId: targetForm._id,
               userId: user._id,
             }).lean();
+
+            // A grant can only add access, never lower it: the form's owner (personal creator,
+            // workspace owner) and workspace admins always resolve through the normal role check below.
+            if (grant) {
+              let fullAccess = false;
+              if (!targetForm.workspaceId) {
+                fullAccess = String(targetForm.createdBy) === String(user._id);
+              } else {
+                const [m, ws] = await Promise.all([
+                  Membership.findOne({ userId: user._id, workspaceId: targetForm.workspaceId }).select("role").lean(),
+                  Workspace.findById(targetForm.workspaceId).select("owner").lean(),
+                ]);
+                fullAccess = m?.role === "owner" || m?.role === "admin" || String(ws?.owner) === String(user._id);
+              }
+              if (fullAccess) grant = null;
+            }
 
             if (grant) {
               // Check permission against grant's role

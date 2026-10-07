@@ -1,8 +1,10 @@
 import nodemailer from "nodemailer";
 import crypto from "crypto";
-import { recordMailLog } from "../models/MailLog";
+import { recordMailLog, MailLogTemplate } from "../models/MailLog";
 import { renderRespondentLinkEmail } from "./respondentMail";
 import { renderActivityEmail, ActivityEmailInput } from "./notificationMail";
+import { RenderedMail, APP_URL } from "../mail/layout";
+import * as T from "../mail/templates";
 
 export type AuthMailType =
   | "verify_email"
@@ -12,14 +14,41 @@ export type AuthMailType =
   | "email_verified_success"
   | "password_changed_success"
   | "workspace_invitation"
-  // Sprint 13 (A5.5): the signed-link email a respondent gets. Contains no response data.
   | "respondent_submission_link"
-  // Sprint 14 (R1): new response / mention / assignment. Contains no response data (notificationMail.ts).
-  | "activity_notification";
+  | "activity_notification"
+  | "role_changed"
+  | "member_removed"
+  | "invitation_accepted"
+  | "invitation_reminder"
+  | "form_shared"
+  | "export_ready"
+  | "export_failed"
+  | "response_limit_reached"
+  | "new_device_signin"
+  | "respondent_receipt"
+  | "weekly_digest"
+  | "workspace_deleted";
+
+// One typed payload per data-carrying template, instead of widening SendMailOptions with more optionals.
+export type MailPayload =
+  | { template: "role_changed"; data: T.RoleChangedInput }
+  | { template: "member_removed"; data: T.MemberRemovedInput }
+  | { template: "invitation_accepted"; data: T.InvitationAcceptedInput }
+  | { template: "invitation_reminder"; data: T.InvitationReminderInput }
+  | { template: "form_shared"; data: T.FormSharedInput }
+  | { template: "export_ready"; data: T.ExportReadyInput }
+  | { template: "export_failed"; data: T.ExportFailedInput }
+  | { template: "response_limit_reached"; data: T.ResponseLimitInput }
+  | { template: "new_device_signin"; data: T.NewDeviceSigninInput }
+  | { template: "respondent_receipt"; data: T.RespondentReceiptInput }
+  | { template: "weekly_digest"; data: T.WeeklyDigestInput }
+  | { template: "workspace_deleted"; data: T.WorkspaceDeletedInput };
 
 export interface SendMailOptions {
   to: string;
   template: AuthMailType;
+  /** Required for the twelve templates in MailPayload; pass that template's data. */
+  payload?: MailPayload["data"];
   actionUrl?: string;
   code?: string;
   name?: string;
@@ -28,17 +57,76 @@ export interface SendMailOptions {
   workspaceName?: string;
   inviterName?: string;
   role?: string;
-  // respondent_submission_link only
   formName?: string;
   expiresAt?: Date;
-  // activity_notification only
   activity?: ActivityEmailInput;
 }
 
-const EMAIL_LOGO_URL = process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-full-light.svg";
-const BEGINSO_LOGO_IMG = `<img src="${EMAIL_LOGO_URL}" alt="Beginso" width="168" height="46" style="display: block; width: 168px; max-width: 100%; height: auto; border: 0; outline: none; text-decoration: none;" />`;
-const BEGINSO_LOGO_SVG = BEGINSO_LOGO_IMG;
+// Notification and bulk mail carry List-Unsubscribe. Transactional mail must not.
+const BULK: ReadonlySet<AuthMailType> = new Set<AuthMailType>([
+  "activity_notification",
+  "weekly_digest",
+  "invitation_accepted",
+  "form_shared",
+  "response_limit_reached",
+]);
 
+const PAYLOAD_RENDERERS: Partial<Record<AuthMailType, (d: any) => RenderedMail>> = {
+  role_changed: T.renderRoleChangedEmail,
+  member_removed: T.renderMemberRemovedEmail,
+  invitation_accepted: T.renderInvitationAcceptedEmail,
+  invitation_reminder: T.renderInvitationReminderEmail,
+  form_shared: T.renderFormSharedEmail,
+  export_ready: T.renderExportReadyEmail,
+  export_failed: T.renderExportFailedEmail,
+  response_limit_reached: T.renderResponseLimitEmail,
+  new_device_signin: T.renderNewDeviceSigninEmail,
+  respondent_receipt: T.renderRespondentReceiptEmail,
+  weekly_digest: T.renderWeeklyDigestEmail,
+  workspace_deleted: T.renderWorkspaceDeletedEmail,
+};
+
+const maskEmail = (e: string): string => e.replace(/^(.).*(@.*)$/, "$1***$2");
+
+// Renders without sending. Null for an unknown template or a missing payload, so the caller
+// refuses to send instead of emitting a blank message.
+export function renderMail(o: SendMailOptions): RenderedMail | null {
+  const { to, template, actionUrl, name } = o;
+  switch (template) {
+    case "verify_email":
+    case "verify_email_otp":
+      return T.renderVerifyEmail({ revealUrl: actionUrl || `${APP_URL}/verification-code` });
+    case "reset_password":
+      return T.renderResetPasswordEmail({ resetUrl: actionUrl || `${APP_URL}/reset-password` });
+    case "welcome_user":
+      return T.renderWelcomeEmail({ name, dashboardUrl: actionUrl || `${APP_URL}/dashboard` });
+    case "workspace_invitation":
+      return T.renderWorkspaceInvitationEmail({
+        to,
+        workspaceName: o.workspaceName || "our workspace",
+        inviterName: o.inviterName || "A team member",
+        role: o.role || "member",
+        acceptUrl: actionUrl || `${APP_URL}/dashboard`,
+      });
+    case "email_verified_success":
+      return T.renderEmailVerifiedEmail({ to, dashboardUrl: actionUrl || `${APP_URL}/dashboard` });
+    case "password_changed_success":
+      return T.renderPasswordChangedEmail({ to, loginUrl: actionUrl || `${APP_URL}/login`, changedAt: new Date() });
+    case "activity_notification":
+      return o.activity ? renderActivityEmail(o.activity) : null;
+    case "respondent_submission_link":
+      // Pure function so the "no answers in the email" rule is provable (respondentMail.ts).
+      return renderRespondentLinkEmail({
+        formName: o.formName || "",
+        actionUrl: actionUrl || APP_URL,
+        expiresAt: o.expiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      });
+    default: {
+      const render = PAYLOAD_RENDERERS[template];
+      return render && o.payload ? render(o.payload) : null;
+    }
+  }
+}
 
 class MailService {
   private transporter: nodemailer.Transporter | null = null;
@@ -55,576 +143,85 @@ class MailService {
         host,
         port,
         secure,
+        // Never fall back to plaintext on 587. SMTP_REQUIRE_TLS=false is the explicit opt-out.
+        requireTLS: !secure && process.env.SMTP_REQUIRE_TLS !== "false",
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
         auth: user && pass ? { user, pass } : undefined,
         tls: {
           // Verify the server certificate. If the relay uses a self-signed cert, set
           // SMTP_TLS_REJECT_UNAUTHORIZED=false explicitly instead of disabling it for everyone.
           rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
         },
+        // Only when the relay cannot sign as the sending domain. Relay-side signing is better.
+        ...(process.env.DKIM_PRIVATE_KEY
+          ? {
+              dkim: {
+                domainName: process.env.DKIM_DOMAIN || process.env.MAIL_DOMAIN || "mail.beginso.com",
+                keySelector: process.env.DKIM_SELECTOR || "beginso",
+                privateKey: process.env.DKIM_PRIVATE_KEY.replace(/\\n/g, "\n"),
+              },
+            }
+          : {}),
       });
     }
     return this.transporter;
   }
 
   // Resolves true when the provider accepted the message, false when it failed (never throws).
-  async sendMail(options: SendMailOptions): Promise<boolean | void> {
+  async sendMail(options: SendMailOptions): Promise<boolean> {
     const startTime = Date.now();
     const reqId = options.requestId || `req_${crypto.randomBytes(8).toString("hex")}`;
     const fromName = process.env.SMTP_FROM_NAME || "Beginso";
     const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || "no-reply@beginso.com";
     const from = `"${fromName}" <${fromEmail}>`;
-    const appUrl = process.env.APP_URL || "https://beginso.com";
+    // Set once mail.beginso.com has SPF/DKIM/DMARC. Until then the relay's own defaults apply.
+    const sendingDomain = process.env.MAIL_DOMAIN;
 
-    const { to, template, actionUrl, code, name, firebaseUid, workspaceName, inviterName, role } = options;
+    const { to, template, firebaseUid } = options;
 
-    let mappedLogTemplate: "verification" | "password_reset" | "welcome" | null = null;
-    if (template === "verify_email" || template === "verify_email_otp") {
-      mappedLogTemplate = "verification";
-    } else if (template === "reset_password") {
-      mappedLogTemplate = "password_reset";
-    } else if (template === "welcome_user" || template === "workspace_invitation") {
-      mappedLogTemplate = "welcome";
+    let mappedLogTemplate: MailLogTemplate | null = null;
+    if (template === "verify_email" || template === "verify_email_otp") mappedLogTemplate = "verification";
+    else if (template === "reset_password") mappedLogTemplate = "password_reset";
+    else if (template === "welcome_user" || template === "workspace_invitation") mappedLogTemplate = "welcome";
+    // activity_notification is logged by notificationEmail.service (claim) with its dedupe key.
+    else if (template !== "activity_notification") mappedLogTemplate = template as MailLogTemplate;
+
+    const rendered = renderMail(options);
+    if (!rendered) {
+      console.error(`❌ No renderer or payload for template ${template}; not sending to ${maskEmail(to)}`);
+      return false;
     }
 
-    let subject = "";
-    let htmlContent = "";
-    let textContent = "";
-
-    if (template === "verify_email" || template === "verify_email_otp") {
-      subject = "Verify your Beginso email";
-      const revealUrl = actionUrl || `${appUrl}/verification-code`;
-
-      textContent = `Verify your email address\n\nClick the link below to securely view your six-digit verification code:\n\n${revealUrl}\n\nThis secure link and its verification code expire in 10 minutes.\n\nIf you did not create a Beginso account, ignore this email.`;
-
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${subject}</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 16px;">
-            <tr>
-              <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);">
-                  <!-- Header Gradient Bar -->
-                  <tr>
-                    <td style="background: #041347; background: linear-gradient(90deg, #041347 0%, #4274D9 100%); height: 8px;"></td>
-                  </tr>
-                  
-                  <!-- Main Content Area -->
-                  <tr>
-                    <td style="padding: 40px 36px 36px 36px;">
-                      <!-- Logo -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td>
-                            ${BEGINSO_LOGO_SVG}
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Heading & Copy -->
-                      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">Verify your email address</h1>
-                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0;">Click the button below to securely view your six-digit verification code.</p>
-
-                      <!-- Primary CTA Button -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td align="center">
-                            <a href="${revealUrl}" target="_blank" style="background-color: #2563EB; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);">View verification code</a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <p style="font-size: 13px; color: #6B7280; margin: 0 0 24px 0; text-align: center;">⏱️ This secure link and its verification code expire in <strong>10 minutes</strong>.</p>
-
-                      <!-- Direct Link Fallback -->
-                      <div style="background-color: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 10px; padding: 16px; margin-bottom: 24px;">
-                        <p style="font-size: 12px; color: #6B7280; margin: 0 0 6px 0; font-weight: 600;">Button not working? Copy and paste this link into your browser:</p>
-                        <a href="${revealUrl}" target="_blank" style="font-size: 12px; color: #2563EB; word-break: break-all; text-decoration: underline;">${revealUrl}</a>
-                      </div>
-
-                      <!-- Security Shield Card -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F9FAFB; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px;">
-                        <tr>
-                          <td style="font-size: 13px; color: #6B7280; line-height: 1.5;">
-                            🛡️ <strong>Security Notice:</strong> The verification code is generated only when you click the button above and is displayed once securely on the Beginso website.
-                          </td>
-                        </tr>
-                      </table>
-
-                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0;" />
-                      
-                      <!-- Footer -->
-                      <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
-                        If you did not create a Beginso account, ignore this email.<br/>
-                        &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `;
-    } else if (template === "reset_password") {
-      subject = "Reset your Beginso password";
-      const resetUrl = actionUrl || `${appUrl}/reset-password`;
-
-      textContent = `Reset your password\n\nWe received a request to reset your Beginso password.\n\nClick the link below to create a new password:\n${resetUrl}\n\nIf you didn't request this change, you can safely ignore this email.`;
-
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${subject}</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 16px;">
-            <tr>
-              <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);">
-                  <!-- Header Gradient Bar -->
-                  <tr>
-                    <td style="background: #041347; background: linear-gradient(90deg, #041347 0%, #4274D9 100%); height: 8px;"></td>
-                  </tr>
-                  
-                  <!-- Main Content Area -->
-                  <tr>
-                    <td style="padding: 40px 36px 36px 36px;">
-                      <!-- Logo -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td>
-                            ${BEGINSO_LOGO_SVG}
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Heading & Copy -->
-                      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">Reset your password</h1>
-                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 8px 0;">We received a request to reset your Beginso password.</p>
-                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 28px 0;">Click the button below to create a new password.</p>
-
-                      <!-- Primary CTA Button -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td align="center">
-                            <a href="${resetUrl}" target="_blank" style="background-color: #2563EB; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);">Reset password</a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Direct Link Fallback -->
-                      <div style="background-color: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 10px; padding: 16px; margin-bottom: 28px;">
-                        <p style="font-size: 12px; color: #6B7280; margin: 0 0 6px 0; font-weight: 600;">Button not working? Copy and paste this link into your browser:</p>
-                        <a href="${resetUrl}" target="_blank" style="font-size: 12px; color: #2563EB; word-break: break-all; text-decoration: underline;">${resetUrl}</a>
-                      </div>
-
-                      <!-- Security Notice Card -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px;">
-                        <tr>
-                          <td style="font-size: 13px; color: #991B1B; line-height: 1.5;">
-                            🔒 <strong>Notice:</strong> If you didn't request a password reset, your password remains secure and unchanged. You can safely ignore this message.
-                          </td>
-                        </tr>
-                      </table>
-
-                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0;" />
-                      
-                      <!-- Footer -->
-                      <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
-                        If you didn't request this change, you can safely ignore this email.<br/>
-                        &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `;
-    } else if (template === "welcome_user") {
-      subject = "Welcome to Beginso! 🎉";
-      const dashboardUrl = actionUrl || `${appUrl}/dashboard`;
-      const displayName = name || "there";
-
-      textContent = `Welcome to Beginso, ${displayName}!\n\nWe're thrilled to have you on board. Beginso gives you powerful tools to create forms, collect responses, and analyze customer data effortlessly.\n\nGet Started: ${dashboardUrl}\n\nNeed help? Reply directly to this email or visit our help center.\n\n© ${new Date().getFullYear()} Beginso Inc. All rights reserved.`;
-
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${subject}</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 16px;">
-            <tr>
-              <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);">
-                  <!-- Header Gradient Bar -->
-                  <tr>
-                    <td style="background: #041347; background: linear-gradient(90deg, #041347 0%, #4274D9 100%); height: 8px;"></td>
-                  </tr>
-                  
-                  <!-- Main Content Area -->
-                  <tr>
-                    <td style="padding: 40px 36px 36px 36px;">
-                      <!-- Logo -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td>
-                            ${BEGINSO_LOGO_SVG}
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Heading & Welcome Banner -->
-                      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">Welcome to Beginso, ${displayName}! 👋</h1>
-                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0;">We're thrilled to have you join our platform. Beginso is built to help you design stunning interactive forms, capture responses seamlessly, and turn data into growth.</p>
-
-                      <!-- Feature Grid Box -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td style="background-color: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 12px; padding: 20px;">
-                            <div style="margin-bottom: 14px;">
-                              <span style="font-size: 16px; margin-right: 8px;">⚡</span>
-                              <strong style="font-size: 14px; color: #111827;">Instant Form Builder:</strong>
-                              <span style="font-size: 13px; color: #6B7280; display: block; margin-top: 2px;">Create customized multi-step forms in seconds.</span>
-                            </div>
-                            <div style="margin-bottom: 14px;">
-                              <span style="font-size: 16px; margin-right: 8px;">📊</span>
-                              <strong style="font-size: 14px; color: #111827;">Real-time Analytics:</strong>
-                              <span style="font-size: 13px; color: #6B7280; display: block; margin-top: 2px;">Track submission trends and conversion performance live.</span>
-                            </div>
-                            <div>
-                              <span style="font-size: 16px; margin-right: 8px;">🔒</span>
-                              <strong style="font-size: 14px; color: #111827;">Enterprise Security:</strong>
-                              <span style="font-size: 13px; color: #6B7280; display: block; margin-top: 2px;">Your data is encrypted and protected by strict session controls.</span>
-                            </div>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Primary CTA Button -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td align="center">
-                            <a href="${dashboardUrl}" target="_blank" style="background-color: #2563EB; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);">Go to Dashboard</a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0;" />
-                      
-                      <!-- Footer -->
-                      <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
-                        Need help getting started? Simply reply directly to this email.<br/>
-                        &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `;
-    } else if (template === "workspace_invitation") {
-      const wsName = workspaceName || "our workspace";
-      const inviter = inviterName || "A team member";
-      const rawRole = role || "member";
-      const roleDisplay = rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase();
-      const acceptUrl = actionUrl || `${appUrl}/dashboard`;
-
-      subject = `You've been invited to join ${wsName} on Beginso ✉️`;
-
-      textContent = `You've been invited to join ${wsName} on Beginso!\n\n${inviter} has invited you to collaborate in the ${wsName} workspace as a ${roleDisplay}.\n\nWorkspace: ${wsName}\nYour Role: ${roleDisplay}\nInvited Email: ${to}\n\nAccept your invitation: ${acceptUrl}\n\nThis invitation link expires in 7 days. If you weren't expecting this invitation, you can safely ignore this email.\n\n© ${new Date().getFullYear()} Beginso Inc. All rights reserved.`;
-
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${subject}</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 16px;">
-            <tr>
-              <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);">
-                  <!-- Header Gradient Bar -->
-                  <tr>
-                    <td style="background: #041347; background: linear-gradient(90deg, #041347 0%, #4274D9 100%); height: 8px;"></td>
-                  </tr>
-                  
-                  <!-- Main Content Area -->
-                  <tr>
-                    <td style="padding: 40px 36px 36px 36px;">
-                      <!-- Logo -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td>
-                            ${BEGINSO_LOGO_SVG}
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Heading -->
-                      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">You've been invited to ${wsName}! ✉️</h1>
-                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0;"><strong>${inviter}</strong> has invited you to collaborate in the <strong>${wsName}</strong> workspace on Beginso as a <strong>${roleDisplay}</strong>.</p>
-
-                      <!-- Invitation Details Box (Same layout as welcome mail) -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td style="background-color: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 12px; padding: 20px;">
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                              <tr>
-                                <td style="padding-bottom: 12px;">
-                                  <span style="font-size: 13px; color: #6B7280;">🏢 Workspace</span>
-                                  <strong style="font-size: 15px; color: #111827; display: block; margin-top: 2px;">${wsName}</strong>
-                                </td>
-                              </tr>
-                              <tr>
-                                <td style="padding-bottom: 12px;">
-                                  <span style="font-size: 13px; color: #6B7280;">👤 Assigned Role</span>
-                                  <div style="margin-top: 4px;">
-                                    <span style="font-size: 12px; font-weight: 700; color: #1D4ED8; background-color: #DBEAFE; padding: 3px 10px; border-radius: 20px; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px;">${roleDisplay}</span>
-                                  </div>
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>
-                                  <span style="font-size: 13px; color: #6B7280;">✉️ Invited Email</span>
-                                  <strong style="font-size: 14px; color: #111827; display: block; margin-top: 2px;">${to}</strong>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Primary CTA Button -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
-                        <tr>
-                          <td align="center">
-                            <a href="${acceptUrl}" target="_blank" style="background-color: #2563EB; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);">Accept Invitation</a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Backup Link -->
-                      <p style="font-size: 13px; color: #6B7280; line-height: 1.5; margin: 0 0 24px 0; text-align: center;">
-                        Button not working? Copy and paste this URL into your browser:<br/>
-                        <a href="${acceptUrl}" style="color: #2563EB; word-break: break-all; text-decoration: underline;">${acceptUrl}</a>
-                      </p>
-
-                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0;" />
-                      
-                      <!-- Footer -->
-                      <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
-                        This invitation link expires in 7 days. If you weren't expecting this invitation, you can safely ignore this email.<br/>
-                        &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `;
-    } else if (template === "activity_notification" && options.activity) {
-      const rendered = renderActivityEmail(options.activity);
-      subject = rendered.subject;
-      textContent = rendered.text;
-      htmlContent = rendered.html;
-    } else if (template === "respondent_submission_link") {
-      // Rendered by a pure function so the "no answers in the email" rule is provable (respondentMail.ts).
-      const rendered = renderRespondentLinkEmail({
-        formName: options.formName || "",
-        actionUrl: actionUrl || appUrl,
-        expiresAt: options.expiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-      });
-      subject = rendered.subject;
-      textContent = rendered.text;
-      htmlContent = rendered.html;
-    } else if (template === "email_verified_success") {
-      subject = "Your email has been verified! ✅";
-      const dashboardUrl = actionUrl || `${appUrl}/dashboard`;
-
-      textContent = `Email Verified Successfully!\n\nYour Beginso account email (${to}) has been verified.\n\nYou can now log in and access your workspace.\n\nGo to Dashboard: ${dashboardUrl}\n\n© ${new Date().getFullYear()} Beginso Inc. All rights reserved.`;
-
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${subject}</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 16px;">
-            <tr>
-              <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);">
-                  <!-- Header Gradient Bar -->
-                  <tr>
-                    <td style="background: linear-gradient(135deg, #059669 0%, #10B981 100%); height: 8px;"></td>
-                  </tr>
-                  
-                  <!-- Main Content Area -->
-                  <tr>
-                    <td style="padding: 40px 36px 36px 36px;">
-                      <!-- Logo -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td>
-                            ${BEGINSO_LOGO_SVG}
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Verified Badge Graphic -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
-                        <tr>
-                          <td align="center">
-                            <div style="display: inline-block; width: 64px; height: 64px; background-color: #D1FAE5; border-radius: 50%; text-align: center; line-height: 64px;">
-                              <span style="font-size: 32px;">✅</span>
-                            </div>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Heading & Copy -->
-                      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px; text-align: center;">Email Verified Successfully!</h1>
-                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 24px 0; text-align: center;">Your email address <strong>${to}</strong> has been confirmed. Your account is fully active and ready to use.</p>
-
-                      <!-- Primary CTA Button -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td align="center">
-                            <a href="${dashboardUrl}" target="_blank" style="background-color: #059669; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 14px 0 rgba(5, 150, 105, 0.35);">Open Beginso Workspace</a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0;" />
-                      
-                      <!-- Footer -->
-                      <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
-                        Thank you for verifying your email.<br/>
-                        &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `;
-    } else if (template === "password_changed_success") {
-      subject = "Security Alert: Your Beginso password was updated";
-      const loginUrl = actionUrl || `${appUrl}/login`;
-
-      textContent = `Password Changed Successfully\n\nYour Beginso account password was updated on ${new Date().toUTCString()}.\n\nIf you performed this action, no further steps are required.\n\nIf you did NOT update your password, please reset your password immediately: ${loginUrl}\n\n© ${new Date().getFullYear()} Beginso Inc. All rights reserved.`;
-
-      htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${subject}</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #F3F4F6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F3F4F6; padding: 40px 16px;">
-            <tr>
-              <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);">
-                  <!-- Header Gradient Bar -->
-                  <tr>
-                    <td style="background: linear-gradient(135deg, #DC2626 0%, #F59E0B 100%); height: 8px;"></td>
-                  </tr>
-                  
-                  <!-- Main Content Area -->
-                  <tr>
-                    <td style="padding: 40px 36px 36px 36px;">
-                      <!-- Logo -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td>
-                            ${BEGINSO_LOGO_SVG}
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Heading & Security Shield Graphic -->
-                      <h1 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">Password Updated Successfully 🔐</h1>
-                      <p style="font-size: 15px; color: #4B5563; line-height: 1.6; margin: 0 0 20px 0;">Your Beginso account password was updated on <strong>${new Date().toUTCString()}</strong>.</p>
-
-                      <!-- Security Warning Alert Box -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-radius: 10px; padding: 16px; margin-bottom: 28px;">
-                        <tr>
-                          <td style="font-size: 13px; color: #991B1B; line-height: 1.6;">
-                            🚨 <strong>Security Alert:</strong> If you performed this change, you can safely ignore this message. If you did <strong>NOT</strong> authorize this change, someone may have accessed your account. Reset your password immediately or contact security support.
-                          </td>
-                        </tr>
-                      </table>
-
-                      <!-- Primary CTA Button -->
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
-                        <tr>
-                          <td align="center">
-                            <a href="${loginUrl}" target="_blank" style="background-color: #111827; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 14px 0 rgba(17, 24, 39, 0.25);">Sign In to Your Account</a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 28px 0 20px 0;" />
-                      
-                      <!-- Footer -->
-                      <p style="font-size: 12px; color: #9CA3AF; margin: 0; line-height: 1.5; text-align: center;">
-                        This security notification was sent to <strong>${to}</strong>.<br/>
-                        &copy; ${new Date().getFullYear()} Beginso Inc. All rights reserved.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `;
-    }
+    const unsubscribeUrl = BULK.has(template)
+      ? options.activity?.unsubscribeUrl || (options.payload as { unsubscribeUrl?: string } | undefined)?.unsubscribeUrl
+      : undefined;
 
     try {
       const transporter = this.getTransporter();
       await transporter.sendMail({
         from,
         to,
-        subject,
-        text: textContent,
-        html: htmlContent,
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html.trim(),
+        replyTo: process.env.SMTP_REPLY_TO || "support@beginso.com",
+        ...(sendingDomain
+          ? { envelope: { from: `bounces@${sendingDomain}`, to }, messageId: `<${crypto.randomUUID()}@${sendingDomain}>` }
+          : {}),
+        headers: {
+          "Auto-Submitted": "auto-generated",
+          "X-Entity-Ref-ID": reqId,
+          ...(unsubscribeUrl
+            ? {
+                "List-Unsubscribe": `<${unsubscribeUrl}>${sendingDomain ? `, <mailto:unsubscribe@${sendingDomain}?subject=unsubscribe>` : ""}`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              }
+            : {}),
+        },
       });
-      console.log(`✉️ Email sent successfully to ${to} [template: ${template}]`);
+      console.log(`✉️ Email sent to ${maskEmail(to)} [template: ${template}]`);
 
       if (mappedLogTemplate) {
         await recordMailLog({
@@ -639,7 +236,7 @@ class MailService {
       }
       return true;
     } catch (err: any) {
-      console.error(`❌ Failed to send ${template} email to ${to}:`, err.message);
+      console.error(`❌ Failed to send ${template} email to ${maskEmail(to)}:`, err.message);
 
       if (mappedLogTemplate) {
         await recordMailLog({

@@ -43,13 +43,20 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
       ? await Form.find({
           createdBy: authReq.user._id,
           $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }],
-        })
-      : await Form.find({ workspaceId: workspaceId.toString() });
+        }).select("title status archivedAt updatedAt").lean()
+      : await Form.find({ workspaceId: workspaceId.toString() }).select("title status archivedAt updatedAt").lean();
     const formIds = forms.map((f) => f._id);
     const formMap = new Map(forms.map((f) => [f._id.toString(), f.title]));
 
     const totalForms = forms.length;
     const publishedForms = forms.filter((f) => f.status === "published" && !f.archivedAt).length; // archived forms are not active (Sprint 13)
+    // True totals for the Home stat cards (no page cap): forms by lifecycle state, archived counted apart.
+    const formCounts = { total: totalForms, published: publishedForms, draft: 0, closed: 0, archived: 0 };
+    for (const f of forms) {
+      if (f.archivedAt) formCounts.archived++;
+      else if (f.status === "draft") formCounts.draft++;
+      else if (f.status === "closed") formCounts.closed++;
+    }
 
     // Start of current month
     const startOfMonth = new Date();
@@ -57,17 +64,24 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
     startOfMonth.setHours(0, 0, 0, 0);
 
     // 3. Aggregate total responses & responses this month
-    const totalResponses = await ResponseModel.countDocuments({ formId: { $in: formIds }, deletedAt: null });
-    const responsesThisMonth = await ResponseModel.countDocuments({
-      formId: { $in: formIds },
-      deletedAt: null,
-      submittedAt: { $gte: startOfMonth },
-    });
+    const [statusAgg, responsesThisMonth] = await Promise.all([
+      ResponseModel.aggregate([{ $match: { formId: { $in: formIds }, deletedAt: null } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+      ResponseModel.countDocuments({ formId: { $in: formIds }, deletedAt: null, submittedAt: { $gte: startOfMonth } }),
+    ]);
+    const responseCounts = { total: 0, new: 0, in_progress: 0, completed: 0, thisMonth: responsesThisMonth };
+    for (const row of statusAgg) {
+      responseCounts.total += row.count;
+      if (row._id === "in_progress" || row._id === "completed") responseCounts[row._id as "in_progress" | "completed"] = row.count;
+      else responseCounts.new += row.count; // legacy rows with no status are "new"
+    }
+    const totalResponses = responseCounts.total;
 
     // 4. Fetch recent responses for recent activity (limit 5 per contract)
     const recentResponses = await ResponseModel.find({ formId: { $in: formIds }, deletedAt: null })
       .sort({ submittedAt: -1 })
-      .limit(5);
+      .limit(5)
+      .select("formId submittedAt createdAt")
+      .lean();
 
     const recentActivity = recentResponses.map((r) => ({
       id: r._id.toString(),
@@ -126,6 +140,7 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
       publishedForms,
       totalResponses,
       responsesThisMonth,
+      counts: { forms: formCounts, responses: responseCounts },
       recentActivity,
       formsBreakdown,
     };

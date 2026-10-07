@@ -25,7 +25,8 @@ export interface IReportFilters {
 }
 
 export interface IReport extends Document {
-  workspaceId: mongoose.Types.ObjectId;
+  // null = a personal-space export, owned by `requestedBy` alone.
+  workspaceId: mongoose.Types.ObjectId | null;
   format: ReportFormat;
   filters?: IReportFilters;
   // Sprint 12, BE 0.2: whose "unread" state filters.unread scopes to. Optional so pre-existing
@@ -47,7 +48,7 @@ const ReportSchema = new Schema<IReport>(
     workspaceId: {
       type: Schema.Types.ObjectId,
       ref: "Workspace",
-      required: true,
+      default: null,
       index: true,
     },
     requestedBy: {
@@ -91,6 +92,7 @@ const ReportSchema = new Schema<IReport>(
 );
 
 ReportSchema.index({ workspaceId: 1, createdAt: -1 });
+ReportSchema.index({ requestedBy: 1, createdAt: -1 });
 // The report queue claims the oldest queued job and recovers stale processing ones.
 ReportSchema.index({ status: 1, createdAt: 1 });
 

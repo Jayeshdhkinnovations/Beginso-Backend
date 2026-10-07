@@ -164,22 +164,13 @@ export class ResponseService {
     } else if (params.field !== undefined || params.value !== undefined) {
       throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "field/value filtering needs formId (question ids are per form)");
     } else if (personalUserId) {
-      const forms = await this.formRepository.findWithPagination(
-        { createdBy: personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] },
-        0,
-        10000
-      );
+      // Ids only: loading whole form documents (fields, pages, settings) just to read _id was the cost here.
+      const forms = await Form.find({ createdBy: personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] }).select("_id").lean();
       mongoQuery.formId = { $in: forms.map((f) => f._id) };
     } else {
       // Find all forms in workspace
-      const forms = await this.formRepository.findWithPagination(
-        { workspaceId },
-        0,
-        1000,
-        workspaceId
-      );
-      const formIds = forms.map((f) => f._id);
-      mongoQuery.formId = { $in: formIds };
+      const forms = await Form.find({ workspaceId }).select("_id").lean();
+      mongoQuery.formId = { $in: forms.map((f) => f._id) };
     }
 
     // Status filter (legacy; still correct because status is kept in sync with stage.category)
@@ -188,7 +179,11 @@ export class ResponseService {
     }
 
     // Stage filter (Sprint 12): takes precedence when both are sent since it is the primary key.
-    if (stageId) {
+    // The Board view sends a column's category slug (new | in_progress | completed) as `stageId`;
+    // that means "every stage in that category", i.e. the legacy status filter, not a stage id.
+    if (stageId && ["new", "in_progress", "completed"].includes(stageId)) {
+      mongoQuery.status = stageId;
+    } else if (stageId) {
       if (!mongoose.Types.ObjectId.isValid(stageId)) {
         const err: any = new Error("Invalid stageId parameter");
         err.statusCode = 400;
@@ -392,24 +387,13 @@ export class ResponseService {
       statusMatch = { formId: form._id, deletedAt: null };
       scopeWorkspaceId = workspaceId || form.workspaceId?.toString() || "";
     } else if (personalUserId) {
-      const forms = await this.formRepository.findWithPagination(
-        { createdBy: personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] },
-        0,
-        10000
-      );
+      const forms = await Form.find({ createdBy: personalUserId, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] }).select("_id").lean();
       statusMatch = { formId: { $in: forms.map((f) => f._id) }, deletedAt: null };
       scopeWorkspaceId = "";
     } else {
       // Workspace-wide stats across all forms in workspace
-      const forms = await this.formRepository.findWithPagination(
-        { workspaceId },
-        0,
-        10000,
-        workspaceId
-      );
-      const formIds = forms.map((f) => f._id);
-
-      statusMatch = { formId: { $in: formIds }, deletedAt: null };
+      const forms = await Form.find({ workspaceId }).select("_id").lean();
+      statusMatch = { formId: { $in: forms.map((f) => f._id) }, deletedAt: null };
       if (stageId && mongoose.Types.ObjectId.isValid(stageId)) {
         statusMatch.stageId = new mongoose.Types.ObjectId(stageId);
       }

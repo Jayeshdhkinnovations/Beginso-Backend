@@ -57,6 +57,9 @@ const adminChangeAllowed = (req: Request, res: Response, targetRole: string, new
   return true;
 };
 
+// Privilege order for the role-change session rule; aliases share a rank (editor = member, viewer = reviewer).
+const ROLE_RANK: Record<string, number> = { viewer: 1, reviewer: 1, member: 2, editor: 2, admin: 3, owner: 4 };
+
 export const listMembers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const rawParam = req.params.id || req.params.workspaceId;
@@ -236,17 +239,24 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
 
     if (!adminChangeAllowed(req, res, membership.role, role)) return;
 
-    membership.role = role as any;
-    await membership.save();
+    const previousRole = membership.role;
+    if (previousRole !== role) {
+      membership.role = role as any;
+      await membership.save();
+    }
 
-    // BE 0.8: Invalidate target user's active session(s) immediately
-    await SessionModel.updateMany(
-      {
-        userId: membership.userId,
-        $or: [{ revokedAt: null }, { revokedAt: { $exists: false } }],
-      },
-      { $set: { revokedAt: new Date() } }
-    );
+    // BE 0.8: Invalidate the target's sessions, but only when the change actually lowers their access.
+    // A no-op "change" or a promotion must not sign the member out (permissions are re-read from the
+    // membership on every request, so a promotion takes effect without a new login).
+    if (ROLE_RANK[role] < ROLE_RANK[previousRole]) {
+      await SessionModel.updateMany(
+        {
+          userId: membership.userId,
+          $or: [{ revokedAt: null }, { revokedAt: { $exists: false } }],
+        },
+        { $set: { revokedAt: new Date() } }
+      );
+    }
 
     const authReq = req as any;
     if (authReq.user) {

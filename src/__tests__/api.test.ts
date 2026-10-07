@@ -80,7 +80,7 @@ beforeEach(async () => {
   }
 });
 
-describe("Onboarding Platform Integration Tests", () => {
+describe("Beginso Integration Tests", () => {
   
   // ==========================================
   // SIGNUP API TESTS (3 Cases)

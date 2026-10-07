@@ -276,7 +276,7 @@ describe("B4 - access modes", () => {
     it("requires a valid email (422 EMAIL_REQUIRED), stores it, and emails a link", async () => {
       const form = await mkForm({ title: "Tracked form", settings: { accessMode: "tracked" } });
       const slug = (await publish(form)).body.slug;
-      const spy = jest.spyOn(mailService, "sendMail").mockResolvedValue(undefined);
+      const spy = jest.spyOn(mailService, "sendMail").mockResolvedValue(true);
 
       const missing = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" });
       expect(missing.status).toBe(422);
@@ -631,6 +631,7 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
     sentLinks = [];
     spy = jest.spyOn(mailService, "sendMail").mockImplementation(async (o: any) => {
       sentLinks.push(o.actionUrl);
+      return true;
     });
   });
   afterEach(() => spy.mockRestore());
@@ -755,7 +756,7 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
 
     // the respondent now sees "Edited"; a member can clear the flag
     expect((await request(app).get(`/api/respond/${tokenFromMail()}`)).body.status).toBe("Edited");
-    expect((await request(app).patch(`/api/responses/${response._id}/edited-after-review`).set(as(tReviewer)).send({ cleared: true })).status).toBe(403);
+    expect((await request(app).patch(`/api/responses/${response._id}/edited-after-review`).set(as(tReviewer)).send({ cleared: true })).status).toBe(200); // reviewers hold responses:write
     const clear = await request(app).patch(`/api/responses/${response._id}/edited-after-review`).set(as(tEditor)).send({ cleared: true });
     expect(clear.status).toBe(200);
     expect((await ResponseModel.findById(response._id))!.editedAfterReviewAt).toBeNull();

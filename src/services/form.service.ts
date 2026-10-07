@@ -21,6 +21,7 @@ import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
 import { evaluateReadiness } from "./readiness.service";
 import { defaultAccessModeForNewForms } from "../utils/accessMode";
 import Workspace from "../models/Workspace";
+import User from "../models/User";
 import { queueActivityEmails } from "./notificationEmail.service";
 
 const MAX_SLUG_ATTEMPTS = 5;
@@ -286,10 +287,27 @@ export class FormService {
       { $group: { _id: "$formId", n: { $sum: 1 } } },
     ]);
     const countByForm = new Map(counts.map((c: any) => [String(c._id), c.n]));
+
+    // Owner identity for the list's Owner column: one query for every distinct creator on the page.
+    const creatorIds = [...new Set(forms.map((f) => (f.createdBy ? String(f.createdBy) : "")).filter(Boolean))];
+    const creators = creatorIds.length
+      ? await User.find({ _id: { $in: creatorIds } }).select("fullName avatarUrl").lean()
+      : [];
+    const ownerById = new Map(
+      creators.map((u: any) => [String(u._id), { name: u.fullName, ...(u.avatarUrl ? { avatarUrl: u.avatarUrl } : {}) }])
+    );
+
     const formsWithCount = forms.map((f) => {
       const doc = f.toObject ? f.toObject() : f;
       const at = pinnedAt.get(String(doc._id));
-      return { ...doc, responseCount: countByForm.get(String(doc._id)) ?? 0, pinned: !!at, ...(at ? { pinnedAt: at } : {}) };
+      const owner = doc.createdBy ? ownerById.get(String(doc.createdBy)) : undefined;
+      return {
+        ...doc,
+        responseCount: countByForm.get(String(doc._id)) ?? 0,
+        pinned: !!at,
+        ...(at ? { pinnedAt: at } : {}),
+        ...(owner ? { owner } : {}),
+      };
     });
 
     const pages = Math.ceil(total / limit);

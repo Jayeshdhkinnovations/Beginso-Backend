@@ -725,9 +725,12 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.body.grant.userId).toBe(outsiderUser._id.toString());
+      // By-email grants answer identically whether or not the account exists (no userId/name leak).
+      expect(res.body.grant.userId).toBeUndefined();
       expect(res.body.grant.accessLevel).toBe("read");
       expect(res.body.grant.role).toBeDefined();
+      const list = await request(app).get(`/api/forms/${personalForm._id}/grants`).set("Authorization", `Bearer ${ownerToken}`);
+      expect(list.body.grants.some((g: any) => g.userId === outsiderUser._id.toString())).toBe(true);
     });
 
     it("Grantee can now read form via GET /api/forms/:id", async () => {

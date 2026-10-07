@@ -368,17 +368,25 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
 export const getTrends = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const formIdStr = req.query.formId as string;
-    const access = await validateFormAccess(req, res, formIdStr);
-    if (!access) return;
-
-    const { form } = access;
+    // No formId = every form in the caller's scope (workspace, or their own personal forms): the
+    // Home/Insights "Total responses" line. A given formId keeps the per-form access checks.
+    let formFilter: any;
+    if (formIdStr) {
+      const access = await validateFormAccess(req, res, formIdStr);
+      if (!access) return;
+      formFilter = access.form._id;
+    } else {
+      const userWorkspaceId = await getWorkspaceId(req);
+      const scopeQuery = userWorkspaceId ? { workspaceId: userWorkspaceId } : { workspaceId: null, createdBy: (req as any).user._id };
+      formFilter = { $in: (await Form.find(scopeQuery).select("_id").lean()).map((f: any) => f._id) }; // find, not distinct: only find honours the trashed-form hook
+    }
     const fromStr = req.query.from as string;
     const toStr = req.query.to as string;
     const rawBucket = (req.query.bucket || req.query.interval || "day") as string;
     const bucket: "day" | "week" = rawBucket === "week" ? "week" : "day";
     const timezone = safeTimezone(req.query.timezone);
 
-    const matchStage: any = { formId: form._id, deletedAt: null };
+    const matchStage: any = { formId: formFilter, deletedAt: null };
     let fromDate: Date | null = null;
     let toDate: Date | null = null;
 

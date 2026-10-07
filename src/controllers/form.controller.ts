@@ -1337,11 +1337,13 @@ export const submitPublicForm = async (
             }
 
             // Create Upload metadata document
-            const workspace = await Workspace.findById(form.workspaceId);
-            if (!workspace) {
+            // Personal forms have no workspace: the uploader's account owns the file instead.
+            const workspace = form.workspaceId ? await Workspace.findById(form.workspaceId) : null;
+            const uploadOwner = workspace?.owner ?? form.createdBy;
+            if (!uploadOwner) {
               res.status(400).json({
                 success: false,
-                message: "Workspace not found",
+                message: "This form has no owner to store the file under",
               });
               return;
             }
@@ -1354,7 +1356,7 @@ export const submitPublicForm = async (
               size: file.size,
               type: file.mimetype,
               path: relPath,
-              owner: workspace.owner,
+              owner: uploadOwner,
               uploadTime: new Date(),
               isBranding: false,
             });
@@ -1717,22 +1719,14 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
     const rawId = req.params.formId || req.params.id;
     const { email, userId, role, accessLevel, permission } = req.body;
 
+    // Granting by email must not reveal whether an account exists: an unknown email gets the same
+    // 201 and body shape as a known one (no user details, no grant row, no notification).
+    const byEmail = !userId && !!email;
     let targetUserId: string | null = userId;
-    if (!targetUserId && email) {
-      const u = await User.findOne({ email: email.toLowerCase().trim() });
-      if (u) {
-        targetUserId = u._id.toString();
-      } else {
-        res.status(404).json({
-          success: false,
-          message: "User with this email does not exist",
-          error: { message: "User with this email does not exist" },
-        });
-        return;
-      }
-    }
-
-    if (!targetUserId) {
+    if (byEmail) {
+      const u = await User.findOne({ email: String(email).toLowerCase().trim() }).select("_id").lean();
+      targetUserId = u ? u._id.toString() : null;
+    } else if (!targetUserId) {
       res.status(400).json({
         success: false,
         message: "email or userId is required",
@@ -1741,7 +1735,7 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
       return;
     }
 
-    if (typeof targetUserId !== "string" || !mongoose.Types.ObjectId.isValid(targetUserId) || !(await User.exists({ _id: targetUserId }))) {
+    if (!byEmail && (typeof targetUserId !== "string" || !mongoose.Types.ObjectId.isValid(targetUserId) || !(await User.exists({ _id: targetUserId })))) {
       res.status(404).json({ success: false, message: "User not found", error: { message: "User not found" } });
       return;
     }
@@ -1757,6 +1751,44 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
         success: false,
         message: `Invalid role: must be one of ${validRoles.join(", ")} or read/write`,
         error: { message: `Invalid role: must be one of ${validRoles.join(", ")} or read/write` },
+      });
+      return;
+    }
+
+    const genericGrant = (resRole: string) => {
+      const level = ["admin", "editor", "member"].includes(resRole) ? "write" : "read";
+      return {
+        success: true,
+        message: "Form access grant saved successfully",
+        grant: { formId: String(rawId), email: String(email || "").toLowerCase().trim(), role: resRole, accessLevel: level, permission: level },
+      };
+    };
+    if (!targetUserId) {
+      res.status(201).json(genericGrant(assignedRole));
+      return;
+    }
+
+    // The owner (personal creator, workspace owner) and workspace admins already have full access.
+    // A grant for them is meaningless and, if ever evaluated, could only lower their access.
+    const targetForm = await Form.findById(rawId).select("workspaceId createdBy").lean();
+    const tid = String(targetUserId);
+    let hasFullAccess = false;
+    if (targetForm) {
+      if (!targetForm.workspaceId) {
+        hasFullAccess = String(targetForm.createdBy) === tid;
+      } else {
+        const [ws, m] = await Promise.all([
+          Workspace.findById(targetForm.workspaceId).select("owner").lean(),
+          Membership.findOne({ userId: tid, workspaceId: targetForm.workspaceId }).select("role").lean(),
+        ]);
+        hasFullAccess = String(ws?.owner) === tid || m?.role === "owner" || m?.role === "admin";
+      }
+    }
+    if (hasFullAccess) {
+      res.status(400).json({
+        success: false,
+        message: "This user already has full access to the form as its owner or an admin",
+        error: { code: "GRANT_TARGET_HAS_FULL_ACCESS", message: "This user already has full access to the form as its owner or an admin" },
       });
       return;
     }
@@ -1798,6 +1830,11 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
         title: "A form was shared with you",
         message: `${authReq.user.fullName || authReq.user.name || "Someone"} shared "${grantForm?.title || "a form"}" with you`,
       }).catch(() => null);
+    }
+
+    if (byEmail) {
+      res.status(201).json(genericGrant(assignedRole));
+      return;
     }
 
     res.status(201).json({

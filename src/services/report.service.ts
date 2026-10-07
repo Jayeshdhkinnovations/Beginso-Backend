@@ -6,6 +6,7 @@ import ReportModel, { IReport } from "../models/Report";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import { buildResponseFilterQuery } from "../utils/responseFilters";
+import { reportFormsFilter } from "../utils/formAccess";
 import { ScoreService } from "./score.service";
 
 const scoreService = new ScoreService();
@@ -144,7 +145,7 @@ export const buildReportQuery = async (report: any, workspaceFormIds: any[]): Pr
 };
 
 export const countReportRows = async (report: any): Promise<number> => {
-  const forms = await Form.find({ workspaceId: report.workspaceId }).select("_id");
+  const forms = await Form.find(await reportFormsFilter(report.workspaceId, report.requestedBy)).select("_id");
   const query = await buildReportQuery(report, forms.map((f) => f._id));
   return ResponseModel.countDocuments(query);
 };
@@ -165,7 +166,7 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
     await report.save();
 
     // Resolve workspace forms
-    const forms = await Form.find({ workspaceId: report.workspaceId });
+    const forms = await Form.find(await reportFormsFilter(report.workspaceId, report.requestedBy));
     const formMap = new Map(forms.map((f) => [f._id.toString(), f]));
     const workspaceFormIds = forms.map((f) => f._id);
 

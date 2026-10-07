@@ -9,7 +9,7 @@ import Form from "../models/Form";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { kickReportQueue } from "../services/reportQueue";
 import { countReportRows } from "../services/report.service";
-import { userHasAccessToForm } from "../utils/formAccess";
+import { userHasAccessToForm, reportFormsFilter } from "../utils/formAccess";
 import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
 
 const reportCreateSchema = z.object({
@@ -38,9 +38,27 @@ const getWorkspaceId = async (req: Request): Promise<string | null> => {
   return workspaceId || null;
 };
 
-const purgeExpiredReportFiles = async (workspaceId: string): Promise<void> => {
-  const expired = await ReportModel.find({
+// Who a report list/create is scoped to: the verified workspace, or (no workspace, or an explicit
+// personal context) the caller alone. Personal reports are private to their requester.
+const reportScope = async (req: Request): Promise<{ workspaceId: string | null; filter: any }> => {
+  const authReq = req as any;
+  let workspaceId = authReq.explicitPersonalContext ? null : await getWorkspaceId(req);
+  // Exporting a form shared to the caller by a grant (it lives outside their active workspace):
+  // that is a personal export of that one form, never an export of the active workspace.
+  const bodyFormId = req.method === "POST" ? req.body?.formId : undefined;
+  if (workspaceId && typeof bodyFormId === "string" && mongoose.Types.ObjectId.isValid(bodyFormId)) {
+    const f: any = await Form.findById(bodyFormId).select("workspaceId").lean();
+    if (f && String(f.workspaceId ?? "") !== workspaceId && (await userHasAccessToForm(String(authReq.user._id), bodyFormId, null))) workspaceId = null;
+  }
+  return {
     workspaceId,
+    filter: workspaceId ? { workspaceId: new mongoose.Types.ObjectId(workspaceId) } : { workspaceId: null, requestedBy: authReq.user._id },
+  };
+};
+
+const purgeExpiredReportFiles = async (scope: any): Promise<void> => {
+  const expired = await ReportModel.find({
+    ...scope,
     expiresAt: { $lt: new Date() },
     filePath: { $exists: true, $ne: null },
   }).select("filePath");
@@ -58,11 +76,8 @@ const purgeExpiredReportFiles = async (workspaceId: string): Promise<void> => {
  */
 export const createReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userWorkspaceId = await getWorkspaceId(req);
-    if (!userWorkspaceId) {
-      res.status(403).json({ success: false, message: "Workspace not found or access denied" });
-      return;
-    }
+    const { workspaceId: userWorkspaceId, filter: scope } = await reportScope(req);
+    const formsFilter = await reportFormsFilter(userWorkspaceId, (req as any).user._id);
 
     const parseResult = reportCreateSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -77,7 +92,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
     const { format, formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity } = parseResult.data;
 
     if (field !== undefined || value !== undefined) {
-      const segForm = formId && mongoose.Types.ObjectId.isValid(formId) ? await Form.findOne({ _id: formId, workspaceId: userWorkspaceId }).select("fields").lean() : null;
+      const segForm = formId && mongoose.Types.ObjectId.isValid(formId) ? await Form.findOne({ _id: formId, ...formsFilter }).select("fields").lean() : null;
       try {
         if (!segForm) throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "field/value filtering needs a formId in this workspace");
         fieldSegmentFilter(segForm, field, value, granularity);
@@ -91,7 +106,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
     // PDF/CSV generation runs inside this process: refuse new jobs while this workspace already
     // has several in flight, and drop files of expired reports while we are here.
     const inFlight = await ReportModel.countDocuments({
-      workspaceId: userWorkspaceId,
+      ...scope,
       status: { $in: ["queued", "processing"] },
       createdAt: { $gt: new Date(Date.now() - 10 * 60 * 1000) },
     });
@@ -103,13 +118,13 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       });
       return;
     }
-    await purgeExpiredReportFiles(userWorkspaceId);
+    await purgeExpiredReportFiles(scope);
 
     // 24 hours expiration window
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const report = await ReportModel.create({
-      workspaceId: new mongoose.Types.ObjectId(userWorkspaceId),
+      workspaceId: userWorkspaceId ? new mongoose.Types.ObjectId(userWorkspaceId) : null,
       requestedBy: (req as any).user?._id,
       format,
       filters: { formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity },
@@ -120,8 +135,8 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
     // Resolve formTitle if formId provided
     let formTitle: string | null = "All Workspace Forms";
     if (formId && mongoose.Types.ObjectId.isValid(formId)) {
-      // Scoped to the caller's workspace: another tenant's form title must never come back here.
-      const formDoc = await Form.findOne({ _id: formId, workspaceId: userWorkspaceId }).select("title");
+      // Scoped to the caller's workspace/personal forms: another tenant's form title must never come back here.
+      const formDoc = await Form.findOne({ _id: formId, ...formsFilter }).select("title");
       if (formDoc) formTitle = formDoc.title;
     }
 
@@ -131,7 +146,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
     const reportObj = {
       _id: report._id.toString(),
       id: report._id.toString(),
-      workspaceId: report.workspaceId.toString(),
+      workspaceId: report.workspaceId ? report.workspaceId.toString() : null,
       format: report.format,
       status: report.status,
       formId: formId || null,
@@ -170,31 +185,21 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
  */
 export const getReports = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userWorkspaceId = await getWorkspaceId(req);
-    if (!userWorkspaceId) {
-      res.status(200).json({
-        success: true,
-        reports: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        totalPages: 0,
-      });
-      return;
-    }
+    const { filter: query } = await reportScope(req);
 
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const rawLimit = parseInt(req.query.limit as string, 10) || 10;
     const limit = Math.min(50, Math.max(1, rawLimit));
     const skip = (page - 1) * limit;
 
-    const query = { workspaceId: new mongoose.Types.ObjectId(userWorkspaceId) };
+    const [total, reports] = await Promise.all([
+      ReportModel.countDocuments(query),
+      ReportModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    ]);
 
-    const total = await ReportModel.countDocuments(query);
-    const reports = await ReportModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
-
-    // Map workspace forms for formTitle resolution
-    const forms = await Form.find({ workspaceId: new mongoose.Types.ObjectId(userWorkspaceId) }).select("_id title");
+    // formTitle resolution: only the forms this page's reports name, not every form in the workspace.
+    const pageFormIds = [...new Set(reports.map((r: any) => r.filters?.formId).filter((id: any) => mongoose.Types.ObjectId.isValid(id)))];
+    const forms = pageFormIds.length ? await Form.find({ _id: { $in: pageFormIds } }).select("_id title").lean() : [];
     const formTitleMap = new Map(forms.map((f) => [f._id.toString(), f.title]));
 
     const now = new Date();
@@ -210,7 +215,7 @@ export const getReports = async (req: Request, res: Response, next: NextFunction
       return {
         _id: r._id.toString(),
         id: r._id.toString(),
-        workspaceId: r.workspaceId.toString(),
+        workspaceId: r.workspaceId ? r.workspaceId.toString() : null,
         format: r.format,
         status: currentStatus,
         formId,
@@ -243,7 +248,7 @@ export const getReports = async (req: Request, res: Response, next: NextFunction
  * report. Workspace-wide reports (no formId) rely on requirePermission: workspace membership + reports:read.
  * A report whose form is trashed/removed, or belongs to another workspace, is a 404.
  */
-const loadReadableReport = async (req: Request, res: Response, workspaceId: string): Promise<any | null> => {
+const loadReadableReport = async (req: Request, res: Response, workspaceId: string | null): Promise<any | null> => {
   const reportId = req.params.id as string;
   if (!mongoose.Types.ObjectId.isValid(reportId)) {
     res.status(400).json({ success: false, message: "Invalid report ID" });
@@ -253,6 +258,15 @@ const loadReadableReport = async (req: Request, res: Response, workspaceId: stri
   if (!report) {
     res.status(404).json({ success: false, message: "Report not found" });
     return null;
+  }
+  const user = (req as any).user;
+  if (!report.workspaceId) {
+    // Personal export: private to whoever requested it (super admins excepted).
+    if (user.role !== "super_admin" && String(report.requestedBy) !== String(user._id)) {
+      res.status(404).json({ success: false, message: "Report not found" });
+      return null;
+    }
+    return report;
   }
   if (report.workspaceId.toString() !== workspaceId) {
     res.status(403).json({ success: false, message: "Access denied to report from another workspace" });
@@ -266,7 +280,6 @@ const loadReadableReport = async (req: Request, res: Response, workspaceId: stri
       res.status(404).json({ success: false, message: "Report not found" });
       return null;
     }
-    const user = (req as any).user;
     if (user.role !== "super_admin" && !(await userHasAccessToForm(String(user._id), formId, workspaceId))) {
       res.status(403).json({ success: false, message: "You do not have access to this report's form" });
       return null;
@@ -281,11 +294,7 @@ const loadReadableReport = async (req: Request, res: Response, workspaceId: stri
  */
 export const getReportById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userWorkspaceId = await getWorkspaceId(req);
-    if (!userWorkspaceId) {
-      res.status(403).json({ success: false, message: "Workspace not found or access denied" });
-      return;
-    }
+    const userWorkspaceId = (await getWorkspaceId(req)) || null;
 
     const report = await loadReadableReport(req, res, userWorkspaceId);
     if (!report) return;
@@ -299,7 +308,7 @@ export const getReportById = async (req: Request, res: Response, next: NextFunct
     const formId = report.filters?.formId || null;
     let formTitle: string | null = "All Workspace Forms";
     if (formId && mongoose.Types.ObjectId.isValid(formId)) {
-      const formDoc = await Form.findOne({ _id: formId, workspaceId: userWorkspaceId }).select("title");
+      const formDoc = await Form.findOne({ _id: formId, ...(await reportFormsFilter(report.workspaceId, report.requestedBy)) }).select("title");
       if (formDoc) formTitle = formDoc.title;
     }
 
@@ -308,7 +317,7 @@ export const getReportById = async (req: Request, res: Response, next: NextFunct
       report: {
         _id: report._id.toString(),
         id: report._id.toString(),
-        workspaceId: report.workspaceId.toString(),
+        workspaceId: report.workspaceId ? report.workspaceId.toString() : null,
         format: report.format,
         status: currentStatus,
         formId,
@@ -332,11 +341,7 @@ export const getReportById = async (req: Request, res: Response, next: NextFunct
  */
 export const getReportFile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userWorkspaceId = await getWorkspaceId(req);
-    if (!userWorkspaceId) {
-      res.status(403).json({ success: false, message: "Workspace not found or access denied" });
-      return;
-    }
+    const userWorkspaceId = (await getWorkspaceId(req)) || null;
 
     const report = await loadReadableReport(req, res, userWorkspaceId);
     if (!report) return;

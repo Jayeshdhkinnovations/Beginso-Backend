@@ -45,6 +45,8 @@ const uploadAny = (req: any, res: any, next: any) =>
 
 // Sprint 14 (B4.2): signed, expiring, no session. Two path segments deep, so it never collides with `/:slug`.
 router.get("/notifications/unsubscribe/:token", authRateLimiter, unsubscribeFromEmails);
+// RFC 8058 one-click: Gmail/Yahoo POST here with no session and no cookies.
+router.post("/notifications/unsubscribe/:token", authRateLimiter, unsubscribeFromEmails);
 router.get("/:slug", publicFormReadLimiter, getPublicFormBySlug);
 router.post("/:slug/view", publicFormReadLimiter, recordFormView);
 // Sprint 13 (Mode 3, OQ-10): a signed-in respondent asks for a one-shot ticket, then submits directly.

@@ -20,7 +20,6 @@ let mongoServer: MongoMemoryServer;
 let ownerToken: string;
 let ownerId: string;
 let workspaceId: string;
-let workspaceIdOther: string;
 
 beforeAll(async () => {
   process.env.JWT_SECRET = "testsecret";
@@ -64,7 +63,6 @@ describe("Offboarding: assignment cleanup on member removal (B3.3/F16)", () => {
     // A second, unrelated workspace where the same user also holds an assignment.
     const { ws: otherWs, form: otherForm } = await setupWorkspaceWithMember("scope-other");
     await Membership.create({ userId: member._id, workspaceId: otherWs._id, role: "member" });
-    workspaceIdOther = (otherWs._id as mongoose.Types.ObjectId).toString();
 
     const resp1 = await ResponseModel.create({ formId: form._id, answers: {}, assigneeId: member._id });
     const resp2 = await ResponseModel.create({ formId: form._id, answers: {}, assigneeId: member._id });
@@ -87,7 +85,7 @@ describe("Offboarding: assignment cleanup on member removal (B3.3/F16)", () => {
 
   it("the removal itself succeeds even if offboardMemberAssignments throws", async () => {
     const { ws, member, form } = await setupWorkspaceWithMember("failsafe");
-    const resp = await ResponseModel.create({ formId: form._id, answers: {}, assigneeId: member._id });
+    await ResponseModel.create({ formId: form._id, answers: {}, assigneeId: member._id });
 
     const spy = jest
       .spyOn(ResponseService.prototype, "offboardMemberAssignments")

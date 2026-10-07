@@ -535,7 +535,7 @@ describe("Beginso Integration Tests", () => {
       await user.save();
 
       const form1 = await Form.create({ title: "Form 1", workspaceId: workspace._id });
-      const form2 = await Form.create({ title: "Form 2", workspaceId: workspace._id });
+      await Form.create({ title: "Form 2", workspaceId: workspace._id });
 
       await ResponseModel.create({ formId: form1._id, answers: { key: "a" } });
       await ResponseModel.create({ formId: form1._id, answers: { key: "b" } });

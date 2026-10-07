@@ -5,6 +5,10 @@ import { mailService, SendMailOptions } from "../services/mail.service";
 dotenv.config();
 // No DB here: fail MailLog writes immediately instead of buffering for 10s per email.
 mongoose.set("bufferCommands", false);
+const origError = console.error;
+console.error = (...a: unknown[]) => {
+  if (!String(a[0]).startsWith("Failed to write MailLog")) origError(...a);
+};
 
 // Usage: npx ts-node src/scripts/sendTemplatePreview.ts [address]
 const to = process.argv[2] || "piyush270205@gmail.com";
@@ -53,14 +57,22 @@ const mails: SendMailOptions[] = [
   { to, template: "workspace_deleted", payload: { workspaceName: "Smith & Co", deletedByName: "Asha Rao", deletedAt: new Date(), timeZone: "Asia/Kolkata", formCount: 7, responseCount: 1204, memberCount: 5 } },
 ];
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 (async () => {
   console.log(`Sending ${mails.length} previews to ${to}`);
   let failed = 0;
   for (const [i, m] of mails.entries()) {
-    const ok = await mailService.sendMail(m);
+    // The relay answers 452 "rate limit exceeded" when mail goes out too fast; wait it out and retry once.
+    let ok = await mailService.sendMail(m);
+    if (!ok) {
+      console.log(`  ${m.template} failed, waiting 90s before one retry`);
+      await sleep(90_000);
+      ok = await mailService.sendMail(m);
+    }
     if (!ok) failed++;
     console.log(`${i + 1}/${mails.length} ${m.template}: ${ok ? "sent" : "FAILED"}`);
-    await new Promise((r) => setTimeout(r, 1500)); // stay under relay rate limits
+    await sleep(8_000);
   }
   console.log(failed ? `${failed} failed` : "All sent");
   process.exit(failed ? 1 : 0);

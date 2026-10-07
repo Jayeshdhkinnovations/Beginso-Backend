@@ -16,7 +16,6 @@ import { generateToken } from "../utils/generateToken";
 let mongoServer: MongoMemoryServer;
 let ownerToken: string;
 let ownerId: string;
-let workspaceId: string;
 let formWithEmailId: string;
 let formWithEmailSlug: string;
 let formNoEmailId: string;
@@ -32,7 +31,6 @@ beforeAll(async () => {
   const owner = await User.create({ firebaseUid: "dup-owner-uid", fullName: "Owner", email: "dup-owner@test.com", role: "admin" });
   ownerId = owner._id.toString();
   const ws = await Workspace.create({ name: "Duplicate Workspace", owner: owner._id });
-  workspaceId = (ws._id as mongoose.Types.ObjectId).toString();
   await Membership.create({ userId: owner._id, workspaceId: ws._id, role: "owner" });
   ownerToken = generateToken({ id: ownerId, email: owner.email, role: owner.role });
 
@@ -84,7 +82,7 @@ describe("Duplicate detection (B4.10/B8.3)", () => {
   });
 
   it("a later same-email (case-insensitive) submission to the SAME form is flagged with the correct duplicateOfId", async () => {
-    const earlier = await submit(formWithEmailSlug, { "Your Email": "repeat@test.com" });
+    await submit(formWithEmailSlug, { "Your Email": "repeat@test.com" });
     const earlierResp = await ResponseModel.findOne({ formId: formWithEmailId, respondentEmail: "repeat@test.com" });
     expect(earlierResp!.duplicateOfId).toBeNull();
 
@@ -117,7 +115,7 @@ describe("Duplicate detection (B4.10/B8.3)", () => {
   });
 
   it("exposes duplicateOfId on the response detail and list, filterable via ?duplicate=true", async () => {
-    const earlier = await submit(formWithEmailSlug, { "Your Email": "listed@test.com" });
+    await submit(formWithEmailSlug, { "Your Email": "listed@test.com" });
     const earlierId = (await ResponseModel.findOne({ formId: formWithEmailId, respondentEmail: "listed@test.com" }))!._id.toString();
     await submit(formWithEmailSlug, { "Your Email": "listed@test.com" });
 

@@ -20,7 +20,6 @@ let mongoServer: MongoMemoryServer;
 let ownerToken: string;
 let adminToken: string;
 let memberToken: string;
-let outsiderToken: string;
 let ownerId: string;
 let adminId: string;
 let memberId: string;
@@ -60,7 +59,6 @@ beforeAll(async () => {
   ownerToken = generateToken({ id: ownerId, email: owner.email, role: owner.role });
   adminToken = generateToken({ id: adminId, email: admin.email, role: admin.role });
   memberToken = generateToken({ id: memberId, email: member.email, role: member.role });
-  outsiderToken = generateToken({ id: outsiderId, email: outsider.email, role: outsider.role });
 });
 
 afterAll(async () => {

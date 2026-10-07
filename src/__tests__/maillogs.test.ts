@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 import app from "../app";
 import User from "../models/User";
-import { MailLog, computeEmailHash, recordMailLog } from "../models/MailLog";
+import { computeEmailHash, recordMailLog } from "../models/MailLog";
 import { generateToken } from "../utils/generateToken";
 
 let mongoServer: MongoMemoryServer;

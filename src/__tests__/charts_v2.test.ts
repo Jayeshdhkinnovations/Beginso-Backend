@@ -283,7 +283,7 @@ describe("saved charts v2", () => {
 
   it("reorder only touches the caller's own charts and 400s on foreign, unknown or repeated ids", async () => {
     const a = (await create("editor", { fieldId: "f-plan", chartType: "bar", title: "A" })).body.chart._id;
-    const b = (await create("editor", { fieldId: "f-plan", chartType: "pie", title: "B" })).body.chart._id;
+    await create("editor", { fieldId: "f-plan", chartType: "pie", title: "B" });
     const c = (await create("editor", { fieldId: "f-feat", chartType: "bar", title: "C" })).body.chart._id;
     const foreign = (await create("admin", { fieldId: "f-plan", chartType: "bar", title: "X", visibility: "workspace" })).body.chart._id;
     const put = (who: string, idList: string[]) => request(app).put(url("/order")).set(as(who)).send({ ids: idList });

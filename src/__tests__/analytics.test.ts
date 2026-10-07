@@ -6,7 +6,6 @@ import User from "../models/User";
 import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
-import ReportModel from "../models/Report";
 import { generateToken } from "../utils/generateToken";
 
 let mongoServer: MongoMemoryServer;

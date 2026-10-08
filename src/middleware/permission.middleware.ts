@@ -32,6 +32,7 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "responses:write",
     "responses:delete",
     "dashboard:*",
+    "dashboard:manage",
     "analytics:*",
     "reports:*",
     "reports:read",

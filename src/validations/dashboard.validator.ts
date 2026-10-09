@@ -4,7 +4,15 @@ const metric = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 const title = z.string().max(80).optional();
 
 const config = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("kpi"), variant: z.number().int().min(1).max(20), metric, title }).strict(),
+  z
+    .object({
+      type: z.literal("kpi"),
+      variant: z.number().int().min(1).max(20),
+      metric,
+      title,
+      tone: z.enum(["primary", "success", "warning", "error", "purple"]).optional(),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("chart"),

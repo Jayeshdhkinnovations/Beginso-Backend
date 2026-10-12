@@ -74,6 +74,8 @@ const BRANDING_DEFAULT_KEYS = [
   "fieldGrouping",
   "backgroundStyle",
   "backgroundColor",
+  "backgroundImageUrl",
+  "formWidth",
 ] as const;
 
 const pickBrandingDefaults = (branding: unknown): Record<string, unknown> => {

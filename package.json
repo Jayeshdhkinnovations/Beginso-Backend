@@ -21,6 +21,7 @@
     "backfill:search": "ts-node src/scripts/backfillResponseSearchText.ts",
     "backfill:duplicates": "ts-node src/scripts/backfillDuplicateDetection.ts",
     "seed:templates": "ts-node src/scripts/seedTemplates.ts",
+    "seed:field-showcase": "ts-node src/scripts/seedFieldShowcase.ts",
     "seed:form": "ts-node src/scripts/seedFullForm.ts",
     "seed:superadmin": "ts-node src/scripts/seedSuperAdmin.ts",
     "seed:test-users": "ts-node src/scripts/seedTestUsers.ts",

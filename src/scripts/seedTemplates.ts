@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import Template from "../models/Template";
+import { fieldShowcaseTemplate } from "../utils/fieldShowcaseTemplate";
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ const seedTemplates = async () => {
     console.log("🗑️ Cleared existing templates");
 
     const templates = [
+      fieldShowcaseTemplate,
       {
         name: "Pitch Plan",
         category: "advanced",

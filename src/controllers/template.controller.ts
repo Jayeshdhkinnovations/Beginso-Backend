@@ -213,6 +213,15 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
         options: raw.options,
         maxFileSize: raw.maxFileSize,
         allowedMimeTypes: raw.allowedMimeTypes,
+        // V2 display & preview settings travel with the field.
+        currency: raw.currency,
+        allowMultiple: raw.allowMultiple,
+        maxImages: raw.maxImages,
+        previewPosition: raw.previewPosition,
+        aspectRatio: raw.aspectRatio,
+        previewSize: raw.previewSize,
+        urlPreviewStyle: raw.urlPreviewStyle,
+        urlDisplay: raw.urlDisplay,
         logicRules: updatedLogicRules,
       };
     });

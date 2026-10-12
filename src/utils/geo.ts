@@ -1,4 +1,9 @@
-import geoip from "geoip-lite";
+import type geoipType from "geoip-lite";
+
+// Loaded on first use, not at import: the bundled GeoLite database is large (it is read into memory on require), and
+// most processes (scripts, tests, requests that never submit a form) never need it.
+let geoip: typeof geoipType | null = null;
+const db = (): typeof geoipType => (geoip ??= require("geoip-lite") as typeof geoipType);
 
 /**
  * Where a response came from, as coarse as the dashboard map needs: country, region, city and a position rounded to
@@ -19,7 +24,7 @@ export const lookupGeo = (ip: string | undefined | null): ResponseGeo | null => 
   if (!ip || ip === "unknown") return null;
   // IPv4-mapped IPv6 ("::ffff:1.2.3.4") -> plain IPv4.
   const clean = ip.replace(/^::ffff:/i, "").trim();
-  const hit = geoip.lookup(clean);
+  const hit = db().lookup(clean);
   if (!hit || !hit.country || !Array.isArray(hit.ll) || hit.ll.length !== 2) return null;
   const [lat, lng] = hit.ll;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;

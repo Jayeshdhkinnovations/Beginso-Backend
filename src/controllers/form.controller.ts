@@ -1531,6 +1531,7 @@ export const submitPublicForm = async (
 
     const submissionObj = submission.toObject();
     delete (submissionObj as any).ipHash;
+    delete (submissionObj as any).geo; // the respondent's own submit response never echoes their location
 
     res.status(200).json({
       success: true,

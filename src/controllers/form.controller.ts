@@ -1,3 +1,4 @@
+import { lookupGeo } from "../utils/geo";
 import { Request, Response, NextFunction } from "express";
 import { reconcilePinsAfterMove } from "../services/pin.service";
 import { recordEvent } from "../services/event.service";
@@ -1478,6 +1479,7 @@ export const submitPublicForm = async (
     const submission = await formService.submitForm(form._id.toString(), answers, hashedIp, ctx?.responseId, {
       respondentEmail,
       respondentUserId,
+      geo: lookupGeo(clientIp),
     });
     submissionSuccess = true;
 

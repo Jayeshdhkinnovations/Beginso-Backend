@@ -135,6 +135,29 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
       };
     });
 
+    // Where responses came from: one row per place (city, else country), busiest first. Only responses that carry a
+    // location count (older ones and ones from private addresses have none), so `located` can be below the total.
+    const locationRows = await ResponseModel.aggregate([
+      { $match: { formId: { $in: formIds }, deletedAt: null, "geo.lat": { $exists: true } } },
+      {
+        $group: {
+          _id: { country: "$geo.country", region: "$geo.region", city: "$geo.city", lat: "$geo.lat", lng: "$geo.lng" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 300 },
+    ]);
+    const locations = locationRows.map((r) => ({
+      country: r._id.country,
+      region: r._id.region ?? null,
+      city: r._id.city ?? null,
+      lat: r._id.lat,
+      lng: r._id.lng,
+      count: r.count,
+    }));
+    const located = locations.reduce((sum, l) => sum + l.count, 0);
+
     const analyticsData = {
       totalForms,
       publishedForms,
@@ -143,6 +166,8 @@ export const getAnalytics = async (req: Request, res: Response, next: NextFuncti
       counts: { forms: formCounts, responses: responseCounts },
       recentActivity,
       formsBreakdown,
+      locations,
+      locatedResponses: located,
     };
 
     res.status(200).json({

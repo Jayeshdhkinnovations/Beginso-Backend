@@ -11,6 +11,9 @@ export interface IResponse extends Document {
   status?: "new" | "in_progress" | "completed" | string;
   submittedAt?: Date;
   ipHash?: string;
+  // Coarse location of the submission (country / city and a ~1 km position), looked up from the IP at submit time and
+  // never from anything the client sends. Absent for private/unknown addresses and for responses made before this existed.
+  geo?: { country: string; region?: string; city?: string; lat: number; lng: number };
   searchText?: string;
   // Sprint 12, BE 0.3 (B8.1): immutable, human-readable, sequential per form (e.g. "#142").
   // Allocated atomically at submission via reference.service.ts; back-filled for pre-existing
@@ -81,6 +84,10 @@ const ResponseSchema = new Schema<IResponse>(
     ipHash: {
       type: String,
       index: true,
+    },
+    geo: {
+      type: new Schema({ country: String, region: String, city: String, lat: Number, lng: Number }, { _id: false }),
+      default: undefined,
     },
     // Lower-cased flat copy of the answer values, used only for response search. Missing on
     // responses stored before it existed until scripts/backfillResponseSearchText.ts has run.

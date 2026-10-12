@@ -21,12 +21,20 @@ const config = z.discriminatedUnion("type", [
       title,
     })
     .strict(),
+  // Where responses came from, on a map. Like every widget it names the metric; the data comes from the dashboard analytics.
+  z
+    .object({
+      type: z.literal("map"),
+      metric,
+      title,
+    })
+    .strict(),
 ]);
 
 const widget = z
   .object({
     id: z.string().min(1).max(64),
-    w: z.union([z.literal(3), z.literal(4), z.literal(6)]),
+    w: z.union([z.literal(3), z.literal(4), z.literal(6), z.literal(12)]),
     config,
   })
   .strict();

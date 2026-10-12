@@ -1,3 +1,4 @@
+import type { ResponseGeo } from "../utils/geo";
 import { FormRepository } from "../repositories/form.repository";
 import { deleteFormData } from "./cleanup.service";
 import FormPin from "../models/FormPin";
@@ -862,7 +863,7 @@ export class FormService {
     responseId?: string,
     // Sprint 13: `isTest` = a builder test submission (CF2.6). `respondentEmail` / `respondentUserId`
     // come from the access mode (D1.1) and win over the "first email field" heuristic.
-    options: { isTest?: boolean; respondentEmail?: string | null; respondentUserId?: unknown } = {}
+    options: { isTest?: boolean; respondentEmail?: string | null; respondentUserId?: unknown; geo?: ResponseGeo | null } = {}
   ) {
     const form = await this.formRepository.findById(formId);
     if (!form) {
@@ -896,6 +897,7 @@ export class FormService {
       searchText: buildSearchText(answers),
       submittedAt: new Date(),
       ipHash,
+      geo: options.geo ?? undefined,
       reference,
       respondentEmail,
       duplicateOfId,

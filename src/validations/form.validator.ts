@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
-import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, IMAGE_MAX_COUNTS, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, IMAGE_MAX_COUNTS, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -232,6 +232,17 @@ const brandingSchema = z.object({
   coverPosition: z.enum(COVER_POSITIONS).optional(),
   showProgress: z.boolean().optional(),
   spacing: z.enum(FORM_SPACINGS).optional(),
+  fontFamily: z.enum(FORM_FONTS).optional(),
+  typeScale: z.enum(TYPE_SCALES).optional(),
+  cardStyle: z.enum(CARD_STYLES).optional(),
+  panelTreatment: z.enum(PANEL_TREATMENTS).optional(),
+  fieldGrouping: z.enum(FIELD_GROUPINGS).optional(),
+  backgroundStyle: z.enum(PAGE_BACKGROUNDS).optional(),
+  backgroundColor: z
+    .string()
+    .trim()
+    .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "backgroundColor must be a valid hex color")
+    .optional(),
 });
 
 const settingsSchema = z.object({

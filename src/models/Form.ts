@@ -92,6 +92,15 @@ export const BUTTON_STYLES = ["solid", "outline"] as const;
 export const BUTTON_RADII = ["4px", "8px", "16px"] as const;
 export const COVER_POSITIONS = ["center", "top", "bottom"] as const;
 export const FORM_SPACINGS = ["compact", "comfortable", "spacious"] as const;
+// Respondent-form look: a curated font list (loaded by the frontend), a type scale, the card surface, the colour
+// panel treatment and whether short fields pair up into two columns.
+export const FORM_FONTS = ["dm_sans", "inter", "work_sans", "lora", "nunito"] as const;
+export const TYPE_SCALES = ["compact", "default", "large"] as const;
+export const CARD_STYLES = ["flat", "soft", "bordered", "elevated"] as const;
+export const PANEL_TREATMENTS = ["solid", "gradient", "image", "pattern"] as const;
+export const FIELD_GROUPINGS = ["auto", "single"] as const;
+// The page behind the form card (not the card itself): how it is filled, and the colour it is built from.
+export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid"] as const;
 
 export interface IBranding {
   primaryColor?: string;
@@ -102,6 +111,13 @@ export interface IBranding {
   coverPosition?: (typeof COVER_POSITIONS)[number];
   showProgress?: boolean;
   spacing?: (typeof FORM_SPACINGS)[number];
+  fontFamily?: (typeof FORM_FONTS)[number];
+  typeScale?: (typeof TYPE_SCALES)[number];
+  cardStyle?: (typeof CARD_STYLES)[number];
+  panelTreatment?: (typeof PANEL_TREATMENTS)[number];
+  fieldGrouping?: (typeof FIELD_GROUPINGS)[number];
+  backgroundStyle?: (typeof PAGE_BACKGROUNDS)[number];
+  backgroundColor?: string;
 }
 
 // Sprint 13 (CF2.7): six layout presets. The three V1 values stay valid on read and write and are
@@ -262,6 +278,13 @@ const BrandingSchema = new Schema<IBranding>(
     coverPosition: { type: String, enum: COVER_POSITIONS },
     showProgress: { type: Boolean },
     spacing: { type: String, enum: FORM_SPACINGS },
+    fontFamily: { type: String, enum: FORM_FONTS },
+    typeScale: { type: String, enum: TYPE_SCALES },
+    cardStyle: { type: String, enum: CARD_STYLES },
+    panelTreatment: { type: String, enum: PANEL_TREATMENTS },
+    fieldGrouping: { type: String, enum: FIELD_GROUPINGS },
+    backgroundStyle: { type: String, enum: PAGE_BACKGROUNDS },
+    backgroundColor: { type: String },
   },
   { _id: false }
 );

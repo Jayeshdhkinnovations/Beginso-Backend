@@ -1019,6 +1019,13 @@ export const getPublicFormBySlug = async (
       coverPosition: branding.coverPosition,
       showProgress: branding.showProgress,
       spacing: branding.spacing,
+      fontFamily: branding.fontFamily,
+      typeScale: branding.typeScale,
+      cardStyle: branding.cardStyle,
+      panelTreatment: branding.panelTreatment,
+      fieldGrouping: branding.fieldGrouping,
+      backgroundStyle: branding.backgroundStyle,
+      backgroundColor: branding.backgroundColor,
     };
 
     const settings = form.settings || {};

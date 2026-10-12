@@ -67,6 +67,13 @@ const BRANDING_DEFAULT_KEYS = [
   "coverPosition",
   "showProgress",
   "spacing",
+  "fontFamily",
+  "typeScale",
+  "cardStyle",
+  "panelTreatment",
+  "fieldGrouping",
+  "backgroundStyle",
+  "backgroundColor",
 ] as const;
 
 const pickBrandingDefaults = (branding: unknown): Record<string, unknown> => {

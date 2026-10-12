@@ -100,6 +100,8 @@ export const CARD_STYLES = ["flat", "soft", "bordered", "elevated"] as const;
 export const PANEL_TREATMENTS = ["solid", "gradient", "image", "pattern"] as const;
 export const FIELD_GROUPINGS = ["auto", "single"] as const;
 // The page behind the form card (not the card itself): how it is filled, and the colour it is built from.
+// How the cover image is shown: cropped to the banner strip, or whole at its own size and ratio.
+export const COVER_FITS = ["banner", "original"] as const;
 export const FORM_WIDTHS = ["narrow", "standard", "wide"] as const;
 export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid", "image"] as const;
 
@@ -121,6 +123,7 @@ export interface IBranding {
   backgroundColor?: string;
   backgroundImageUrl?: string;
   formWidth?: (typeof FORM_WIDTHS)[number];
+  coverFit?: (typeof COVER_FITS)[number];
 }
 
 // Sprint 13 (CF2.7): six layout presets. The three V1 values stay valid on read and write and are
@@ -290,6 +293,7 @@ const BrandingSchema = new Schema<IBranding>(
     backgroundColor: { type: String },
     backgroundImageUrl: { type: String },
     formWidth: { type: String, enum: FORM_WIDTHS },
+    coverFit: { type: String, enum: COVER_FITS },
   },
   { _id: false }
 );

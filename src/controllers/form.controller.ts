@@ -1028,6 +1028,7 @@ export const getPublicFormBySlug = async (
       backgroundColor: branding.backgroundColor,
       backgroundImageUrl: branding.backgroundImageUrl,
       formWidth: branding.formWidth,
+      coverFit: branding.coverFit,
     };
 
     const settings = form.settings || {};

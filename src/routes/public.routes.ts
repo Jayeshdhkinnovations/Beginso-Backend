@@ -23,9 +23,14 @@ const storage = multer.diskStorage({
     }
     cb(null, targetDir);
   },
-  filename: (req, file, cb) => {
+  filename: (req: any, file, cb) => {
     const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-    cb(null, safeName);
+    // Several images can share a name (IMG_0001.jpg from two phones): keep each one instead of overwriting.
+    const used: Set<string> = (req._usedFileNames ??= new Set<string>());
+    let name = safeName;
+    for (let n = 1; used.has(name); n++) name = `${n}-${safeName}`;
+    used.add(name);
+    cb(null, name);
   },
 });
 

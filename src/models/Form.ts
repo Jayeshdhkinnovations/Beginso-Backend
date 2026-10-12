@@ -24,6 +24,24 @@ export interface IFormPage {
   description?: string;
 }
 
+// Field types added after V1. Kept as a list so the schema enum, the zod validator and the type stay in step.
+export const EXTRA_FIELD_TYPES = ["rating", "yes_no", "url", "time", "datetime", "currency", "address", "signature", "image_upload"] as const;
+export type FieldTypeExtra = (typeof EXTRA_FIELD_TYPES)[number];
+
+export const CURRENCIES = ["INR", "USD", "EUR", "GBP"] as const;
+export const PREVIEW_POSITIONS = ["top", "inline"] as const;
+export const ASPECT_RATIOS = ["original", "16:9", "1:1"] as const;
+export const PREVIEW_SIZES = ["small", "medium", "large"] as const;
+export const URL_PREVIEW_STYLES = ["rich", "compact", "text"] as const;
+export const URL_DISPLAYS = ["card", "inline"] as const;
+export const IMAGE_MAX_COUNTS = [2, 5, 10] as const;
+export type Currency = (typeof CURRENCIES)[number];
+export type PreviewPosition = (typeof PREVIEW_POSITIONS)[number];
+export type AspectRatio = (typeof ASPECT_RATIOS)[number];
+export type PreviewSize = (typeof PREVIEW_SIZES)[number];
+export type UrlPreviewStyle = (typeof URL_PREVIEW_STYLES)[number];
+export type UrlDisplay = (typeof URL_DISPLAYS)[number];
+
 export interface IFormField {
   fieldId?: string;
   pageId?: string;
@@ -38,7 +56,8 @@ export interface IFormField {
     | "dropdown"
     | "multiple_choice"
     | "checkbox"
-    | "file_upload";
+    | "file_upload"
+    | FieldTypeExtra;
   required: boolean;
   deleted?: boolean;
   placeholder?: string;
@@ -55,6 +74,15 @@ export interface IFormField {
   options?: string[];
   maxFileSize?: number;
   allowedMimeTypes?: string[];
+  // Display & preview settings (stored with the field so every response renders the same way).
+  currency?: Currency;
+  allowMultiple?: boolean;
+  maxImages?: number;
+  previewPosition?: PreviewPosition;
+  aspectRatio?: AspectRatio;
+  previewSize?: PreviewSize;
+  urlPreviewStyle?: UrlPreviewStyle;
+  urlDisplay?: UrlDisplay;
   logicRules?: ILogicRule[];
 }
 
@@ -184,6 +212,7 @@ export const FormFieldSchema = new Schema<IFormField>({
       "multiple_choice",
       "checkbox",
       "file_upload",
+      ...EXTRA_FIELD_TYPES,
     ],
   },
   required: { type: Boolean, default: false },
@@ -202,6 +231,14 @@ export const FormFieldSchema = new Schema<IFormField>({
   options: { type: [String], default: [] },
   maxFileSize: { type: Number },
   allowedMimeTypes: { type: [String], default: [] },
+  currency: { type: String, enum: CURRENCIES },
+  allowMultiple: { type: Boolean },
+  maxImages: { type: Number },
+  previewPosition: { type: String, enum: PREVIEW_POSITIONS },
+  aspectRatio: { type: String, enum: ASPECT_RATIOS },
+  previewSize: { type: String, enum: PREVIEW_SIZES },
+  urlPreviewStyle: { type: String, enum: URL_PREVIEW_STYLES },
+  urlDisplay: { type: String, enum: URL_DISPLAYS },
   logicRules: { type: [LogicRuleSchema], default: [] },
 });
 

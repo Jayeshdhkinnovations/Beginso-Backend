@@ -10,7 +10,7 @@ export const normaliseSubmittedAnswers = (form: IForm, parsed: unknown): Record<
   const answers: Record<string, any> = {};
   if (!parsed || typeof parsed !== "object") return answers;
 
-  const fields = (form.fields ?? []).filter((f) => !f.deleted && f.type !== "file_upload");
+  const fields = (form.fields ?? []).filter((f) => !f.deleted && f.type !== "file_upload" && f.type !== "image_upload");
   const findField = (idOrLabel: unknown, label?: unknown) =>
     fields.find(
       (f) =>

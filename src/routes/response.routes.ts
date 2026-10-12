@@ -10,18 +10,22 @@ import {
   markResponseUnread,
   getResponseActivity,
   clearEditedAfterReview,
+  getLinkPreviewHandler,
 } from "../controllers/response.controller";
 import { bulkUpdateResponses } from "../controllers/bulk.controller";
 import { listNotes, createNote, updateNote, deleteNote } from "../controllers/note.controller";
 import { scoreResponse, getResponseScore } from "../controllers/score.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
+import { linkPreviewRateLimiter } from "../middleware/rateLimiter";
 
 const router = Router();
 
 // Scope all response routes with authentication and suspension checks
 router.get("/", protect as any, blockSuspended as any, requirePermission("responses:read") as any, getResponses);
 router.get("/stats", protect as any, blockSuspended as any, requirePermission("responses:read") as any, getResponseStats);
+// Mounted before "/:id" so "link-preview" is never swallowed as an :id.
+router.get("/link-preview", protect as any, blockSuspended as any, requirePermission("responses:read") as any, linkPreviewRateLimiter, getLinkPreviewHandler);
 // Mounted before "/:id" so "bulk" is never swallowed as an :id.
 router.post("/bulk", protect as any, blockSuspended as any, requirePermission("responses:read") as any, bulkUpdateResponses);
 router.get("/:id", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "response" }) as any, getResponseDetail);

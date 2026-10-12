@@ -203,7 +203,11 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
         const scoreMap = await scoreService.aggregateForMany(batch.map((r) => r._id.toString()));
         for (const r of batch) {
           const formTitle = formMap.get(r.formId.toString())?.title || "Form Response";
-          const answersFormatted = escapeCsv(r.answers);
+          // A drawn signature is a base64 PNG (up to ~300 KB): export a marker, not the image bytes.
+          const exportable = Object.fromEntries(
+            Object.entries((r.answers as Record<string, unknown>) ?? {}).map(([k, v]) => [k, typeof v === "string" && v.startsWith("data:image/") ? "[drawn signature]" : v])
+          );
+          const answersFormatted = escapeCsv(exportable);
           const agg = scoreMap.get(r._id.toString()) || { scoreAverage: null, scoreCount: 0 };
           const line = `${escapeCsv(r._id.toString())},${escapeCsv(r.reference || "")},${escapeCsv(
             r.formId.toString()

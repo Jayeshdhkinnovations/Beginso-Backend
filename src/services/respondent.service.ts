@@ -170,7 +170,7 @@ const answersView = (form: IForm, response: IResponse) => {
       fieldId: f.fieldId,
       label: f.label,
       type: f.type,
-      value: f.type === "file_upload" ? fileNameOf(raw) : raw ?? null,
+      value: f.type === "file_upload" ? fileNameOf(raw) : f.type === "image_upload" ? (Array.isArray(raw) ? raw.join(", ") : "") : raw ?? null,
       // Enough for a respondent to correct an answer with the right control. These are the form's own PUBLIC
       // definition (the same things the public form already shows), never anything about the response.
       required: !!f.required,
@@ -230,7 +230,7 @@ export const editResponse = async (
   const merged: Record<string, any> = { ...((response.answers as any) ?? {}) };
   let changed = false;
   for (const field of form.fields ?? []) {
-    if (field.deleted || !field.fieldId || field.type === "file_upload") continue;
+    if (field.deleted || !field.fieldId || field.type === "file_upload" || field.type === "image_upload") continue;
     if (!Object.prototype.hasOwnProperty.call(incoming, field.fieldId)) continue;
     merged[field.label] = incoming[field.fieldId];
     changed = true;

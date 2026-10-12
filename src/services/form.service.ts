@@ -625,7 +625,7 @@ export class FormService {
       if (field.deleted) {
         continue;
       }
-      if (options.isTest && field.type === "file_upload") {
+      if (options.isTest && (field.type === "file_upload" || field.type === "image_upload")) {
         continue;
       }
 
@@ -635,12 +635,12 @@ export class FormService {
       }
 
       let value = (field.fieldId && answers[field.fieldId] !== undefined) ? answers[field.fieldId] : answers[field.label];
-      if (field.type === "file_upload") {
+      if (field.type === "file_upload" || field.type === "image_upload") {
         value = answers[field.label];
       }
       
       // 1. Required check
-      if (field.required && (value === undefined || value === null || value === "")) {
+      if (field.required && (value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0))) {
         validationErrors.push({ field: field.label, message: `Field "${field.label}" is required.` });
         continue;
       }
@@ -774,6 +774,58 @@ export class FormService {
                 message: `Field "${field.label}" file type "${value.mimeType}" is not allowed. Allowed types: ${field.allowedMimeTypes.join(", ")}.`
               });
             }
+          }
+        }
+
+        // 10. Validate the V2 field types. Each one is a plain value (string/number) except image_upload,
+        // whose answer is the list of stored file names the submit controller wrote after saving the files.
+        const bad = (message: string) => validationErrors.push({ field: field.label, message: `Field "${field.label}" ${message}` });
+        if (field.type === "rating") {
+          const n = Number(value);
+          if (!Number.isInteger(n) || n < 1 || n > 5) bad("must be a rating from 1 to 5.");
+        }
+        if (field.type === "yes_no" && value !== "Yes" && value !== "No") bad('must be "Yes" or "No".');
+        if (field.type === "url") {
+          let ok = typeof value === "string" && value.length <= 2048;
+          if (ok) {
+            try {
+              const u = new URL(value);
+              ok = u.protocol === "https:" || u.protocol === "http:";
+            } catch {
+              ok = false;
+            }
+          }
+          if (!ok) bad("must be a valid http(s) web address.");
+        }
+        if (field.type === "time" && !(typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value))) {
+          bad("must be a valid time (HH:MM).");
+        }
+        if (field.type === "datetime") {
+          const okShape = typeof value === "string" && /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(value);
+          if (!okShape || isNaN(new Date(value).getTime())) bad("must be a valid date and time.");
+        }
+        if (field.type === "currency") {
+          const n = Number(value);
+          if (!Number.isFinite(n)) bad("must be a valid amount.");
+          else if (field.min !== undefined && n < field.min) bad(`must be at least ${field.min}.`);
+          else if (field.max !== undefined && n > field.max) bad(`cannot exceed ${field.max}.`);
+        }
+        if (field.type === "address" && !(typeof value === "string" && value.length <= 500)) {
+          bad("must be text of at most 500 characters.");
+        }
+        if (field.type === "signature") {
+          // Drawn: a PNG data URL (bounded). Typed: short plain text. Anything else is refused, so the
+          // value can only ever be rendered as an <img> of a PNG or as text.
+          const drawn = typeof value === "string" && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(value) && value.length <= 300_000;
+          const typed = typeof value === "string" && !value.startsWith("data:") && value.length <= 100;
+          if (!drawn && !typed) bad("must be a drawn or typed signature.");
+        }
+        if (field.type === "image_upload") {
+          const max = field.allowMultiple ? field.maxImages ?? 5 : 1;
+          if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) {
+            bad("must be one or more uploaded images.");
+          } else if (value.length > max) {
+            bad(`accepts at most ${max} image${max === 1 ? "" : "s"}.`);
           }
         }
       }

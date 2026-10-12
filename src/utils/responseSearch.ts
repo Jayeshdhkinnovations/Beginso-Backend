@@ -4,7 +4,10 @@ export const buildSearchText = (answers: unknown): string => {
   const parts = new Set<string>();
   const walk = (value: unknown, depth: number): void => {
     if (value == null || depth > 4) return;
-    if (typeof value === "string") parts.add(value);
+    // A drawn signature is a base64 PNG: unsearchable, and it would eat the whole 20k budget below.
+    if (typeof value === "string") {
+      if (!value.startsWith("data:image/")) parts.add(value);
+    }
     else if (typeof value === "number" || typeof value === "boolean") parts.add(String(value));
     else if (Array.isArray(value)) value.forEach((v) => walk(v, depth + 1));
     else if (typeof value === "object") {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
-import { ACCESS_MODE_VALUES, AccessMode, BUTTON_RADII, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, IMAGE_MAX_COUNTS, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -105,6 +105,35 @@ const fileUploadObj = baseFieldSchema.extend({
   allowedMimeTypes: z.array(z.string().trim().min(1, "MIME type cannot be empty")).optional(),
 });
 
+const simpleObj = <T extends string>(type: T) => baseFieldSchema.extend({ type: z.literal(type) });
+
+const urlObj = baseFieldSchema.extend({
+  type: z.literal("url"),
+  urlPreviewStyle: z.enum(URL_PREVIEW_STYLES).optional(),
+  urlDisplay: z.enum(URL_DISPLAYS).optional(),
+});
+
+const currencyObj = baseFieldSchema.extend({
+  type: z.literal("currency"),
+  currency: z.enum(CURRENCIES).optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+});
+
+const imageUploadObj = baseFieldSchema.extend({
+  type: z.literal("image_upload"),
+  maxFileSize: z.number().positive("maxFileSize must be positive").optional(), // in MB, per image
+  allowMultiple: z.boolean().optional(),
+  maxImages: z
+    .number()
+    .int()
+    .refine((n) => (IMAGE_MAX_COUNTS as readonly number[]).includes(n), "maxImages must be 2, 5 or 10")
+    .optional(),
+  previewPosition: z.enum(PREVIEW_POSITIONS).optional(),
+  aspectRatio: z.enum(ASPECT_RATIOS).optional(),
+  previewSize: z.enum(PREVIEW_SIZES).optional(),
+});
+
 export const fieldSchema = z
   .discriminatedUnion("type", [
     shortTextObj,
@@ -117,6 +146,15 @@ export const fieldSchema = z
     multipleChoiceObj,
     checkboxObj,
     fileUploadObj,
+    simpleObj("rating"),
+    simpleObj("yes_no"),
+    urlObj,
+    simpleObj("time"),
+    simpleObj("datetime"),
+    currencyObj,
+    simpleObj("address"),
+    simpleObj("signature"),
+    imageUploadObj,
   ])
   .superRefine((data, ctx) => {
     if (data.type === "short_text" || data.type === "long_text") {
@@ -128,7 +166,7 @@ export const fieldSchema = z
         });
       }
     }
-    if (data.type === "number") {
+    if (data.type === "number" || data.type === "currency") {
       if (data.min !== undefined && data.max !== undefined && data.min >= data.max) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

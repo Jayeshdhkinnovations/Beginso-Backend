@@ -164,6 +164,13 @@ export const searchRateLimiter = createRateLimiter({
   log: true,
 });
 
+// GET /api/responses/link-preview: makes an outbound request per call, so it is capped per signed-in user.
+export const linkPreviewRateLimiter = createRateLimiter({
+  name: "link-preview",
+  limit: () => ({ max: intEnv("LINK_PREVIEW_RATE_LIMIT_MAX", 60), windowMs: 60000 }),
+  by: (req, ip) => (req as any).user?._id?.toString() ?? ip,
+});
+
 export const clearRateLimitStore = async (): Promise<void> => {
   await RateLimitBucket.deleteMany({});
 };

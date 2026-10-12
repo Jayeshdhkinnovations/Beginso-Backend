@@ -22,6 +22,7 @@ import { getRealClientIp, hashIp } from "../utils/ip";
 import { keyedHash } from "../utils/pepper";
 import { RateLimitBucket } from "../models/RateLimitBucket";
 import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
+import { DEFAULT_IMAGE_MAX_MB, IMAGE_EXT_RE, IMAGE_MIME_TYPES, looksLikeImage } from "../utils/imageUpload";
 import { logWorkspaceEvent } from "../services/event.service";
 import { ACCESS_MODE_VALUES } from "../models/Form";
 import { getAccessMode } from "../utils/accessMode";
@@ -981,6 +982,10 @@ export const getPublicFormBySlug = async (
       if (raw.allowedMimeTypes !== undefined && raw.allowedMimeTypes.length > 0) {
         cleanField.allowedMimeTypes = raw.allowedMimeTypes;
       }
+      // V2 display & preview settings the respondent form needs (currency symbol, how many images).
+      for (const key of ["currency", "allowMultiple", "maxImages", "aspectRatio", "previewSize"]) {
+        if (raw[key] !== undefined) cleanField[key] = raw[key];
+      }
       if (raw.logicRules !== undefined && raw.logicRules.length > 0) {
         cleanField.logicRules = raw.logicRules.map((rule: any) => ({
           ruleId: rule.ruleId,
@@ -1376,6 +1381,61 @@ export const submitPublicForm = async (
             }
           }
         }
+      }
+    }
+
+    // image_upload: one or more images per field. Each is checked by extension, declared type, size and
+    // its real first bytes; the answer is the list of stored file names (the response detail joins them to
+    // the Upload records by name, so the viewer can show each one under the right field).
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      const uploaded = req.files as Express.Multer.File[];
+      for (const field of form.fields) {
+        if (field.type !== "image_upload" || field.deleted) continue;
+        const files = uploaded.filter((f) => f.fieldname === field.label || f.fieldname === field.fieldId);
+        if (files.length === 0) continue;
+
+        const maxImages = field.allowMultiple ? field.maxImages ?? 5 : 1;
+        const maxMb = field.maxFileSize ?? DEFAULT_IMAGE_MAX_MB;
+        let problem: string | null = null;
+        if (files.length > maxImages) problem = `accepts at most ${maxImages} image${maxImages === 1 ? "" : "s"}.`;
+        for (const file of files) {
+          if (problem) break;
+          if (!IMAGE_EXT_RE.test(file.originalname) || !IMAGE_MIME_TYPES.includes(file.mimetype) || !looksLikeImage(file.path)) {
+            problem = `only accepts JPG, PNG or WebP images ("${file.originalname}" is not one).`;
+          } else if (file.size / (1024 * 1024) > maxMb) {
+            problem = `images cannot exceed ${maxMb} MB ("${file.originalname}" is too large).`;
+          }
+        }
+        if (problem) {
+          for (const file of files) fs.promises.unlink(file.path).catch(() => {});
+          res.status(422).json({
+            success: false,
+            message: "Validation failed",
+            errors: [{ field: field.label, message: `Field "${field.label}" ${problem}` }],
+            error: { message: "Validation failed" },
+          });
+          return;
+        }
+
+        const workspace = form.workspaceId ? await Workspace.findById(form.workspaceId) : null;
+        const uploadOwner = workspace?.owner ?? form.createdBy;
+        if (!uploadOwner) {
+          res.status(400).json({ success: false, message: "This form has no owner to store the file under" });
+          return;
+        }
+        const ctx = (req as any).uploadContext;
+        for (const file of files) {
+          await Upload.create({
+            name: file.originalname,
+            size: file.size,
+            type: file.mimetype,
+            path: ctx ? path.join(ctx.userId, ctx.formId, "responses", ctx.responseId, file.filename) : file.filename,
+            owner: uploadOwner,
+            uploadTime: new Date(),
+            isBranding: false,
+          });
+        }
+        answers[field.label] = files.map((f) => f.filename);
       }
     }
 

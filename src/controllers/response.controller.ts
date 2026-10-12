@@ -1,3 +1,4 @@
+import { getLinkPreview } from "../services/linkPreview.service";
 import { Request, Response, NextFunction } from "express";
 import { queueActivityEmails } from "../services/notificationEmail.service";
 import { recordEvent } from "../services/event.service";
@@ -565,6 +566,23 @@ export const markResponseUnread = async (req: Request, res: Response, next: Next
     await readStateService.markUnread(authReq.user._id.toString(), String(id));
     res.status(200).json({ success: true, message: "Marked as unread", unread: true });
   } catch (error: any) {
+    next(error);
+  }
+};
+
+// GET /api/responses/link-preview?url=... Title/thumbnail for a URL a respondent submitted. Signed-in members
+// only; the fetch itself is SSRF-hardened (see linkPreview.service.ts). Always answers with at least the
+// domain, so the viewer never has to guess whether a preview is merely unavailable.
+export const getLinkPreviewHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const url = typeof req.query.url === "string" ? req.query.url : "";
+    const preview = url.length > 0 && url.length <= 2048 ? await getLinkPreview(url) : null;
+    if (!preview) {
+      res.status(422).json({ success: false, message: "A valid http(s) URL is required", error: { message: "A valid http(s) URL is required" } });
+      return;
+    }
+    res.status(200).json({ success: true, preview });
+  } catch (error) {
     next(error);
   }
 };

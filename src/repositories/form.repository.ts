@@ -29,13 +29,17 @@ export class FormRepository {
     query: any,
     skip: number,
     limit: number,
-    workspaceId?: string
+    workspaceId?: string,
+    sort: Record<string, 1 | -1> = { createdAt: -1 }
   ): Promise<IForm[]> {
     const finalQuery = { ...query };
     if (workspaceId) {
       finalQuery.workspaceId = workspaceId;
     }
-    return await Form.find(finalQuery).sort({ createdAt: -1 }).skip(skip).limit(limit);
+    // _id last so equal values (same title, same second) keep one stable order across pages.
+    const q = Form.find(finalQuery).sort({ ...sort, _id: sort._id ?? -1 }).skip(skip).limit(limit);
+    // Titles sort case-insensitively, the way a person reads a list.
+    return await ("title" in sort ? q.collation({ locale: "en", strength: 2 }) : q);
   }
 
   async count(query: any, workspaceId?: string): Promise<number> {

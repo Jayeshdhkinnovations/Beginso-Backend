@@ -22,6 +22,14 @@ import { queueActivityEmails } from "./notificationEmail.service";
 
 const MAX_SLUG_ATTEMPTS = 5;
 
+// GET /api/forms ?sort=<field>&order=asc|desc. Only these fields are accepted; the default (and any unknown value) is newest first.
+const FORM_SORT_FIELDS = ["createdAt", "updatedAt", "title", "status"] as const;
+export const parseFormSort = (field?: string, order?: string): Record<string, 1 | -1> => {
+  if (!field || !(FORM_SORT_FIELDS as readonly string[]).includes(field)) return { createdAt: -1 };
+  const asc = order ? order.toLowerCase() === "asc" : field === "title" || field === "status";
+  return { [field]: asc ? 1 : -1 };
+};
+
 export class FormValidationError extends Error {
   statusCode = 422;
   errors: Array<{ field: string; message: string }>;
@@ -241,6 +249,9 @@ export class FormService {
       archived?: string;
       userId?: string;
       pinned?: boolean;
+      // Whitelisted sort: `sort` is one of FORM_SORT_FIELDS, `order` is "asc" | "desc". Anything else keeps createdAt desc.
+      sort?: string;
+      order?: string;
     }
   ) {
     const page = clampInt(options.page, 1, 1, 100000);
@@ -281,7 +292,7 @@ export class FormService {
       forms = matched.slice(skip, skip + limit);
     } else {
       [forms, total] = await Promise.all([
-        this.formRepository.findWithPagination(query, skip, limit, workspaceId),
+        this.formRepository.findWithPagination(query, skip, limit, workspaceId, parseFormSort(options.sort, options.order)),
         this.formRepository.count(query, workspaceId),
       ]);
       if (options.userId) pinnedAt = await pinsFor(options.userId, forms.map((f) => f._id));

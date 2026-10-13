@@ -484,6 +484,8 @@ export const listForms = async (req: Request, res: Response, next: NextFunction)
       // Pinned forms: the caller's private pins decorate every row; pinned=true lists only those.
       userId: authReq.user._id.toString(),
       pinned: req.query.pinned === "true",
+      sort: typeof req.query.sort === "string" ? req.query.sort : undefined,
+      order: typeof req.query.order === "string" ? req.query.order : undefined,
       // C1.6: no active workspace or explicit personal context -> list caller's personal forms
       personalUserId: (isExplicitPersonal || !workspaceId) ? authReq.user._id.toString() : undefined,
     });

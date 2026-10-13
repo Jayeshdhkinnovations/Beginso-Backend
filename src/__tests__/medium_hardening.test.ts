@@ -224,7 +224,8 @@ describe("S-35 reports", () => {
     const foreign = await Workspace.create({ name: "Foreign", slug: "foreign-med", timezone: "UTC", owner: editor._id });
     const foreignForm = await mkForm(foreign._id, editor._id, { title: "Top secret form" });
     const created = await as(request(app).post("/api/reports"), owner).send({ format: "csv", formId: String(foreignForm._id) });
-    expect(created.status).toBe(202);
+    // refused up front now (it could only ever produce an empty file); the title still never comes back
+    expect(created.status).toBe(404);
     expect(JSON.stringify(created.body)).not.toContain("Top secret");
 
     await Report.deleteMany({});

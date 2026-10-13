@@ -91,6 +91,13 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
 
     const { format, formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity } = parseResult.data;
 
+    // A form outside the caller's scope (another user's personal form, another workspace's form) would only yield an empty
+    // file; refuse it up front instead of queueing a job that can never contain anything.
+    if (formId && (!mongoose.Types.ObjectId.isValid(formId) || !(await Form.exists({ _id: formId, ...formsFilter })))) {
+      res.status(404).json({ success: false, message: "Form not found" });
+      return;
+    }
+
     if (field !== undefined || value !== undefined) {
       const segForm = formId && mongoose.Types.ObjectId.isValid(formId) ? await Form.findOne({ _id: formId, ...formsFilter }).select("fields").lean() : null;
       try {

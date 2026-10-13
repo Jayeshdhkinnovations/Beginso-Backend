@@ -25,7 +25,9 @@ export class DashboardLayoutService {
         return { conflict: raced ? out(raced) : null };
       }
     }
-    if (version !== undefined && version !== existing.version) return { conflict: out(existing) };
+    // A save must say which version it was based on. Without one it would silently overwrite someone else's layout,
+    // so the caller gets the current layout back (409) and decides. (The very first save has no layout yet and needs none.)
+    if (version === undefined || version !== existing.version) return { conflict: out(existing) };
     // Compare-and-set on version so concurrent writers cannot both win.
     const updated = await Dashboard.findOneAndUpdate(
       { ...filter, version: existing.version },

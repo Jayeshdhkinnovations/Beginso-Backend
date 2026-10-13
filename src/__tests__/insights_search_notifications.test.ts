@@ -2,7 +2,7 @@
 // depend on: the question breakdown counts real answers, completionRate has one meaning, saved charts are
 // permission-checked, exports are audited, search never discloses what a caller may not see, activity emails
 // never contain a response, and notifications never cross contexts.
-process.env.JWT_SECRET = "test-jwt-secret-key-for-sprint14-insights-search-launch";
+process.env.JWT_SECRET = "test-jwt-secret-key-for-insights-search-notifications";
 process.env.RATE_LIMIT_MAX = "0";
 process.env.SEARCH_RATE_LIMIT_MAX = "0";
 process.env.AUTH_RATE_LIMIT_MAX = "0";
@@ -31,7 +31,7 @@ import { renderActivityEmail } from "../services/notificationMail";
 import { sendActivityEmails, signUnsubscribeToken } from "../services/notificationEmail.service";
 import { clearRateLimitStore } from "../middleware/rateLimiter";
 import jwt from "jsonwebtoken";
-import { migrateSprint14, rollbackSprint14 } from "../scripts/migrateSprint14";
+import { migrateInsightsIndexes, rollbackInsightsIndexes } from "../scripts/migrateInsightsIndexes";
 
 let mongoServer: MongoMemoryServer;
 let owner: any, member: any, viewer: any, outsider: any, sharee: any, solo: any;
@@ -41,6 +41,15 @@ let wsA: any, wsB: any;
 const token = (u: any) => generateToken({ id: u._id.toString(), email: u.email, role: u.role || "user" });
 const as = (t: string, slug?: string) => ({ Authorization: `Bearer ${t}`, ...(slug ? { "x-workspace-slug": slug } : {}) });
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Audit events are written fire-and-forget after the response, so tests poll for them instead of sleeping a fixed time
+// (a fixed delay passed alone and failed under load).
+const waitFor = async (check: () => Promise<boolean>, timeoutMs = 20000) => {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    if (await check()) return;
+    await wait(25);
+  }
+};
 
 const fields = () => [
   { fieldId: "f-name", pageId: "p1", label: "Full name", type: "short_text", required: false },
@@ -246,7 +255,7 @@ describe("BE 0.2 / 0.4 - completionRate has one meaning (views based), reviewedR
   });
 
   it("POST /api/templates/:id/use stores templateId + templateCategory, exposed on form read and analytics rows; other forms are null", async () => {
-    const tpl = await Template.create({ name: "Event signup", category: "Events", theme: "default", fields: fields().map(({ pageId, ...f }) => f) as any });
+    const tpl = await Template.create({ name: "Event signup", category: "Events", theme: "default", fields: fields().map(({ pageId: _pageId, ...f }) => f) as any });
     const res = await request(app).post(`/api/templates/${tpl._id}/use`).set(as(tOwner, "ws-a")).send({});
     expect(res.status).toBe(201);
     const id = res.body.data._id;
@@ -366,7 +375,7 @@ describe("BE 0.5 / 0.5b - export audit trail and PDF pagination", () => {
     const pages = (file.body as Buffer).toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? [];
     expect(pages).toHaveLength(1);
 
-    await wait(150);
+    await waitFor(async () => !!(await Event.findOne({ action: "report.download", targetId: id })));
     const dl = await Event.findOne({ action: "report.download", targetId: id });
     expect(dl).toBeTruthy();
     expect(dl!.actorEmail).toBe(viewer.email);
@@ -451,15 +460,15 @@ describe("BE 0.6 - GET /api/search permission filtering (security critical)", ()
   const SECRET = "ZEBRA-SECRET-ANSWER-7731";
   const search = (t: string, q: string, slug?: string, extra = "") => request(app).get(`/api/search?q=${encodeURIComponent(q)}${extra}`).set(as(t, slug));
   const all = (body: any) => Object.values(body.groups).flatMap((g: any) => g.items);
-  let aForms: any[], bForm: any, archived: any, trashed: any, soloForm: any, grantedForm: any, hiddenForm: any;
+  let aForms: any[], bForm: any, trashed: any, grantedForm: any, hiddenForm: any;
 
   beforeAll(async () => {
     aForms = [];
     for (let i = 1; i <= 3; i++) aForms.push(await mkForm({ title: `Quokka survey ${i}`, status: "published" }));
-    archived = await mkForm({ title: "Quokka archived", archivedAt: new Date() });
+    await mkForm({ title: "Quokka archived", archivedAt: new Date() });
     trashed = await mkForm({ title: "Quokka trashed", deletedAt: new Date() });
     bForm = await Form.create({ title: "Quokka other workspace", workspaceId: wsB._id, createdBy: outsider._id, fields: fields(), pages: [{ id: "p1", order: 0 }] } as any);
-    soloForm = await Form.create({ title: "Quokka personal", workspaceId: null, createdBy: solo._id, fields: fields(), pages: [{ id: "p1", order: 0 }] } as any);
+    await Form.create({ title: "Quokka personal", workspaceId: null, createdBy: solo._id, fields: fields(), pages: [{ id: "p1", order: 0 }] } as any);
     grantedForm = await mkForm({ title: "Quokka shared form" });
     hiddenForm = await mkForm({ title: "Quokka not shared" });
     await FormAccessGrant.create({ formId: grantedForm._id, userId: sharee._id, role: "reviewer" });
@@ -786,17 +795,17 @@ describe("BE 0.8 - notifications: context scoping, filters, cursor, unread-count
 
 // ---------------------------------------------------------------------------------------------------
 describe("BE 0.11 / 0.12 - additive migration + health", () => {
-  it("migrateSprint14 only builds indexes (never rewrites documents), is idempotent, and rolls back cleanly", async () => {
+  it("migrateInsightsIndexes only builds indexes (never rewrites documents), is idempotent, and rolls back cleanly", async () => {
     const forms = await Form.countDocuments({}).setOptions({ includeDeleted: true });
-    const dry = await migrateSprint14({ dryRun: true });
+    const dry = await migrateInsightsIndexes({ dryRun: true });
     expect(dry.before).toEqual(dry.after);
-    const first = await migrateSprint14();
-    const second = await migrateSprint14();
+    const first = await migrateInsightsIndexes();
+    const second = await migrateInsightsIndexes();
     expect(second.after).toEqual(first.after);
     expect(await Form.countDocuments({}).setOptions({ includeDeleted: true })).toBe(forms);
-    expect((await rollbackSprint14()).length).toBe(3);
-    expect(await rollbackSprint14()).toEqual([]); // already rolled back
-    await migrateSprint14(); // and forward again
+    expect((await rollbackInsightsIndexes()).length).toBe(3);
+    expect(await rollbackInsightsIndexes()).toEqual([]); // already rolled back
+    await migrateInsightsIndexes(); // and forward again
   });
 
   it("GET /api/health still answers and carries the build info keys", async () => {

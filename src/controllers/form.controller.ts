@@ -2,7 +2,6 @@ import { lookupGeo } from "../utils/geo";
 import { Request, Response, NextFunction } from "express";
 import { reconcilePinsAfterMove } from "../services/pin.service";
 import { recordEvent } from "../services/event.service";
-import crypto from "crypto";
 import { FormService } from "../services/form.service";
 import { createFormSchema, patchFormSchema } from "../validations/form.validator";
 import mongoose from "mongoose";
@@ -24,7 +23,6 @@ import { keyedHash } from "../utils/pepper";
 import { RateLimitBucket } from "../models/RateLimitBucket";
 import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
 import { DEFAULT_IMAGE_MAX_MB, IMAGE_EXT_RE, IMAGE_MIME_TYPES, looksLikeImage } from "../utils/imageUpload";
-import { logWorkspaceEvent } from "../services/event.service";
 import { ACCESS_MODE_VALUES } from "../models/Form";
 import { getAccessMode } from "../utils/accessMode";
 import { normaliseLayout } from "../utils/layout";
@@ -1141,7 +1139,7 @@ export const submitPublicForm = async (
     if (data) {
       try {
         parsed = typeof data === "string" ? JSON.parse(data) : data;
-      } catch (e) {
+      } catch {
         res.status(422).json({
           success: false,
           message: "Validation failed",
@@ -1452,8 +1450,8 @@ export const submitPublicForm = async (
 
     // Strip raw ObjectId/UUID/fieldId keys from answers — only keep human-readable label keys
     const labelKeys = new Set(form.fields.map((f: any) => f.label));
-    const fieldIdKeys = new Set(form.fields.map((f: any) => f.fieldId).filter(Boolean));
-    const idPattern = /^[0-9a-fA-F]{24}$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    const _fieldIdKeys = new Set(form.fields.map((f: any) => f.fieldId).filter(Boolean));
+    const _idPattern = /^[0-9a-fA-F]{24}$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     for (const key of Object.keys(answers)) {
       // Only answers to questions that exist on this form are stored: an unknown key (including
       // ones starting with "$") is dropped instead of being written into the database verbatim.
@@ -1982,7 +1980,7 @@ export const getFormOverview = async (req: Request, res: Response, next: NextFun
       return;
     }
 
-    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(
+    const { formDoc, workspaceId: _workspaceId, isAuthorized } = await resolveFormAccess(
       formId as string,
       authReq.user,
       authReq.formAccessGrant

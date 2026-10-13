@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
 import PDFDocument from "pdfkit";
-import ReportModel, { IReport } from "../models/Report";
+import ReportModel from "../models/Report";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import { buildResponseFilterQuery } from "../utils/responseFilters";
@@ -548,7 +548,7 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
         report.errorMessage = err?.message || "Failed to generate report due to an internal processing error. Please try again.";
         await report.save();
       }
-    } catch (saveErr) {
+    } catch {
       // Ignored
     }
   }

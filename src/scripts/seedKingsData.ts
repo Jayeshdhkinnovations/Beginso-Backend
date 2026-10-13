@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import path from "path";
 import User from "../models/User";
 import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
+import { refuseInProduction } from "./_guard";
 
 dotenv.config();
 
@@ -34,6 +34,7 @@ const ratingValues = ["5 - Excellent", "4 - Very Good", "3 - Good", "2 - Fair", 
 const paymentMethods = ["Credit Card (Stripe)", "PayPal", "Bank Transfer", "Crypto (USDC)"];
 
 const seedKingsData = async () => {
+  refuseInProduction("seed demo data and delete the responses of the seeded forms");
   try {
     console.log("🚀 Connecting to MongoDB Atlas...");
     await mongoose.connect(mongoUri);

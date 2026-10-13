@@ -246,7 +246,7 @@ export const getFile = async (
 
     // Exact match on the stored path only (no regex, no basename fallback): the file that is
     // served is always the file that is authorized below.
-    const forwardSlashPath = filename.replace(/[\/\\]/g, "/");
+    const forwardSlashPath = filename.replace(/[/\\]/g, "/");
     const uploadDoc = await Upload.findOne({
       path: { $in: [forwardSlashPath, forwardSlashPath.replace(/\//g, path.sep), forwardSlashPath.replace(/\//g, "\\")] },
     });
@@ -339,7 +339,7 @@ export const cleanEmptyDirs = async (dir: string, stopDir: string) => {
         currentDir = path.dirname(currentDir);
       }
     }
-  } catch (err) {
+  } catch {
     // Ignore cleanup errors silently
   }
 };

@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { recordEvent } from "../services/event.service";
 import mongoose from "mongoose";
-import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { newInvitationToken, findInvitationByToken, publicInvitation } from "../utils/invitationToken";
 import Invitation from "../models/Invitation";

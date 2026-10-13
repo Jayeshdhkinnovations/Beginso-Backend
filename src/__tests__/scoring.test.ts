@@ -19,7 +19,7 @@ import { generateReportAsync } from "../services/report.service";
 
 let mongo: MongoMemoryServer;
 let wsA: any, wsB: any, form: any, formB: any;
-let respHigh: any, respLow: any, respNone: any, respB: any;
+let respHigh: any, respLow: any, respB: any;
 let owner: any, admin: any, editor: any, member: any, reviewer: any, viewer: any, outsider: any;
 const t: Record<string, string> = {};
 const auth = (who: string) => ({ Authorization: `Bearer ${t[who]}` });
@@ -58,7 +58,7 @@ beforeAll(async () => {
     ResponseModel.create({ formId: f._id, answers: { Name: ref }, reference: ref, submittedAt: new Date() });
   respHigh = await mkResp(form, "#1");
   respLow = await mkResp(form, "#2");
-  respNone = await mkResp(form, "#3");
+  await mkResp(form, "#3"); // a third response with no score
   respB = await mkResp(formB, "#1");
 
   criterionA = (await request(app).get(`/api/workspaces/${wsA._id}/score-criteria`).set(auth("owner"))).body.criteria[0].id;

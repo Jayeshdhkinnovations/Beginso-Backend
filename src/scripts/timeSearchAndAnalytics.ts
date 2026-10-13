@@ -1,8 +1,7 @@
-/* eslint-disable no-console */
-// Sprint 14 BE 0.11: seeds multi-workspace volume and times GET /api/search + the analytics endpoints (p50/p95/max).
+// Search and analytics timing: seeds multi-workspace volume and times GET /api/search + the analytics endpoints (p50/p95/max).
 //
-//   npm run time:sprint14                       in-memory MongoDB (nothing real is touched)
-//   TIMING_MONGODB_URI=<local|clone uri> TIMING_KEEP=1 npm run time:sprint14
+//   npm run time:search-analytics                       in-memory MongoDB (nothing real is touched)
+//   TIMING_MONGODB_URI=<local|clone uri> TIMING_KEEP=1 npm run time:search-analytics
 //                                               your own LOCAL or CLONE database. It SEEDS DATA into it: never point it
 //                                               at production. A URI that does not look local/test/staging/clone is refused.
 // Env: WORKSPACES (default 10), FORMS (per workspace, 10), RESPONSES (per form, 300), RUNS (per endpoint, 40).

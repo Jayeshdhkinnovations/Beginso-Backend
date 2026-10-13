@@ -39,7 +39,6 @@ import { generateToken } from "../utils/generateToken";
 let mongoServer: MongoMemoryServer;
 
 let ownerUser: any;
-let ownerToken: string;
 
 let memberUser: any;
 let memberToken: string;
@@ -74,7 +73,6 @@ beforeAll(async () => {
     role: "admin",
     status: "active",
   });
-  ownerToken = makeToken(ownerUser);
 
   // 2. Create Workspace
   workspace = await Workspace.create({

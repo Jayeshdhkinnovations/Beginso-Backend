@@ -31,7 +31,7 @@ const isAllowlisted = (ip: string): boolean => {
   return list.length > 0 && list.includes(ip.replace(/^::ffff:/, ""));
 };
 
-const hit = async (key: string, windowMs: number): Promise<number> => {
+export const hit = async (key: string, windowMs: number): Promise<number> => {
   const windowStart = Math.floor(Date.now() / windowMs);
   const bucketKey = `${key}:${windowStart}`;
   const expiresAt = new Date((windowStart + 2) * windowMs);

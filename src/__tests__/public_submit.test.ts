@@ -296,7 +296,7 @@ describe("POST /api/public/:slug/submit Integration Tests", () => {
       if (fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
-        } catch (e) {
+        } catch {
           // ignore
         }
       }

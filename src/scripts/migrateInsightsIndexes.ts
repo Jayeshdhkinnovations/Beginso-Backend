@@ -14,11 +14,11 @@ import { MailLog } from "../models/MailLog";
 // What it does: builds the new indexes (idempotent) and reports counts a human can eyeball before and after.
 // Run it on a FRESH CLONE first (migration rehearsal #2); it never deletes or rewrites a document.
 //
-//   npm run migrate:sprint14 -- --dry-run     report only, builds nothing
-//   npm run migrate:sprint14                  build indexes + report
-//   npm run migrate:sprint14 -- --rollback    drop only the indexes this script created (data is untouched, and the
+//   npm run migrate:insights-indexes -- --dry-run     report only, builds nothing
+//   npm run migrate:insights-indexes                  build indexes + report
+//   npm run migrate:insights-indexes -- --rollback    drop only the indexes this script created (data is untouched, and the
 //                                             previous release ignores every new field, so rollback needs nothing else)
-export const SPRINT14_INDEXES = [
+export const INSIGHTS_INDEXES = [
   { model: "Notification", index: "userId_1_workspaceId_1_read_1_createdAt_-1" },
   { model: "MailLog", index: "dedupeKey_1" },
   { model: "SavedChart", index: "formId_1_order_1_createdAt_1" },
@@ -33,7 +33,7 @@ export const report = async () => ({
   mailLogsWithDedupeKey: await MailLog.countDocuments({ dedupeKey: { $type: "string" } }),
 });
 
-export const migrateSprint14 = async (options: { dryRun?: boolean } = {}) => {
+export const migrateInsightsIndexes = async (options: { dryRun?: boolean } = {}) => {
   const before = await report();
   if (!options.dryRun) {
     await Promise.all([Notification.createIndexes(), MailLog.createIndexes(), SavedChart.createIndexes()]);
@@ -41,9 +41,9 @@ export const migrateSprint14 = async (options: { dryRun?: boolean } = {}) => {
   return { before, after: await report() };
 };
 
-export const rollbackSprint14 = async (): Promise<string[]> => {
+export const rollbackInsightsIndexes = async (): Promise<string[]> => {
   const dropped: string[] = [];
-  for (const { model, index } of SPRINT14_INDEXES) {
+  for (const { model, index } of INSIGHTS_INDEXES) {
     try {
       await mongoose.model(model).collection.dropIndex(index);
       dropped.push(`${model}.${index}`);
@@ -64,10 +64,10 @@ if (require.main === module) {
     }
     await mongoose.connect(mongoUri);
     if (process.argv.includes("--rollback")) {
-      console.log("Dropped indexes:", await rollbackSprint14());
+      console.log("Dropped indexes:", await rollbackInsightsIndexes());
     } else {
       const dryRun = process.argv.includes("--dry-run");
-      console.log(dryRun ? "[dry run]" : "Migrated.", JSON.stringify(await migrateSprint14({ dryRun }), null, 2));
+      console.log(dryRun ? "[dry run]" : "Migrated.", JSON.stringify(await migrateInsightsIndexes({ dryRun }), null, 2));
     }
     await mongoose.disconnect();
   };

@@ -4,8 +4,6 @@ import { recordEvent } from "../services/event.service";
 import { getAuth } from "firebase-admin/auth";
 import User from "../models/User";
 import Workspace from "../models/Workspace";
-import Form from "../models/Form";
-import ResponseModel from "../models/Response";
 
 export const updateProfile = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -33,7 +31,7 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       message: "Profile updated successfully",
       user,
     });
-  } catch (error: any) {
+  } catch {
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };

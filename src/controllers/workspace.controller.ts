@@ -372,7 +372,7 @@ export const deleteWorkspace = async (req: Request, res: Response, next: NextFun
 // POST /api/workspaces/:id/transfer-ownership  { userId }   (owner only)
 export const transferOwnership = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const authReq = req as any;
+    const _authReq = req as any;
     const rawId = String(req.params.id || "").trim();
     const workspace = mongoose.Types.ObjectId.isValid(rawId)
       ? await Workspace.findById(rawId)

@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import crypto from "crypto";
 import { recordMailLog, MailLogTemplate } from "../models/MailLog";
 import { renderRespondentLinkEmail } from "./respondentMail";
@@ -129,9 +129,9 @@ export function renderMail(o: SendMailOptions): RenderedMail | null {
 }
 
 class MailService {
-  private transporter: nodemailer.Transporter | null = null;
+  private transporter: Transporter | null = null;
 
-  private getTransporter(): nodemailer.Transporter {
+  private getTransporter(): Transporter {
     if (!this.transporter) {
       const host = process.env.SMTP_HOST || "email.toowix.com";
       const port = Number(process.env.SMTP_PORT) || 587;

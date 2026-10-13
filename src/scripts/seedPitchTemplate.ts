@@ -3,12 +3,14 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import Template from "../models/Template";
+import { refuseInProduction } from "./_guard";
 
 dotenv.config();
 
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/onboarding";
 
 const seedPitchTemplate = async () => {
+  refuseInProduction("replace the pitch template");
   try {
     await mongoose.connect(mongoUri);
     console.log("✅ Connected to MongoDB for seeding pitch template");
@@ -32,7 +34,7 @@ const seedPitchTemplate = async () => {
     };
 
     // Remove existing template with name 'pitch' if present to avoid duplication
-    await Template.deleteMany({ name: /^pitch$/i });
+    await Template.deleteMany({ name: /^pitch$/i, workspaceId: null }); // built-in only
 
     const createdTemplate = await Template.create(templateData);
 

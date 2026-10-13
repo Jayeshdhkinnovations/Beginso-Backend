@@ -7,10 +7,10 @@ console.log("🔥 firebase.ts loaded");
 let serviceAccount: any = null;
 try {
   serviceAccount = require("./firebase/serviceAccountKey.json");
-} catch (error) {
+} catch {
   try {
     serviceAccount = require("./firebase/serviceAccountkey.json");
-  } catch (keyError) {
+  } catch {
     if (process.env.NODE_ENV === "production") {
       // A mock key would let the server boot "healthy" while every login fails.
       throw new Error("Firebase serviceAccountKey.json is missing. Refusing to start in production.");

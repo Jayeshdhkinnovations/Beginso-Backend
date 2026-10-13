@@ -5,11 +5,6 @@ import FormPin from "../models/FormPin";
 import { PIN_LIMIT, pinsFor } from "./pin.service";
 import Form, { IForm, IFormField } from "../models/Form";
 import ResponseModel from "../models/Response";
-import Upload from "../models/Upload";
-import FormAccessGrant from "../models/FormAccessGrant";
-import { getUploadDir } from "../controllers/upload.controller";
-import fs from "fs";
-import path from "path";
 import mongoose from "mongoose";
 import { nanoid } from "nanoid";
 import { validateFieldsIntegrity, getHiddenFieldIds } from "../validations/form.validator";
@@ -121,8 +116,8 @@ export class FormService {
         const existingObj = JSON.parse(JSON.stringify(existing));
         
         // Remove internal fields for comparison
-        const { _id, deleted, ...cleanExisting } = existingObj as any;
-        const { _id: incomingId, deleted: incomingDeleted, ...cleanIncoming } = incoming;
+        const { _id, deleted: _deleted, ...cleanExisting } = existingObj as any;
+        const { _id: _incomingId, deleted: _incomingDeleted, ...cleanIncoming } = incoming;
 
         const hasChanges = !deepEqual(cleanExisting, cleanIncoming) || existing.deleted !== (incoming.deleted ?? false);
         if (hasChanges) {

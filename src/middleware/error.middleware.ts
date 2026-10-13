@@ -26,7 +26,7 @@ export const errorHandler = (
   err: any,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   let statusCode = err.statusCode || 500;
   if (err instanceof mongoose.Error.CastError) statusCode = 400;

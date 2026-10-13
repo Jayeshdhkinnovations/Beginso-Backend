@@ -34,5 +34,8 @@ const RespondentLinkSchema = new Schema<IRespondentLink>(
   { timestamps: true }
 );
 
+// Expired links are useless; MongoDB removes each one 30 days after its expiry (the grace keeps a recently expired link visible to support).
+RespondentLinkSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+
 const RespondentLink = mongoose.model<IRespondentLink>("RespondentLink", RespondentLinkSchema);
 export default RespondentLink;

@@ -4,13 +4,13 @@ Everything here is a command or check that needs production, a prod clone or a p
 
 ## 1. Migration rehearsal #2 (fresh prod clone)
 
-The Sprint 14 data change is additive: `migrateSprint14` only builds 3 indexes (Notification, MailLog `dedupeKey`, SavedChart) and rewrites no document.
+The Sprint 14 data change is additive: `migrateInsightsIndexes` only builds 3 indexes (Notification, MailLog `dedupeKey`, SavedChart) and rewrites no document.
 
 1. Restore a FRESH copy of production into a separate database (never the live one).
 2. `set MONGODB_URI=<clone uri>` (PowerShell: `$env:MONGODB_URI="<clone uri>"`).
-3. Dry run (reports counts, builds nothing): `npm run migrate:sprint14 -- --dry-run`
-4. Run: `npm run migrate:sprint14` (idempotent; run it twice and confirm the second run is a no-op).
-5. Rollback (drops only the indexes this script created; data untouched): `npm run migrate:sprint14 -- --rollback`
+3. Dry run (reports counts, builds nothing): `npm run migrate:insights-indexes -- --dry-run`
+4. Run: `npm run migrate:insights-indexes` (idempotent; run it twice and confirm the second run is a no-op).
+5. Rollback (drops only the indexes this script created; data untouched): `npm run migrate:insights-indexes -- --rollback`
 6. Run step 4 again after the rollback. Record the before/after counts printed. Exercise the rollback BEFORE doing the real deploy.
 7. Start the new build against the clone and confirm null-safety: old forms (no `templateId`), old notifications (no `workspaceId`), and `GET /api/analytics/*` all return 200.
 
@@ -18,9 +18,9 @@ The Sprint 14 data change is additive: `migrateSprint14` only builds 3 indexes (
 
 Script: `src/scripts/timeSearchAndAnalytics.ts` (seeds workspaces, forms and responses, then times `GET /api/search` and the analytics endpoints; prints p50/p95/max).
 
-- Safe default (in-memory MongoDB): `npm run time:sprint14`
-- Bigger local volume: `$env:WORKSPACES=20; $env:FORMS=10; $env:RESPONSES=500; $env:RUNS=60; npm run time:sprint14`
-- Your own LOCAL or CLONE database (it WRITES seed data; refuses URIs that do not look local/test/staging/clone): `$env:TIMING_MONGODB_URI="mongodb://localhost:27017/beginso-clone-test"; npm run time:sprint14`
+- Safe default (in-memory MongoDB): `npm run time:search-analytics`
+- Bigger local volume: `$env:WORKSPACES=20; $env:FORMS=10; $env:RESPONSES=500; $env:RUNS=60; npm run time:search-analytics`
+- Your own LOCAL or CLONE database (it WRITES seed data; refuses URIs that do not look local/test/staging/clone): `$env:TIMING_MONGODB_URI="mongodb://localhost:27017/beginso-clone-test"; npm run time:search-analytics`
 - Search is rate limited per user (`SEARCH_RATE_LIMIT_MAX`, default 120/min; 0 disables). Raise `RUNS` only with `SEARCH_RATE_LIMIT_MAX=0`.
 - Pass bar from tasks.md: no query above 100 ms and search p95 within the OQ-5 figure (300 ms). A 10-sample in-memory smoke run printed p95 20-120 ms (first-call warmup); that is NOT the measurement, the real run on volume is still to do.
 - Also run `seed:v2a-volume` (existing, 100k responses) on a local DB if you want the older volume shape.

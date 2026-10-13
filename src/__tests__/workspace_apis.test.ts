@@ -171,7 +171,7 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
-describe("Sprint 8 — Phase 0 Backend Contracts [BE]", () => {
+describe("Workspace APIs and context contracts", () => {
   // =========================================================================
   // BE 0.1: Workspace APIs
   // =========================================================================
@@ -303,7 +303,7 @@ describe("Sprint 8 — Phase 0 Backend Contracts [BE]", () => {
   // =========================================================================
   describe("BE 0.2 — Zero-Workspace Signup Guarantee (C1.3)", () => {
     it("POST /api/auth/session for new user creates 0 Workspace and 0 Membership rows", async () => {
-      const freshEmail = `fresh_signup_${Date.now()}@test.com`;
+      const _freshEmail = `fresh_signup_${Date.now()}@test.com`;
       const freshToken = `token-fresh-${Date.now()}`;
 
       // Mock verifyIdToken will return this unique user

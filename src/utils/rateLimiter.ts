@@ -1,77 +1,32 @@
 import { keyedHash } from "./pepper";
+import { hit } from "../middleware/rateLimiter";
 
-interface RateLimitRecord {
-  lastSentAt: number;
-  hourlyCount: number;
-  hourStart: number;
-}
-
-const verificationLimits = new Map<string, RateLimitRecord>();
-const resetLimits = new Map<string, RateLimitRecord>();
+// Cooldowns for the two mails the auth flow can send on its own: the email-verification code and the password
+// reset link. They used to live in two in-process Maps (lost on restart, separate per instance, never pruned);
+// they now use the same MongoDB counters as every other limiter (RateLimitBucket, TTL cleanup), so they hold
+// across restarts and across PM2 instances. As everywhere else, if the counter store is down the request is let
+// through rather than blocking sign-in.
 
 export const hashKey = (key: string): string => {
   return keyedHash(key.toLowerCase().trim());
 };
 
-export const checkVerificationRateLimit = (uid: string): boolean => {
-  const now = Date.now();
-  const record = verificationLimits.get(uid);
-
-  if (!record) {
-    verificationLimits.set(uid, { lastSentAt: now, hourlyCount: 1, hourStart: now });
+// true = allowed. Two rules: at most one send per `cooldownMs`, and at most `hourlyMax` per hour.
+const allow = async (name: string, subject: string, cooldownMs: number, hourlyMax: number): Promise<boolean> => {
+  try {
+    const key = `${name}:${hashKey(subject)}`;
+    // A refused attempt must not use up the hourly allowance, so the hour is only counted once the cooldown passed.
+    if ((await hit(`${key}:cooldown`, cooldownMs)) > 1) return false;
+    if ((await hit(`${key}:hour`, 60 * 60 * 1000)) > hourlyMax) return false;
+    return true;
+  } catch (err) {
+    console.error(`Cooldown "${name}" failed open:`, err);
     return true;
   }
-
-  // Check 30s cooldown
-  if (now - record.lastSentAt < 30 * 1000) {
-    return false;
-  }
-
-  // Check 1 hour window
-  if (now - record.hourStart > 3600 * 1000) {
-    record.hourStart = now;
-    record.hourlyCount = 1;
-    record.lastSentAt = now;
-    return true;
-  }
-
-  if (record.hourlyCount >= 5) {
-    return false;
-  }
-
-  record.hourlyCount += 1;
-  record.lastSentAt = now;
-  return true;
 };
 
-export const checkResetRateLimit = (email: string): boolean => {
-  const now = Date.now();
-  const key = hashKey(email);
-  const record = resetLimits.get(key);
+// Verification code mail: 30 s between sends, 5 per hour, per Firebase user.
+export const checkVerificationRateLimit = (uid: string): Promise<boolean> => allow("otp-send", uid, 30 * 1000, 5);
 
-  if (!record) {
-    resetLimits.set(key, { lastSentAt: now, hourlyCount: 1, hourStart: now });
-    return true;
-  }
-
-  // Check 60s cooldown
-  if (now - record.lastSentAt < 60 * 1000) {
-    return false;
-  }
-
-  // Check 1 hour window
-  if (now - record.hourStart > 3600 * 1000) {
-    record.hourStart = now;
-    record.hourlyCount = 1;
-    record.lastSentAt = now;
-    return true;
-  }
-
-  if (record.hourlyCount >= 5) {
-    return false;
-  }
-
-  record.hourlyCount += 1;
-  record.lastSentAt = now;
-  return true;
-};
+// Password reset mail: 60 s between sends, 5 per hour, per email address.
+export const checkResetRateLimit = (email: string): Promise<boolean> => allow("reset-mail", email, 60 * 1000, 5);

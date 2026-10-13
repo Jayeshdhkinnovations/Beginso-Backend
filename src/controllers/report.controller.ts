@@ -232,6 +232,7 @@ export const getReports = async (req: Request, res: Response, next: NextFunction
     res.status(200).json({
       success: true,
       data: formattedReports,
+      reports: formattedReports, // same array under the older key, so a client never has to guess which one is present
       total,
       page,
       limit,

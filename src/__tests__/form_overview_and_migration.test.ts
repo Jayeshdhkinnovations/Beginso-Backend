@@ -12,7 +12,7 @@ jest.mock("firebase-admin/auth", () => {
             name: `User ${token}`,
           };
         },
-        revokeRefreshTokens: async (uid: string) => {
+        revokeRefreshTokens: async (_uid: string) => {
           return {};
         },
         deleteUser: async () => {
@@ -46,11 +46,10 @@ import { revokeFirebaseUserTokens } from "../config/firebase";
 
 let mongoServer: MongoMemoryServer;
 
-describe("Sprint 10 — Remaining Backend Contracts (BE 0.6–BE 0.11)", () => {
+describe("Form overview, own-form access and data migration contracts", () => {
   let userA: any;
   let tokenA: string;
   let userB: any;
-  let tokenB: string;
 
   process.env.JWT_SECRET = "test-jwt-secret-key-for-sprint10-remaining";
 
@@ -92,7 +91,6 @@ describe("Sprint 10 — Remaining Backend Contracts (BE 0.6–BE 0.11)", () => {
       role: "admin",
       firebaseUid: "firebase-uid-b-" + Date.now(),
     });
-    tokenB = generateToken({ id: userB._id.toString(), email: userB.email, role: userB.role });
   });
 
   describe("BE 0.6 — Form Overview Stats (GET /api/forms/:id/overview)", () => {

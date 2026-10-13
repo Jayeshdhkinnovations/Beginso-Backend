@@ -16,11 +16,9 @@ let mongoServer: MongoMemoryServer;
 
 let ownerToken: string;
 let memberToken: string;
-let outsiderToken: string; // no membership, no grant, anywhere relevant
 let ownerId: string;
 let memberId: string;
 let outsiderId: string;
-let workspaceId: string;
 let formId: string;
 
 beforeAll(async () => {
@@ -36,7 +34,6 @@ beforeAll(async () => {
   outsiderId = outsider._id.toString();
 
   const ws = await Workspace.create({ name: "RO Workspace", owner: owner._id });
-  workspaceId = (ws._id as mongoose.Types.ObjectId).toString();
   await Membership.create({ userId: owner._id, workspaceId: ws._id, role: "owner" });
   await Membership.create({ userId: member._id, workspaceId: ws._id, role: "member" });
 
@@ -51,7 +48,6 @@ beforeAll(async () => {
 
   ownerToken = generateToken({ id: ownerId, email: owner.email, role: owner.role });
   memberToken = generateToken({ id: memberId, email: member.email, role: member.role });
-  outsiderToken = generateToken({ id: outsiderId, email: outsider.email, role: outsider.role });
 });
 
 afterAll(async () => {

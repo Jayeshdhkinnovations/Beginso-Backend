@@ -15,6 +15,17 @@ import Membership from "../models/Membership";
 import Workspace from "../models/Workspace";
 import SessionModel from "../models/Session";
 import User from "../models/User";
+import Note from "../models/Note";
+import ScoreEntry from "../models/ScoreEntry";
+import ResponseReadState from "../models/ResponseReadState";
+import RespondentLink from "../models/RespondentLink";
+import FormReferenceCounter from "../models/FormReferenceCounter";
+import Stage from "../models/Stage";
+import Tag from "../models/Tag";
+import ScoreCriterion from "../models/ScoreCriterion";
+import SavedView from "../models/SavedView";
+import Template from "../models/Template";
+import Dashboard from "../models/Dashboard";
 import { getUploadDir } from "../controllers/upload.controller";
 
 // Single place that knows how to delete tenant data without leaving orphans. Files live at
@@ -85,6 +96,17 @@ export const deleteFormData = async (formId: string): Promise<void> => {
   const legacyNames = await legacyFileNames(id);
   if (legacyNames.length) await removeUploads({ path: { $in: legacyNames } });
   await removeUploads({ path: { $regex: segmentPattern(id) } }, id);
+  // Everything hanging off this form's responses (notes, scores, read state, respondent links) goes with them.
+  // includeTest: a test submission's notes and links are this form's data too.
+  const responseIds: mongoose.Types.ObjectId[] = [];
+  for await (const r of ResponseModel.find({ formId: id }).setOptions({ includeTest: true }).select("_id").lean().cursor()) responseIds.push(r._id as mongoose.Types.ObjectId);
+  for (let i = 0; i < responseIds.length; i += 1000) {
+    const chunk = responseIds.slice(i, i + 1000);
+    await Promise.all([Note, ScoreEntry, ResponseReadState, RespondentLink].map((M: any) => M.deleteMany({ responseId: { $in: chunk } })));
+  }
+  await RespondentLink.deleteMany({ formId: id });
+  await FormReferenceCounter.deleteMany({ formId: id });
+  await SavedView.deleteMany({ formId: id });
   await ResponseModel.deleteMany({ formId: id });
   await FormAccessGrant.deleteMany({ formId: id });
   await SavedChart.deleteMany({ formId: id });
@@ -112,6 +134,8 @@ export const deleteWorkspaceData = async (workspaceId: mongoose.Types.ObjectId |
   }
 
   await Report.deleteMany({ workspaceId });
+  // Workspace-owned configuration that used to be left behind.
+  await Promise.all([Stage, Tag, ScoreCriterion, SavedView, SavedChart, Template, Dashboard].map((M: any) => M.deleteMany({ workspaceId })));
   await Invitation.deleteMany({ workspaceId });
   await Notification.deleteMany({ workspaceId });
   await Membership.deleteMany({ workspaceId });
@@ -152,6 +176,9 @@ export const deleteAccountData = async (user: any): Promise<void> => {
   await Membership.deleteMany({ userId });
   await FormAccessGrant.deleteMany({ userId });
   await FormPin.deleteMany({ userId });
+  await ResponseReadState.deleteMany({ userId });
+  await Dashboard.deleteMany({ ownerId: userId, workspaceId: null }); // the personal Home layout
+  await SavedView.deleteMany({ ownerId: userId, workspaceId: null }); // personal saved inbox views
   await Invitation.deleteMany({ email: String(user.email).toLowerCase(), status: "pending" });
   await SessionModel.deleteMany({ userId });
   await Notification.deleteMany({ userId });

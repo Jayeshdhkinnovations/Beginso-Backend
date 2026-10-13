@@ -191,7 +191,7 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
-describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", () => {
+describe("Team and permissions contracts", () => {
   // =========================================================================
   // BE 0.1: GET /api/workspaces/:id — add caller's role/isOwner
   // =========================================================================
@@ -504,7 +504,7 @@ describe("Sprint 9 — Team & Permissions Backend Contracts [BE 0.1 - BE 0.8]", 
 
     beforeAll(async () => {
       // Create a fresh invitation for outsiderUser
-      const res = await request(app)
+      const _res = await request(app)
         .post(`/api/workspaces/${workspace._id}/invitations`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({

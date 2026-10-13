@@ -47,7 +47,7 @@ import Upload from "../models/Upload";
 import Template from "../models/Template";
 import { generateToken } from "../utils/generateToken";
 
-const openHole = process.env.SEC_SHOW_OPEN ? it : it.failing;
+const _openHole = process.env.SEC_SHOW_OPEN ? it : it.failing;
 
 const uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), "beginso-sec-"));
 process.env.UPLOAD_DIR = uploadDir;

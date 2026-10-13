@@ -6,7 +6,7 @@ jest.mock("firebase-admin/auth", () => {
         createUser: async (data: any) => {
           return { uid: `mock-uid-${data.email}` };
         },
-        verifyIdToken: async (token: string) => {
+        verifyIdToken: async (_token: string) => {
           return {
             uid: "mock-uid-session",
             email: "sessionuser@test.com",
@@ -186,7 +186,7 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
-describe("Sprint 7 — Phase 0 Backend Contracts [BE]", () => {
+describe("Workspace and membership models and contracts", () => {
   // =========================================================================
   // BE 0.1: Workspace model
   // =========================================================================

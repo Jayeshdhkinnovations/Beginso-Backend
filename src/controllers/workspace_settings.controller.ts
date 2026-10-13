@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { deleteAccountFlow } from "./user.controller";
 import { recordEvent } from "../services/event.service";
-import { getAuth } from "firebase-admin/auth";
 import mongoose from "mongoose";
 import path from "path";
 import fs from "fs";
@@ -10,7 +9,6 @@ import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import Upload from "../models/Upload";
-import SessionModel from "../models/Session";
 import User from "../models/User";
 import Notification from "../models/Notification";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
@@ -346,7 +344,7 @@ export const downloadWorkspaceExportFile = async (req: Request, res: Response, n
  * so this is the same guarded flow as DELETE /api/users/profile: fresh password confirmation, and
  * refusal while the caller owns a workspace other people still belong to.
  */
-export const deleteCurrentWorkspace = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const deleteCurrentWorkspace = async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   const workspace = await getCallerWorkspace(req);
   if (!workspace) {
     res.status(404).json({ success: false, message: "Workspace not found" });

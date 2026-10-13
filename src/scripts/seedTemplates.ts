@@ -4,12 +4,14 @@ import fs from "fs";
 import path from "path";
 import Template from "../models/Template";
 import { fieldShowcaseTemplate } from "../utils/fieldShowcaseTemplate";
+import { refuseInProduction } from "./_guard";
 
 dotenv.config();
 
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/onboarding";
 
 const seedTemplates = async () => {
+  refuseInProduction("replace the built-in templates");
   try {
     await mongoose.connect(mongoUri);
     console.log("✅ Connected to MongoDB for seeding");
@@ -21,9 +23,9 @@ const seedTemplates = async () => {
       pitchSeedsData = JSON.parse(fs.readFileSync(seedsPath, "utf-8"));
     }
 
-    // Clear existing templates
-    await Template.deleteMany({});
-    console.log("🗑️ Cleared existing templates");
+    // Clear the BUILT-IN templates only (workspaceId null). Templates a workspace published (workspaceId set) are never touched.
+    const removed = await Template.deleteMany({ workspaceId: null });
+    console.log(`🗑️ Cleared ${removed.deletedCount} built-in templates (workspace templates are kept)`);
 
     const templates = [
       fieldShowcaseTemplate,

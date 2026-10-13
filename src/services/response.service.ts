@@ -12,7 +12,6 @@ import { NoteService } from "./note.service";
 import { ScoreService } from "./score.service";
 import { logWorkspaceEvent } from "./event.service";
 import { userHasAccessToForm as userHasAccessToFormShared } from "../utils/formAccess";
-import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
 import {
   PaginatedResponsesResult,
   IResponse,
@@ -22,8 +21,6 @@ import {
   IResponseTagSummary,
 } from "../types/response.types";
 import mongoose from "mongoose";
-import fs from "fs";
-import path from "path";
 import { escapeRegex } from "../utils/safeInput";
 import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
 import { buildResponseFilterQuery } from "../utils/responseFilters";

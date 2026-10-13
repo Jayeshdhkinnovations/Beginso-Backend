@@ -50,7 +50,7 @@ const uploadAny = multer({
   },
 }).any();
 
-router.post("/", protect as any, blockSuspended as any, userActionRateLimiter("upload", 120) as any, requirePermission("uploads:create") as any, (req: any, res: any, next: any) => {
+router.post("/", protect as any, blockSuspended as any, userActionRateLimiter("upload", 120) as any, requirePermission("uploads:create") as any, (req: any, res: any, _next: any) => {
   uploadAny(req, res, async (err: any) => {
     if (err) {
       // Clean up whatever staging directory this request created before failing.
@@ -65,7 +65,7 @@ router.post("/", protect as any, blockSuspended as any, userActionRateLimiter("u
           }
           await cleanEmptyDirs(path.dirname(dir), uploadDir);
         }
-      } catch (cleanupErr) {
+      } catch {
         // Ignore silently
       }
 

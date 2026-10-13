@@ -219,14 +219,34 @@ export const fieldSchema = z
     }
   });
 
+// An image address stored on a form. These values end up as <img src> and CSS url(...) in the public form, so
+// only plain http(s) addresses or this API's own upload path are accepted: no javascript:, data: or file:
+// schemes, no embedded credentials, and no characters that could break out of url("...") or an attribute.
+export const safeImageUrl = z
+  .string()
+  .trim()
+  .max(2048, "image address is too long")
+  .refine((v) => {
+    if (v === "") return true;
+    if (/["'()<>\\\s]/.test(v)) return false;
+    if (v.startsWith("/api/upload/file/")) return true;
+    try {
+      const u = new URL(v);
+      return (u.protocol === "https:" || u.protocol === "http:") && !u.username && !u.password;
+    } catch {
+      return false;
+    }
+  }, "must be an http(s) image address or an uploaded file path")
+  .optional();
+
 const brandingSchema = z.object({
   primaryColor: z
     .string()
     .trim()
     .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "primaryColor must be a valid hex color")
     .optional(),
-  logoUrl: z.string().trim().optional(),
-  coverImageUrl: z.string().trim().optional(),
+  logoUrl: safeImageUrl,
+  coverImageUrl: safeImageUrl,
   buttonStyle: z.enum(BUTTON_STYLES).optional(),
   buttonRadius: z.enum(BUTTON_RADII).optional(),
   coverPosition: z.enum(COVER_POSITIONS).optional(),
@@ -238,7 +258,7 @@ const brandingSchema = z.object({
   panelTreatment: z.enum(PANEL_TREATMENTS).optional(),
   fieldGrouping: z.enum(FIELD_GROUPINGS).optional(),
   backgroundStyle: z.enum(PAGE_BACKGROUNDS).optional(),
-  backgroundImageUrl: z.string().trim().optional(),
+  backgroundImageUrl: safeImageUrl,
   formWidth: z.enum(FORM_WIDTHS).optional(),
   coverFit: z.enum(COVER_FITS).optional(),
   backgroundColor: z

@@ -42,7 +42,7 @@ import { generateToken } from "../utils/generateToken";
 
 let mongoServer: MongoMemoryServer;
 
-describe("Sprint 10 — Events, Activity & Audit Log Contracts", () => {
+describe("Events, activity and audit log contracts", () => {
   let ownerUser: any;
   let adminUser: any;
   let memberUser: any;

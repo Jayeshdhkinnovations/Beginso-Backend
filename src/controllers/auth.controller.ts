@@ -1,11 +1,9 @@
 import { Request, Response } from "express";
 import { getAuth } from "firebase-admin/auth";
 import jwt from "jsonwebtoken";
-import { ZodError } from "zod";
 
 import crypto from "crypto";
 import User from "../models/User";
-import Workspace from "../models/Workspace";
 import AuthOtp from "../models/AuthOtp";
 import AuthTicket from "../models/AuthTicket";
 import Notification from "../models/Notification";
@@ -232,7 +230,7 @@ export const session = async (
       httpOnly: true,
       secure: true,
       sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days: the same lifetime as the JWT it carries (it used to outlive the token by 23 days)
     });
 
     res.status(200).json({
@@ -310,7 +308,7 @@ export const requestEmailVerification = async (
     let decodedToken;
     try {
       decodedToken = await getAuth().verifyIdToken(token, true);
-    } catch (err: any) {
+    } catch {
       res.status(401).json({
         success: false,
         error: { message: "Invalid or expired authentication token." },
@@ -331,7 +329,7 @@ export const requestEmailVerification = async (
 
     // Only send verification mail for unverified password-provider accounts
     if (signInProvider === "password" && !email_verified) {
-      if (checkVerificationRateLimit(uid)) {
+      if (await checkVerificationRateLimit(uid)) {
         // Generate a 32-byte opaque reveal ticket
         const ticket = crypto.randomBytes(32).toString("base64url");
         const ticketHash = hashKey(ticket);
@@ -468,7 +466,7 @@ export const verifyEmailCode = async (
     let decodedToken;
     try {
       decodedToken = await getAuth().verifyIdToken(token);
-    } catch (err: any) {
+    } catch {
       res.status(401).json({
         success: false,
         error: { message: "Invalid or expired authentication token." },
@@ -575,7 +573,7 @@ export const requestForgotPassword = async (
           fbUser.tokensValidAfterTime !== undefined;
 
         if (hasPasswordProvider && !fbUser.disabled) {
-          if (checkResetRateLimit(normalizedEmail)) {
+          if (await checkResetRateLimit(normalizedEmail)) {
             const appUrl = process.env.APP_URL || "https://beginso.com";
             const rawActionUrl = await getAuth().generatePasswordResetLink(normalizedEmail, {
               url: `${appUrl}/reset-password`,
@@ -592,7 +590,7 @@ export const requestForgotPassword = async (
                   apiKey ? `&apiKey=${encodeURIComponent(apiKey)}` : ""
                 }`;
               }
-            } catch (e) {
+            } catch {
               // fallback to rawActionUrl
             }
 
@@ -613,11 +611,11 @@ export const requestForgotPassword = async (
             });
           }
         }
-      } catch (err: any) {
+      } catch {
         // User not found or other internal error — logged internally
       }
     })();
-  } catch (error: any) {
+  } catch {
     res.status(202).json({
       message: "If an account exists for that email, a password-reset link will be sent.",
     });
@@ -709,7 +707,7 @@ export const notifyPasswordChanged = async (
         if (decoded && decoded.email) {
           targetEmail = String(decoded.email).trim().toLowerCase();
         }
-      } catch (e) {
+      } catch {
         // Fallback to body email
       }
     }

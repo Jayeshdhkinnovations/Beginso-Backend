@@ -7,7 +7,6 @@ import Workspace from "../models/Workspace";
 import Membership from "../models/Membership";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
-import FormReferenceCounter from "../models/FormReferenceCounter";
 import { generateToken } from "../utils/generateToken";
 import { allocateReference } from "../services/reference.service";
 import { backfillResponseReference } from "../scripts/backfillResponseReference";

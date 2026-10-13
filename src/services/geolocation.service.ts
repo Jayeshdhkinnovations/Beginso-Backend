@@ -82,7 +82,7 @@ export const resolveIpLocation = async (ipStr: string): Promise<ILoginLocation |
     }
 
     return null;
-  } catch (err) {
+  } catch {
     // Silently handle timeouts, network failures, or unparseable responses
     return null;
   }

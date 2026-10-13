@@ -25,7 +25,7 @@ export const allocateReference = async (formId: string | mongoose.Types.ObjectId
     const counter = await FormReferenceCounter.findOneAndUpdate(
       { formId },
       { $inc: { seq: 1 } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
     return `#${counter.seq}`;
   } catch (err: any) {

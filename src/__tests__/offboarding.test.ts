@@ -87,6 +87,8 @@ describe("Offboarding: assignment cleanup on member removal (B3.3/F16)", () => {
     const { ws, member, form } = await setupWorkspaceWithMember("failsafe");
     await ResponseModel.create({ formId: form._id, answers: {}, assigneeId: member._id });
 
+    // The controller logs the failure on purpose; keep it out of the test output but assert it was logged.
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
     const spy = jest
       .spyOn(ResponseService.prototype, "offboardMemberAssignments")
       .mockRejectedValueOnce(new Error("simulated offboarding failure"));
@@ -95,6 +97,7 @@ describe("Offboarding: assignment cleanup on member removal (B3.3/F16)", () => {
       .delete(`/api/workspaces/${ws._id}/members/${member._id}`)
       .set("Authorization", `Bearer ${ownerToken}`);
 
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("offboardMemberAssignments failed"), expect.anything(), expect.any(Error));
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     // The membership is still gone even though offboarding failed.

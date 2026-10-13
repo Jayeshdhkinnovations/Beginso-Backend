@@ -24,7 +24,7 @@ const drain = async (): Promise<void> => {
       const next = await ReportModel.findOneAndUpdate(
         { status: "queued" },
         { $set: { status: "processing" } },
-        { sort: { createdAt: 1 }, new: true }
+        { sort: { createdAt: 1 }, returnDocument: "after" }
       );
       if (!next) break;
       running += 1;

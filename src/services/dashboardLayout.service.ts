@@ -32,7 +32,7 @@ export class DashboardLayoutService {
     const updated = await Dashboard.findOneAndUpdate(
       { ...filter, version: existing.version },
       { $set: { widgets, ownerId }, $inc: { version: 1 } },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
     if (!updated) {
       const latest = await Dashboard.findOne(filter).lean();

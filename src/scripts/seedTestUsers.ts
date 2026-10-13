@@ -133,7 +133,7 @@ const seedForUser = async (email: string, users: any[]) => {
     const tag = await Tag.findOneAndUpdate(
       { workspaceId: ws._id, nameLower: t.name.toLowerCase() },
       { $setOnInsert: { name: t.name, colour: t.colour } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
     tags.push(tag!);
   }

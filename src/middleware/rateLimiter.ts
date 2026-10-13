@@ -39,7 +39,7 @@ export const hit = async (key: string, windowMs: number): Promise<number> => {
     RateLimitBucket.findOneAndUpdate(
       { key: bucketKey },
       { $inc: { count: 1 }, $setOnInsert: { expiresAt } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     ).lean();
   try {
     return (await attempt())!.count;

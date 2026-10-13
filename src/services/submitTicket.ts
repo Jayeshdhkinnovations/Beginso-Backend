@@ -45,11 +45,11 @@ export const redeemSubmitTicket = async (ticket: unknown, formId: string): Promi
   if (!parsed.u || !parsed.f || !parsed.j || typeof parsed.e !== "number") return null;
   if (parsed.f !== formId || parsed.e < Date.now()) return null;
 
-  // new: false returns the document as it was before, so null means this is the first redemption.
+  // returnDocument "before" returns the document as it was before, so null means this is the first redemption.
   const before = await RateLimitBucket.findOneAndUpdate(
     { key: `submit-ticket:${parsed.j}` },
     { $setOnInsert: { count: 1, expiresAt: new Date(parsed.e + 60_000) } },
-    { upsert: true, new: false }
+    { upsert: true, returnDocument: "before" }
   ).lean();
   return before ? null : parsed.u;
 };

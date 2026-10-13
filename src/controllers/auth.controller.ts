@@ -482,7 +482,7 @@ export const verifyEmailCode = async (
     const otpRecord = await AuthOtp.findOneAndUpdate(
       { uid, consumed: false, expiresAt: { $gt: new Date() }, attempts: { $lt: 5 } },
       { $inc: { attempts: 1 } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!otpRecord) {

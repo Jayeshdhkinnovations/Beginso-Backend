@@ -547,7 +547,7 @@ export class ResponseService {
         throw err;
       }
       const fromStageId = existingResponse.stageId ? existingResponse.stageId.toString() : null;
-      const updated = await ResponseModel.findByIdAndUpdate(responseId, { $set: { status: input.status } }, { new: true });
+      const updated = await ResponseModel.findByIdAndUpdate(responseId, { $set: { status: input.status } }, { returnDocument: "after" });
       if (!updated) {
         const err: any = new Error("Response not found");
         err.statusCode = 404;
@@ -734,7 +734,7 @@ export class ResponseService {
     const updated = await ResponseModel.findByIdAndUpdate(
       responseId,
       { $set: { assigneeId: assigneeId ? new mongoose.Types.ObjectId(assigneeId) : null } },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!updated) {
       const err: any = new Error("Response not found");
@@ -809,7 +809,7 @@ export class ResponseService {
     const updated = await ResponseModel.findByIdAndUpdate(
       responseId,
       { $set: { tagIds: uniqueTagIds.map((id) => new mongoose.Types.ObjectId(id)) } },
-      { new: true }
+      { returnDocument: "after" }
     );
     if (!updated) {
       const err: any = new Error("Response not found");

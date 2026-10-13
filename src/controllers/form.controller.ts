@@ -1107,11 +1107,11 @@ export const recordFormView = async (req: Request, res: Response): Promise<void>
     const form = await formService.getPublicFormBySlug(slug, { readOnly: true });
     const hourWindow = Math.floor(Date.now() / 3_600_000);
     const key = `view:${form._id}:${keyedHash(getRealClientIp(req))}:${hourWindow}`;
-    // new: false returns the document as it was before, so null means this IP is new for this hour.
+    // returnDocument "before" returns the document as it was before, so null means this IP is new for this hour.
     const before = await RateLimitBucket.findOneAndUpdate(
       { key },
       { $setOnInsert: { count: 1, expiresAt: new Date((hourWindow + 2) * 3_600_000) } },
-      { upsert: true, new: false }
+      { upsert: true, returnDocument: "before" }
     ).lean();
     if (!before) await Form.updateOne({ _id: form._id }, { $inc: { viewsCount: 1 } });
   } catch {
@@ -1874,7 +1874,7 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
         role: assignedRole,
         grantedBy: authReq.user._id,
       },
-      { upsert: true, returnDocument: "after", new: true }
+      { upsert: true, returnDocument: "after" }
     );
 
     const grantObj = grant ? (grant.toObject ? grant.toObject() : grant) : {};

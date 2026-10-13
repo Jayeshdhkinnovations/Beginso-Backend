@@ -19,9 +19,9 @@ const config: Config = {
   resetMocks: true,
   restoreMocks: true,
   transform: {
-    // isolatedModules skips per-file type-checking (much faster). `npm run type-check` /
+    // tsconfig.json sets isolatedModules, which makes ts-jest skip per-file type-checking (much faster). `npm run type-check` /
     // `npm run build` (tsc, which includes the tests) is the type gate.
-    '^.+\\.[tj]sx?$': ['ts-jest', { isolatedModules: true }],
+    '^.+\\.[tj]sx?$': 'ts-jest',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(jose)/)',

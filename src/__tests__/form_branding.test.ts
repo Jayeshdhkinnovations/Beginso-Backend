@@ -97,3 +97,25 @@ describe("public form read", () => {
     expect(b).toMatchObject({ backgroundStyle: "image", backgroundImageUrl: "https://cdn.example.com/bg.jpg", formWidth: "narrow", coverFit: "banner", fontFamily: "inter" });
   });
 });
+
+describe("form icon (used when there is no uploaded logo)", () => {
+  it("accepts an icon name and colour", async () => {
+    const res = await patchBranding({ iconName: "shopping-cart", iconColor: "#16A34A" });
+    expect(res.status).toBe(200);
+    expect(res.body.branding ?? res.body.form?.branding).toMatchObject({ iconName: "shopping-cart", iconColor: "#16A34A" });
+  });
+
+  it.each([
+    ["iconName", "Shopping Cart"], ["iconName", "x"], ["iconName", "<svg onload=alert(1)>"], ["iconName", "a".repeat(41)],
+    ["iconColor", "green"], ["iconColor", "#12"], ["iconColor", "url(javascript:1)"],
+  ])("rejects %s = %s", async (key, value) => {
+    expect((await patchBranding({ [key]: value })).status).toBe(400);
+  });
+
+  it("the public form read returns the icon", async () => {
+    await patchBranding({ iconName: "briefcase", iconColor: "#7C3AED" });
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug ?? published.body.publishedSlug}`);
+    expect((pub.body.form ?? pub.body).branding).toMatchObject({ iconName: "briefcase", iconColor: "#7C3AED" });
+  });
+});

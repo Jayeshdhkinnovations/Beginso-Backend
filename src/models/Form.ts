@@ -125,6 +125,9 @@ export interface IBranding {
   backgroundImageUrl?: string;
   formWidth?: (typeof FORM_WIDTHS)[number];
   coverFit?: (typeof COVER_FITS)[number];
+  // The form's own icon when it has no uploaded logo: a name from the frontend's icon set (a slug, never rendered as markup) and a colour.
+  iconName?: string;
+  iconColor?: string;
 }
 
 // Sprint 13 (CF2.7): six layout presets. The three V1 values stay valid on read and write and are
@@ -295,6 +298,8 @@ const BrandingSchema = new Schema<IBranding>(
     backgroundImageUrl: { type: String },
     formWidth: { type: String, enum: FORM_WIDTHS },
     coverFit: { type: String, enum: COVER_FITS },
+    iconName: { type: String },
+    iconColor: { type: String },
   },
   { _id: false }
 );

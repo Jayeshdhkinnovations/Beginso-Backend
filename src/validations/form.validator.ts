@@ -261,6 +261,13 @@ const brandingSchema = z.object({
   backgroundImageUrl: safeImageUrl,
   formWidth: z.enum(FORM_WIDTHS).optional(),
   coverFit: z.enum(COVER_FITS).optional(),
+  // A slug such as "shopping-cart": letters, digits and hyphens only, so it can never carry markup.
+  iconName: z.string().trim().regex(/^[a-z0-9-]{2,40}$/, "iconName must be a lowercase icon name").optional(),
+  iconColor: z
+    .string()
+    .trim()
+    .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "iconColor must be a valid hex color")
+    .optional(),
   backgroundColor: z
     .string()
     .trim()

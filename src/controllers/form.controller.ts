@@ -1035,6 +1035,8 @@ export const getPublicFormBySlug = async (
       backgroundImageUrl: branding.backgroundImageUrl,
       formWidth: branding.formWidth,
       coverFit: branding.coverFit,
+      iconName: branding.iconName,
+      iconColor: branding.iconColor,
     };
 
     const settings = form.settings || {};

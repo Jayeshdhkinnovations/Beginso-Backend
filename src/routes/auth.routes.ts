@@ -10,7 +10,7 @@ import {
   confirmPasswordReset,
   notifyPasswordChanged,
 } from "../controllers/auth.controller";
-import { getSessions, revokeSession } from "../controllers/session.controller";
+import { getSessions, revokeSession, revokeOtherSessions } from "../controllers/session.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { authRateLimiter, emailTargetRateLimiter } from "../middleware/rateLimiter";
 import { requirePermission } from "../middleware/permission.middleware";
@@ -28,6 +28,7 @@ router.post("/notify-password-changed", authRateLimiter, emailTargetRateLimiter,
 router.post("/logout", protect as any, blockSuspended as any, logout);
 router.get("/me", protect as any, blockSuspended as any, getMe);
 router.get("/sessions", protect as any, blockSuspended as any, requirePermission("sessions:read") as any, getSessions);
+router.delete("/sessions", protect as any, blockSuspended as any, requirePermission("sessions:manage") as any, revokeOtherSessions);
 router.delete("/sessions/:id", protect as any, blockSuspended as any, requirePermission("sessions:manage", { resourceType: "session" }) as any, revokeSession);
 
 export default router;

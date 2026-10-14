@@ -84,3 +84,32 @@ export const revokeSession = async (req: Request, res: Response, next: NextFunct
     next(error);
   }
 };
+
+/**
+ * DELETE /api/auth/sessions
+ * "Sign out of all other devices": revokes every still-active session of the caller EXCEPT the one making the request.
+ * Needs to know the current session, so a token without one (a legacy JWT) gets a 400 rather than signing everything out.
+ * Responds with how many sessions were revoked.
+ */
+export const revokeOtherSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized" });
+      return;
+    }
+    if (!authReq.sessionId) {
+      res.status(400).json({ success: false, message: "This sign-in has no session to keep, so other sessions cannot be told apart. Sign in again first." });
+      return;
+    }
+
+    const result = await SessionModel.updateMany(
+      { userId: authReq.user._id, _id: { $ne: authReq.sessionId }, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
+
+    res.status(200).json({ success: true, message: "Other sessions revoked successfully", revoked: result.modifiedCount });
+  } catch (error) {
+    next(error);
+  }
+};

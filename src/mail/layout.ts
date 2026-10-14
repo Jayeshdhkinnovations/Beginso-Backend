@@ -9,8 +9,8 @@
  * six inline templates, so a footer change meant six edits.
  *
  * Email constraints honoured here:
- *  - PNG logo. SVG does not render in Gmail, Outlook, Apple Mail or Yahoo.
- *  - Tables and inline styles only. No flexbox, no grid, no <style> blocks.
+ *  - Hosted SVG logos (light + dark); clients that cannot draw SVG (Gmail, Outlook) show the alt text.
+ *  - Tables and inline styles; the one <style> block is only the dark-mode override.
  *  - Flat colour declared before any gradient, for Outlook.
  *  - Every interpolated value is HTML-escaped (see esc). The previous inline
  *    templates escaped nothing, so a workspace named `Smith & Co` or a form
@@ -54,16 +54,33 @@ export const C = {
 export const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
-/**
- * Served from the CDN, never attached to the mail. Email clients do not render SVG, so the file the
- * mail points at is the PNG sibling of the SVG: upload src/assets/beginso-logo.png to the CDN as
- * assets/logo-full-light.png. An EMAIL_LOGO_URL ending in .svg is mapped to .png automatically.
- */
-export const LOGO_URL = (
-  process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-full-light.png"
-).replace(/\.svg(\?.*)?$/i, ".png$1");
-
 export const APP_URL = process.env.APP_URL || "https://www.beginso.com";
+
+/**
+ * The logo at the top of every mail: the brand's own hosted files, one for light and one for dark. The mail shows the light one
+ * and swaps to the dark one when the reader's system is in dark mode (see DARK_CSS). EMAIL_LOGO_URL / EMAIL_LOGO_DARK_URL override.
+ * Note: Gmail and Outlook do not draw SVG at all, so there the logo is blank whatever the address; Apple Mail, iOS Mail and most
+ * others do.
+ */
+export const LOGO_URL = process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-light.svg";
+export const LOGO_DARK_URL = process.env.EMAIL_LOGO_DARK_URL || "https://storage.beginso.com/assets/logo-dark.svg";
+
+/**
+ * Dark mode for clients that honour prefers-color-scheme (Apple Mail, iOS Mail, others): the page and card go dark and the inline
+ * brand text colours are lifted, matched by attribute selector because the templates style inline. Clients without support ignore
+ * the whole block and keep the light mail.
+ */
+const DARK_CSS = `
+.logo-dark { display: none; max-height: 0; overflow: hidden; }
+@media (prefers-color-scheme: dark) {
+  .logo-light { display: none !important; }
+  .logo-dark { display: block !important; max-height: none !important; overflow: visible !important; }
+  .m-page { background-color: #0B1020 !important; }
+  .m-card { background-color: #141B2E !important; border-color: #263050 !important; }
+  [style*="color: ${C.ink}"], [style*="color:${C.ink}"] { color: #F1F4FB !important; }
+  [style*="color: ${C.inkSoft}"], [style*="color: ${C.body}"] { color: #C3CBDD !important; }
+  [style*="color: ${C.muted}"], [style*="color: ${C.faint}"] { color: #8D97B0 !important; }
+}`;
 
 // ---------------------------------------------------------------------------
 // Escaping
@@ -247,20 +264,22 @@ export function layout(opts: LayoutOptions): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="x-apple-disable-message-reformatting">
-<meta name="color-scheme" content="light">
-<meta name="supported-color-schemes" content="light">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>${DARK_CSS}</style>
 </head>
-<body style="margin: 0; padding: 0; background-color: ${C.page}; font-family: ${FONT}; -webkit-font-smoothing: antialiased;">
+<body class="m-page" style="margin: 0; padding: 0; background-color: ${C.page}; font-family: ${FONT}; -webkit-font-smoothing: antialiased;">
 <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">${esc(preheader)}</div>
 <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">${spacer}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: ${C.page};">
+<table role="presentation" class="m-page" width="100%" cellspacing="0" cellpadding="0" style="background-color: ${C.page};">
   <tr><td align="center" style="padding: 40px 16px;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: ${C.surface}; border-radius: 16px; overflow: hidden; border: 1px solid ${C.line};">
+    <table role="presentation" class="m-card" width="100%" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: ${C.surface}; border-radius: 16px; overflow: hidden; border: 1px solid ${C.line};">
       <tr><td style="background: ${a.flat}; background: ${a.gradient}; height: 8px; line-height: 8px; font-size: 0;">&nbsp;</td></tr>
       <tr><td style="padding: 36px 32px 32px 32px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 26px;">
           <tr><td>
-            <img src="${escUrl(LOGO_URL)}" alt="Beginso" width="168" height="46" style="display: block; width: 168px; max-width: 100%; border: 0; outline: none; text-decoration: none;" />
+            <img class="logo-light" src="${escUrl(LOGO_URL)}" alt="Beginso" width="168" height="46" style="display: block; width: 168px; max-width: 100%; border: 0; outline: none; text-decoration: none;" />
+            <img class="logo-dark" src="${escUrl(LOGO_DARK_URL)}" alt="" width="168" height="46" style="display: none; max-height: 0; width: 168px; max-width: 100%; border: 0;" />
           </td></tr>
         </table>
         ${content}

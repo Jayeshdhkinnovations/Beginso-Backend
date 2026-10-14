@@ -12,7 +12,7 @@ describe("mail templates", () => {
     expect(m.subject).toBeTruthy();
     expect(m.text).not.toMatch(/undefined|NaN/);
     expect(m.html).toMatch(/^<!DOCTYPE html>/);
-    expect(m.html).toContain("https://storage.beginso.com/assets/logo-full-light.png");
+    expect(m.html).toContain("https://www.beginso.com/email/beginso-logo.png");
     expect(m.html).not.toContain(".svg");
     expect(m.html).not.toContain("#2563EB");
     expect(m.subject).not.toMatch(/[\u{1F300}-\u{1FAFF}✅✉]/u);

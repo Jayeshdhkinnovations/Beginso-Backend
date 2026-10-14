@@ -4,6 +4,7 @@ import connectDB from "./config/database";
 import { closeExpiredForms } from "./services/form.service";
 import { recoverReportQueue } from "./services/reportQueue";
 import { purgeExpiredTrash } from "./services/trash.service";
+import { reconcileAllStorage } from "./services/storage.service";
 
 if (!process.env.JWT_SECRET) {
     console.error("❌ JWT_SECRET environment variable is missing. Refusing to start.");
@@ -42,6 +43,20 @@ const startServer = async () => {
         const retention = () => purgeExpiredTrash().catch((e) => console.error("purgeExpiredTrash failed:", e));
         retention();
         setInterval(retention, 5 * 60 * 1000).unref();
+
+        // B-14: byte-level drift in the per-user storage counter is corrected once a day (first run 10 minutes after
+        // start, so a restart does not add load). Every mismatch is logged by reconcileUser. 0 hours turns it off.
+        const reconcileHours = Number(process.env.STORAGE_RECONCILE_INTERVAL_HOURS ?? 24);
+        if (reconcileHours > 0) {
+            const reconcile = () =>
+                reconcileAllStorage()
+                    .then((rs) => console.log(`[storage] reconcile: ${rs.length} checked, ${rs.filter((r) => r.fixed).length} corrected, ${rs.filter((r) => r.skipped).length} skipped`))
+                    .catch((e) => console.error("reconcileAllStorage failed:", e));
+            setTimeout(() => {
+                reconcile();
+                setInterval(reconcile, reconcileHours * 60 * 60 * 1000).unref();
+            }, 10 * 60 * 1000).unref();
+        }
 
         const server = app.listen(PORT, () => {
             console.log(`🚀 Server running on port ${PORT}`);

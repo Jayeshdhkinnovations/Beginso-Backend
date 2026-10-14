@@ -63,6 +63,13 @@ jobs:
         run: |
           node -e "const fs=require('fs');const sha=process.env.COMMIT_SHA||'';fs.writeFileSync('dist/version.json',JSON.stringify({commit:sha.slice(0,7),commitMessage:(process.env.COMMIT_MESSAGE||'').split('\n')[0],deployedAt:new Date().toISOString()}))"
 
+      # GET /api/superadmin/health reads this to show the dependency-vulnerability count. `npm audit` exits
+      # non-zero when it finds something, so its result is captured and the step never fails the deploy.
+      - name: Record Dependency Audit
+        run: |
+          npm audit --omit=dev --json > audit-raw.json || true
+          node -e "const fs=require('fs');let v={};try{v=JSON.parse(fs.readFileSync('audit-raw.json','utf8')).metadata.vulnerabilities||{}}catch(e){}const n=k=>Number(v[k])||0;if(typeof v.total==='number'){fs.writeFileSync('dist/audit.json',JSON.stringify({total:n('total'),critical:n('critical'),high:n('high'),checkedAt:new Date().toISOString()}))}"
+
       # PM2 runs the app from APP_DIR (script /root/Onboarding-backend/dist/server.js), NOT from
       # this runner workspace, so the fresh build has to be copied there. Copy only (no delete):
       # APP_DIR holds files that are not in git (.env, dist/config/firebase/serviceAccountKey.json).

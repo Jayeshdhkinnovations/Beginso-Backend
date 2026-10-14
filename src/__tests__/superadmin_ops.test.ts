@@ -16,6 +16,8 @@ import Invitation from "../models/Invitation";
 import { AuditLog } from "../models/AuditLog";
 import { generateToken } from "../utils/generateToken";
 import { MB } from "../services/storage.service";
+import { resetFrontendBuildCache } from "../services/superadminOps.service";
+import { parseAuditSummary, loadAuditInfo } from "../utils/auditInfo";
 
 process.env.JWT_SECRET = "test-jwt-secret-key-for-superadmin-ops";
 
@@ -223,15 +225,58 @@ describe("deleting an admin goes through the shared account cascade", () => {
 });
 
 describe("health", () => {
-  it("reports build info, queue depth and SMTP TLS, and says plainly what is not recorded", async () => {
+  const origFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = origFetch;
+    resetFrontendBuildCache();
+  });
+
+  it("reports build info, queue depth and SMTP TLS, and the frontend build and audit when it publishes them", async () => {
     await ReportModel.create({ workspaceId: null, format: "csv", status: "queued", expiresAt: new Date(Date.now() + 1e6) });
     await ReportModel.create({ workspaceId: null, format: "csv", status: "failed", expiresAt: new Date(Date.now() + 1e6) });
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ commit: "abc1234", commitMessage: "Add things", builtAt: "2026-10-14T08:00:00.000Z", audit: { total: 2, critical: 0, high: 1, checkedAt: "2026-10-14T08:00:00.000Z" } }),
+    }) as any;
     const res = await get("/api/superadmin/health");
     expect(res.status).toBe(200);
     expect(res.body.reportQueue).toEqual({ queued: 1, processing: 0, failed: 1 });
     expect(res.body.smtp.tlsVerification).toBe(true);
-    expect(res.body.dependencyVulnerabilities).toBeNull();
     expect(res.body.backend).toHaveProperty("commit");
+    expect(res.body.frontend).toEqual({ commit: "abc1234", commitMessage: "Add things", builtAt: "2026-10-14T08:00:00.000Z" });
+    expect(res.body.dependencyVulnerabilities.frontend).toMatchObject({ total: 2, high: 1 });
+    expect(res.body.dependencyVulnerabilities).toHaveProperty("backend");
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toMatch(/\/build-info\.json$/);
+  });
+
+  it("says nothing is recorded (null) when the frontend cannot be reached or answers garbage", async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error("offline")) as any;
+    const down = await get("/api/superadmin/health");
+    expect(down.status).toBe(200);
+    expect(down.body.frontend).toBeNull();
+    expect(down.body.dependencyVulnerabilities.frontend).toBeNull();
+
+    resetFrontendBuildCache();
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ commit: 5, audit: { total: "x" } }) }) as any;
+    const odd = await get("/api/superadmin/health");
+    expect(odd.body.frontend).toEqual({ commit: null, commitMessage: null, builtAt: null });
+    expect(odd.body.dependencyVulnerabilities.frontend).toBeNull();
+  });
+
+  it("caches the frontend answer for five minutes", async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ commit: "abc1234" }) }) as any;
+    await get("/api/superadmin/health");
+    await get("/api/superadmin/health");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("audit summary parsing", () => {
+  it("accepts a complete summary and rejects anything else", () => {
+    expect(parseAuditSummary({ total: 3, critical: 1, high: 2, checkedAt: "2026-10-14" })).toEqual({ total: 3, critical: 1, high: 2, checkedAt: "2026-10-14" });
+    expect(parseAuditSummary({ total: 3 })).toBeNull();
+    expect(parseAuditSummary(null)).toBeNull();
+    expect(loadAuditInfo("D:/no/such/audit.json")).toBeNull();
   });
 });
 

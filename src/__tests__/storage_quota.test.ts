@@ -16,7 +16,7 @@ import Notification from "../models/Notification";
 import { AuditLog } from "../models/AuditLog";
 import { clearRateLimitStore } from "../middleware/rateLimiter";
 import { generateToken } from "../utils/generateToken";
-import { MB, bsonSize, computeTrueUsage, reconcileUser } from "../services/storage.service";
+import { MB, bsonSize, computeTrueUsage, reconcileUser, reconcileAllStorage } from "../services/storage.service";
 import { purgeItem, emptyTrash } from "../services/trash.service";
 
 const uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), "beginso-quota-"));
@@ -257,6 +257,27 @@ describe("reconciliation", () => {
     const fixed = await reconcileUser(owner._id);
     expect(fixed.fixed).toBe(true);
     expect(await used()).toBe(truth);
+  });
+
+  it("the scheduled run fixes every user and skips one whose counter moves while it is measured", async () => {
+    await mkForm();
+    await setUsed(999999, owner);
+    await setUsed(123, member);
+    const results = await reconcileAllStorage();
+    expect(results.filter((r) => r.fixed).length).toBe(2);
+    expect(await used(owner)).toBe(await computeTrueUsage(owner._id));
+    expect(await used(member)).toBe(0);
+
+    // A write landing during the measurement must not be overwritten by the stale total.
+    const realAggregate = Upload.aggregate.bind(Upload);
+    jest.spyOn(Upload, "aggregate").mockImplementationOnce(((...args: any[]) =>
+      User.updateOne({ _id: owner._id }, { $inc: { storageUsedBytes: 50 } }).then(() => (realAggregate as any)(...args))) as any);
+    const before = await used(owner);
+    const skipped = await reconcileUser(owner._id);
+    jest.restoreAllMocks();
+    expect(skipped.skipped).toBe(true);
+    expect(skipped.fixed).toBe(false);
+    expect(await used(owner)).toBe(before + 50); // left alone for the next run
   });
 
   it("the admin endpoints list over-quota accounts, change limits with an audit row, and reconcile", async () => {

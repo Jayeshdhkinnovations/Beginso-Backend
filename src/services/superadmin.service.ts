@@ -15,7 +15,7 @@ import crypto from "crypto";
 import { mailService } from "./mail.service";
 import { escapeRegex } from "../utils/safeInput";
 import path from "path";
-import { DEFAULT_STORAGE_QUOTA_BYTES, DEFAULT_WORKSPACE_LIMIT, reconcileUser } from "./storage.service";
+import { DEFAULT_STORAGE_QUOTA_BYTES, DEFAULT_WORKSPACE_LIMIT, reconcileAllStorage, reconcileUser } from "./storage.service";
 import { getUploadDir } from "../controllers/upload.controller";
 import { deleteAccountData } from "./cleanup.service";
 import { workspacesOfUser } from "./superadminOps.service";
@@ -684,10 +684,8 @@ export class SuperAdminService {
 
   // Recompute from scratch and correct the counter. One user, or everyone when no id is given.
   async reconcileStorage(id?: string) {
-    const ids = id ? [id] : (await User.find().select("_id").lean()).map((u: any) => u._id);
-    const results = [];
-    for (const uid of ids) results.push(await reconcileUser(uid));
-    return { results: results.filter((r) => r.drift !== 0), checked: results.length };
+    const results = id ? [await reconcileUser(id)] : await reconcileAllStorage();
+    return { results: results.filter((r) => r.drift !== 0), checked: results.length, skipped: results.filter((r) => r.skipped).length };
   }
 
   async deleteAdmin(

@@ -283,19 +283,31 @@ export interface ReconcileResult {
   actual: number;
   drift: number;
   fixed: boolean;
+  /** The counter moved while the true usage was being measured, so nothing was changed; the next run retries. */
+  skipped?: boolean;
 }
 
 /** Always corrects a mismatch; `dryRun` only reports it. */
 export const reconcileUser = async (userId: mongoose.Types.ObjectId | string, { dryRun = false } = {}): Promise<ReconcileResult> => {
-  const user = await model("User").findById(userId).select("storageUsedBytes").lean();
-  const stored = user?.storageUsedBytes ?? 0;
+  const User = model("User");
+  const stored = (await User.findById(userId).select("storageUsedBytes").lean())?.storageUsedBytes ?? 0;
   const actual = await computeTrueUsage(userId);
+  // A write that landed while we were measuring makes `actual` stale: correcting from it would erase that write.
+  const storedNow = (await User.findById(userId).select("storageUsedBytes").lean())?.storageUsedBytes ?? 0;
+  if (storedNow !== stored) return { userId: String(userId), stored, actual, drift: 0, fixed: false, skipped: true };
   const drift = stored - actual;
   if (drift !== 0) {
     console.warn(`[storage] drift for user ${userId}: stored ${stored}, actual ${actual} (${drift > 0 ? "+" : ""}${drift})`);
-    if (!dryRun) await model("User").updateOne({ _id: userId }, { $set: { storageUsedBytes: actual } });
+    if (!dryRun) await User.updateOne({ _id: userId }, { $set: { storageUsedBytes: actual } });
   }
   return { userId: String(userId), stored, actual, drift, fixed: drift !== 0 && !dryRun };
+};
+
+/** Every user, one after another. Used by the scheduled job and the script. */
+export const reconcileAllStorage = async (dryRun = false): Promise<ReconcileResult[]> => {
+  const out: ReconcileResult[] = [];
+  for (const u of await model("User").find().select("_id").lean()) out.push(await reconcileUser(u._id, { dryRun }));
+  return out;
 };
 
 /**

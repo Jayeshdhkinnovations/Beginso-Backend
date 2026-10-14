@@ -1,21 +1,14 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import User from "../models/User";
 import "../models/Form";
 import "../models/Response";
 import "../models/Upload";
-import { reconcileUser, ReconcileResult } from "../services/storage.service";
+import { reconcileAllStorage } from "../services/storage.service";
 
 // Recomputes every user's true storage (forms + responses + uploads, Trash included) and corrects the
 // running counter `User.storageUsedBytes` where it has drifted. Every mismatch is logged. Safe to re-run.
 //   npm run reconcile:storage             fix drift
 //   npm run reconcile:storage -- --dry-run  report only
-export const reconcileAllStorage = async (dryRun = false): Promise<ReconcileResult[]> => {
-  const out: ReconcileResult[] = [];
-  for (const u of await User.find().select("_id").lean()) out.push(await reconcileUser(u._id, { dryRun }));
-  return out;
-};
-
 if (require.main === module) {
   dotenv.config();
   const run = async () => {
@@ -28,7 +21,8 @@ if (require.main === module) {
     const dryRun = process.argv.includes("--dry-run");
     const results = await reconcileAllStorage(dryRun);
     const drifted = results.filter((r) => r.drift !== 0);
-    console.log(`Checked ${results.length} user(s); ${drifted.length} drifted${dryRun ? " (dry run, nothing changed)" : ", corrected"}.`);
+    const skipped = results.filter((r) => r.skipped).length;
+    console.log(`Checked ${results.length} user(s); ${drifted.length} drifted${dryRun ? " (dry run, nothing changed)" : ", corrected"}${skipped ? `; ${skipped} skipped because their counter was changing (run again)` : ""}.`);
     await mongoose.disconnect();
   };
   run().catch((e) => {

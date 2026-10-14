@@ -10,6 +10,7 @@ import SessionModel from "../models/Session";
 import { AuditLog, IAuditLog } from "../models/AuditLog";
 import { escapeRegex } from "../utils/safeInput";
 import { buildInfo } from "../utils/buildInfo";
+import { auditInfo, parseAuditSummary, AuditSummary } from "../utils/auditInfo";
 import { deleteWorkspaceData } from "./cleanup.service";
 import { kickReportQueue } from "./reportQueue";
 import { DEFAULT_STORAGE_QUOTA_BYTES, DEFAULT_WORKSPACE_LIMIT, hardCeilingOf } from "./storage.service";
@@ -325,15 +326,50 @@ export const workspacesOfUser = async (userId: mongoose.Types.ObjectId | string)
 // Health
 // ---------------------------------------------------------------------------------------------------
 
+export interface FrontendBuild {
+  commit: string | null;
+  commitMessage: string | null;
+  builtAt: string | null;
+}
+
+// The product frontend publishes /build-info.json at build time (scripts/write-build-info.mjs). Fetched with a short
+// timeout and cached for 5 minutes per process, so the health page never waits on, or hammers, the frontend host.
+let frontendCache: { at: number; value: { build: FrontendBuild; audit: AuditSummary | null } | null } | null = null;
+const FRONTEND_CACHE_MS = 5 * 60 * 1000;
+
+export const fetchFrontendBuild = async (now = Date.now()): Promise<{ build: FrontendBuild; audit: AuditSummary | null } | null> => {
+  if (frontendCache && now - frontendCache.at < FRONTEND_CACHE_MS) return frontendCache.value;
+  let value: { build: FrontendBuild; audit: AuditSummary | null } | null = null;
+  try {
+    const base = (process.env.APP_URL || "https://beginso.com").replace(/\/+$/, "");
+    const res = await fetch(`${base}/build-info.json`, { signal: AbortSignal.timeout(3000), headers: { accept: "application/json" } });
+    if (res.ok) {
+      const raw: any = await res.json();
+      const str = (v: unknown) => (typeof v === "string" ? v : null);
+      value = { build: { commit: str(raw.commit), commitMessage: str(raw.commitMessage), builtAt: str(raw.builtAt) }, audit: parseAuditSummary(raw.audit) };
+    }
+  } catch {
+    value = null; // frontend unreachable: shown as "not exposed", never an error on the health page
+  }
+  frontendCache = { at: now, value };
+  return value;
+};
+
+export const resetFrontendBuildCache = (): void => {
+  frontendCache = null;
+};
+
 export const getHealth = async () => {
-  const counts = await ReportModel.aggregate([{ $match: { status: { $in: ["queued", "processing", "failed"] } } }, { $group: { _id: "$status", n: { $sum: 1 } } }]);
+  const [counts, frontend] = await Promise.all([
+    ReportModel.aggregate([{ $match: { status: { $in: ["queued", "processing", "failed"] } } }, { $group: { _id: "$status", n: { $sum: 1 } } }]),
+    fetchFrontendBuild(),
+  ]);
   const n = (s: string) => counts.find((c: any) => c._id === s)?.n ?? 0;
   return {
     backend: { commit: buildInfo.commit, commitMessage: buildInfo.commitMessage, deployedAt: buildInfo.deployedAt },
-    // Not recorded anywhere yet: CI does not store `npm audit` output and the frontend exposes no build info.
-    // Reported as null so the console says so instead of showing a made-up zero.
-    dependencyVulnerabilities: null,
-    frontend: null,
+    frontend: frontend?.build ?? null,
+    // null = not recorded: dist/audit.json (backend) comes from the deploy workflow, build-info.json (frontend) from its build.
+    dependencyVulnerabilities: { backend: auditInfo, frontend: frontend?.audit ?? null },
     reportQueue: { queued: n("queued"), processing: n("processing"), failed: n("failed") },
     smtp: { tlsVerification: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false" },
   };

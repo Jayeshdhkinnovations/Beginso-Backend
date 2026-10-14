@@ -890,6 +890,41 @@ ${notice("If you did not request a password reset, your password is unchanged an
   };
 }
 
+export interface RespondentConfirmationInput {
+  formName: string;
+  /** The signed-in list of the respondent's own submissions. A plain page address: opening it needs a login, it carries no token. */
+  myUrl: string;
+}
+
+/**
+ * Sent after a submission to a "signed-in Beginso users only" form. It confirms the submission and points to My submissions,
+ * which asks the person to sign in. It deliberately holds no answers, no questions and no access token (unlike the tracked-mode
+ * link mail, whose link works without signing in): the page address alone proves nothing and opens nothing.
+ */
+export function renderRespondentConfirmationEmail(i: RespondentConfirmationInput): RenderedMail {
+  const name = i.formName.trim() || "a form";
+  return {
+    subject: `We received your response to "${name}"`,
+    text: `Thanks, your response was received
+
+You submitted a response to "${name}" while signed in to Beginso.
+
+You can see it any time under My submissions (you will be asked to sign in): ${i.myUrl}
+
+For your privacy this email does not repeat what you submitted. If you did not make this submission, you can ignore this email.`,
+    html: layout({
+      preheader: `Your response to ${name} was received`,
+      content: `
+${heading("Thanks, your response was received")}
+${paragraph(`You submitted a response to <strong>${esc(name)}</strong> while signed in to Beginso. You can see it any time under <strong>My submissions</strong>.`)}
+${button("Open My submissions", i.myUrl)}
+${linkFallback(i.myUrl)}
+${notice("You will be asked to sign in first. For your privacy this email does not repeat what you submitted.")}`,
+      footerNote: "If you did not make this submission, you can ignore this email.",
+    }),
+  };
+}
+
 export function renderWelcomeEmail(i: { name?: string; dashboardUrl: string }): RenderedMail {
   const who = i.name || "there";
   return {

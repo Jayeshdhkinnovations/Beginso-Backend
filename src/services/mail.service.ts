@@ -15,6 +15,7 @@ export type AuthMailType =
   | "password_changed_success"
   | "workspace_invitation"
   | "respondent_submission_link"
+  | "respondent_confirmation"
   | "activity_notification"
   | "role_changed"
   | "member_removed"
@@ -42,6 +43,7 @@ export type MailPayload =
   | { template: "response_limit_reached"; data: T.ResponseLimitInput }
   | { template: "new_device_signin"; data: T.NewDeviceSigninInput }
   | { template: "respondent_receipt"; data: T.RespondentReceiptInput }
+  | { template: "respondent_confirmation"; data: T.RespondentConfirmationInput }
   | { template: "weekly_digest"; data: T.WeeklyDigestInput }
   | { template: "workspace_deleted"; data: T.WorkspaceDeletedInput }
   | { template: "storage_warning"; data: T.StorageWarningInput };
@@ -84,6 +86,7 @@ const PAYLOAD_RENDERERS: Partial<Record<AuthMailType, (d: any) => RenderedMail>>
   response_limit_reached: T.renderResponseLimitEmail,
   new_device_signin: T.renderNewDeviceSigninEmail,
   respondent_receipt: T.renderRespondentReceiptEmail,
+  respondent_confirmation: T.renderRespondentConfirmationEmail,
   weekly_digest: T.renderWeeklyDigestEmail,
   workspace_deleted: T.renderWorkspaceDeletedEmail,
   storage_warning: T.renderStorageWarningEmail,

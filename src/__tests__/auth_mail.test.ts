@@ -60,13 +60,13 @@ describe("Auth Email & Session Enforcement Endpoints", () => {
     expect(res.body.success).toBe(false);
   });
 
-  it("should return 202 Accepted on /api/auth/forgot-password for any input", async () => {
+  it("tells the caller plainly when no account uses the email (404), instead of claiming a link is on its way", async () => {
     const res = await request(app)
       .post("/api/auth/forgot-password")
       .send({ email: "randomuser@example.com" });
 
-    expect(res.status).toBe(202);
-    expect(res.body.message).toContain("password-reset link will be sent");
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("ACCOUNT_NOT_FOUND");
   });
 
   it("should return updated dashboard analytics with required totalForms, publishedForms, totalResponses, responsesThisMonth, recentActivity", async () => {

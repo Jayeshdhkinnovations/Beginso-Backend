@@ -109,6 +109,21 @@ export const sendSubmissionLink = async (params: {
   }
 };
 
+// Sends the confirmation for a submission to a "signed-in Beginso users only" form. NOT the tracked-mode link: that one is a bearer
+// token (/r/<token>) that opens the submission without signing in. This one points at /my-submissions, a signed-in page, and holds
+// no token and no answers. Never throws: a failed email must not fail the submission.
+export const sendSubmissionConfirmation = async (params: { formName: string; email: string }): Promise<void> => {
+  try {
+    await mailService.sendMail({
+      to: params.email,
+      template: "respondent_confirmation",
+      payload: { formName: params.formName, myUrl: `${appUrl()}/my-submissions` },
+    });
+  } catch (err) {
+    console.error("Failed to send respondent confirmation email:", err);
+  }
+};
+
 interface ResolvedLink {
   state: LinkState;
   link?: IRespondentLink;

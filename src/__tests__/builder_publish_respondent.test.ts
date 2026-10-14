@@ -319,6 +319,41 @@ describe("B4 - access modes", () => {
       expect(replay.status).toBe(401); // single use
     });
 
+    it("emails a confirmation to the account address that points at My submissions (no token), and creates no respondent link", async () => {
+      const form = await mkForm({ title: "Login form", settings: { accessMode: "login" } });
+      const slug = (await publish(form)).body.slug;
+      const spy = jest.spyOn(mailService, "sendMail").mockResolvedValue(true);
+
+      const { ticket } = (await request(app).post(`/api/public/${slug}/submit-ticket`).set({ Authorization: `Bearer ${tRespondent}` })).body;
+      const ok = await submitPublic(slug, { "f-name": "Cy", "f-email": "cy@x.com" }, { respondentEmail: "attacker@evil.test" }, { "x-submit-ticket": ticket });
+      expect(ok.status).toBe(200);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const arg = spy.mock.calls[0][0] as any;
+      expect(arg).toMatchObject({ to: "respondent@s13.test", template: "respondent_confirmation" }); // the ACCOUNT address, not the body's
+      expect(arg.payload.myUrl).toMatch(/\/my-submissions$/);
+      expect(JSON.stringify(arg)).not.toMatch(/Cy|cy@x\.com/); // none of the answers
+      const stored = await ResponseModel.findOne({ formId: form._id });
+      expect(await RespondentLink.countDocuments({ responseId: stored!._id })).toBe(0); // no bearer token was issued
+      spy.mockRestore();
+    });
+
+    it("sends nothing for an open-mode submission, and tracked mode still sends only its own link mail", async () => {
+      const open = await mkForm({ title: "Open form" });
+      const openSlug = (await publish(open)).body.slug;
+      const tracked = await mkForm({ title: "Tracked again", settings: { accessMode: "tracked" } });
+      const trackedSlug = (await publish(tracked)).body.slug;
+      const spy = jest.spyOn(mailService, "sendMail").mockResolvedValue(true);
+
+      expect((await submitPublic(openSlug, { "f-name": "Di", "f-email": "di@x.com" })).status).toBe(200);
+      expect(spy).not.toHaveBeenCalled();
+
+      expect((await submitPublic(trackedSlug, { "f-name": "Ed", "f-email": "ed@x.com" }, { respondentEmail: "ed@example.com" })).status).toBe(200);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect((spy.mock.calls[0][0] as any).template).toBe("respondent_submission_link");
+      spy.mockRestore();
+    });
+
     it("a ticket is bound to one form, expires, and cannot be forged", async () => {
       const formA = await mkForm({ settings: { accessMode: "login" } });
       const formB = await mkForm({ settings: { accessMode: "login" } });
@@ -733,6 +768,11 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
     expect(after!.answers["Full name"]).toBe("Dee Fixed");
     expect(after!.editedAfterReviewAt).toBeNull();
     expect(after!.lastEditedByRespondentAt).toBeTruthy();
+    // The form owner sees that it was edited, even though nobody had reviewed it (no after-review flag).
+    const detail = await request(app).get(`/api/responses/${response._id}`).set(as(tOwner));
+    expect(detail.status).toBe(200);
+    expect(detail.body.lastEditedByRespondentAt ?? detail.body.data?.lastEditedByRespondentAt).toBeTruthy();
+    expect(detail.body.editedAfterReviewAt ?? detail.body.data?.editedAfterReviewAt ?? null).toBeNull();
     expect((await request(app).patch(`/api/respond/${tokenFromMail()}`).send({ answers: {} })).status).toBe(422);
   });
 

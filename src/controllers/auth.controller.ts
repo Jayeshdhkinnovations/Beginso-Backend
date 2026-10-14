@@ -537,6 +537,13 @@ export const verifyEmailCode = async (
 };
 
 // POST /api/auth/forgot-password
+//
+// Says plainly whether the address can get a reset link, instead of the old "if an account exists..." 202 that told
+// someone who mistyped their email that a mail was on its way when none was. The cost is that the answer reveals whether an
+// address has an account; the route stays behind authRateLimiter and emailTargetRateLimiter (and checkResetRateLimit below)
+// so it cannot be used to scan addresses quickly.
+//   202 a reset link is being sent    400 malformed address, or the account signs in with Google only
+//   403 the account is suspended      404 no account uses this address      429 asked too often
 export const requestForgotPassword = async (
   req: Request,
   res: Response
@@ -544,81 +551,93 @@ export const requestForgotPassword = async (
   res.setHeader("Cache-Control", "no-store");
   try {
     const rawEmail = req.body?.email;
-    if (!rawEmail || typeof rawEmail !== "string") {
-      res.status(202).json({
-        message: "If an account exists for that email, a password-reset link will be sent.",
+    const normalizedEmail = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+    if (!normalizedEmail || normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      res.status(400).json({ message: "Enter a valid email address.", code: "INVALID_EMAIL" });
+      return;
+    }
+
+    let fbUser;
+    try {
+      fbUser = await getAuth().getUserByEmail(normalizedEmail);
+    } catch (lookupError: any) {
+      if (lookupError?.code === "auth/user-not-found") {
+        res.status(404).json({
+          message: "We couldn't find a Beginso account with that email. Check the address, or sign up.",
+          code: "ACCOUNT_NOT_FOUND",
+        });
+        return;
+      }
+      throw lookupError;
+    }
+
+    if (fbUser.disabled) {
+      res.status(403).json({ message: "This account is suspended. Contact support for help.", code: "ACCOUNT_SUSPENDED" });
+      return;
+    }
+
+    const hasPasswordProvider =
+      fbUser.providerData.some((p) => p.providerId === "password") ||
+      fbUser.tokensValidAfterTime !== undefined;
+    if (!hasPasswordProvider) {
+      res.status(400).json({
+        message: "This account signs in with Google, so it has no password to reset. Use \"Sign in with Google\" instead.",
+        code: "NO_PASSWORD",
       });
       return;
     }
 
-    const normalizedEmail = rawEmail.trim().toLowerCase();
-    if (!normalizedEmail || normalizedEmail.length > 254) {
-      res.status(202).json({
-        message: "If an account exists for that email, a password-reset link will be sent.",
+    if (!(await checkResetRateLimit(normalizedEmail))) {
+      recordMailLog({
+        template: "password_reset",
+        outcome: "rate_limited",
+        email: normalizedEmail,
+        firebaseUid: fbUser.uid,
+        provider: "smtp",
+        errorCode: "RATE_LIMITED",
       });
+      res.status(429).json({ message: "Too many reset requests for this email. Please wait a minute and try again.", code: "RATE_LIMITED" });
       return;
     }
 
-    // Always return 202 Accepted to prevent account enumeration
-    res.status(202).json({
-      message: "If an account exists for that email, a password-reset link will be sent.",
-    });
+    res.status(202).json({ message: "A password-reset link is on its way to your email." });
 
-    // Send password reset mail asynchronously
+    // Build and send the mail after answering: Firebase link generation and SMTP are the slow part.
     (async () => {
       try {
-        const fbUser = await getAuth().getUserByEmail(normalizedEmail);
-        const hasPasswordProvider =
-          fbUser.providerData.some((p) => p.providerId === "password") ||
-          fbUser.tokensValidAfterTime !== undefined;
+        const appUrl = process.env.APP_URL || "https://beginso.com";
+        const rawActionUrl = await getAuth().generatePasswordResetLink(normalizedEmail, {
+          url: `${appUrl}/reset-password`,
+        });
 
-        if (hasPasswordProvider && !fbUser.disabled) {
-          if (await checkResetRateLimit(normalizedEmail)) {
-            const appUrl = process.env.APP_URL || "https://beginso.com";
-            const rawActionUrl = await getAuth().generatePasswordResetLink(normalizedEmail, {
-              url: `${appUrl}/reset-password`,
-            });
-
-            // Extract oobCode & apiKey and build direct website URL without firebaseapp.com domain
-            let actionUrl = rawActionUrl;
-            try {
-              const urlObj = new URL(rawActionUrl);
-              const oobCode = urlObj.searchParams.get("oobCode");
-              const apiKey = urlObj.searchParams.get("apiKey");
-              if (oobCode) {
-                actionUrl = `${appUrl}/reset-password?mode=resetPassword&oobCode=${encodeURIComponent(oobCode)}${
-                  apiKey ? `&apiKey=${encodeURIComponent(apiKey)}` : ""
-                }`;
-              }
-            } catch {
-              // fallback to rawActionUrl
-            }
-
-            await mailService.sendMail({
-              to: normalizedEmail,
-              template: "reset_password",
-              actionUrl,
-              firebaseUid: fbUser.uid,
-            });
-          } else {
-            recordMailLog({
-              template: "password_reset",
-              outcome: "rate_limited",
-              email: normalizedEmail,
-              firebaseUid: fbUser.uid,
-              provider: "smtp",
-              errorCode: "RATE_LIMITED",
-            });
+        // Extract oobCode & apiKey and build direct website URL without firebaseapp.com domain
+        let actionUrl = rawActionUrl;
+        try {
+          const urlObj = new URL(rawActionUrl);
+          const oobCode = urlObj.searchParams.get("oobCode");
+          const apiKey = urlObj.searchParams.get("apiKey");
+          if (oobCode) {
+            actionUrl = `${appUrl}/reset-password?mode=resetPassword&oobCode=${encodeURIComponent(oobCode)}${
+              apiKey ? `&apiKey=${encodeURIComponent(apiKey)}` : ""
+            }`;
           }
+        } catch {
+          // fallback to rawActionUrl
         }
-      } catch {
-        // User not found or other internal error — logged internally
+
+        await mailService.sendMail({
+          to: normalizedEmail,
+          template: "reset_password",
+          actionUrl,
+          firebaseUid: fbUser.uid,
+        });
+      } catch (sendError) {
+        console.error("Password reset mail failed:", sendError);
       }
     })();
-  } catch {
-    res.status(202).json({
-      message: "If an account exists for that email, a password-reset link will be sent.",
-    });
+  } catch (error) {
+    console.error("Forgot password lookup failed:", error);
+    res.status(503).json({ message: "We couldn't send the reset email right now. Please try again.", code: "UNAVAILABLE" });
   }
 };
 

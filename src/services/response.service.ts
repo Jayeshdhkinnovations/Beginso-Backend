@@ -290,6 +290,7 @@ export class ResponseService {
       duplicateOfId: r.duplicateOfId ? r.duplicateOfId.toString() : null,
       ...(r.isTest ? { isTest: true } : {}),
       editedAfterReviewAt: r.editedAfterReviewAt ?? null,
+      lastEditedByRespondentAt: r.lastEditedByRespondentAt ?? null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
@@ -492,6 +493,7 @@ export class ResponseService {
       duplicateOfId: response.duplicateOfId ? response.duplicateOfId.toString() : null,
       ...(response.isTest ? { isTest: true } : {}),
       editedAfterReviewAt: response.editedAfterReviewAt ?? null,
+      lastEditedByRespondentAt: response.lastEditedByRespondentAt ?? null,
       createdAt: response.createdAt,
       updatedAt: response.updatedAt,
     };

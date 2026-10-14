@@ -27,7 +27,7 @@ import { ACCESS_MODE_VALUES } from "../models/Form";
 import { getAccessMode } from "../utils/accessMode";
 import { normaliseLayout } from "../utils/layout";
 import { redeemSubmitTicket, issueSubmitTicket } from "../services/submitTicket";
-import { sendSubmissionLink } from "../services/respondent.service";
+import { sendSubmissionLink, sendSubmissionConfirmation } from "../services/respondent.service";
 import { z } from "zod";
 import { publicFormStorageState } from "../services/storage.service";
 
@@ -1508,6 +1508,12 @@ export const submitPublicForm = async (
         email: respondentEmail,
       });
       if (process.env.NODE_ENV === "test") await sent; // deterministic for tests; fire-and-forget in production
+    }
+
+    // Login mode: confirm to the account's own address, with a link to My submissions (a signed-in page, no token). Open mode sends nothing.
+    if (accessMode === "login" && respondentEmail) {
+      const confirmed = sendSubmissionConfirmation({ formName: form.title, email: respondentEmail });
+      if (process.env.NODE_ENV === "test") await confirmed;
     }
 
     // Create form_activity notification for workspace owner

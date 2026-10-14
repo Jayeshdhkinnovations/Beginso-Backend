@@ -67,6 +67,8 @@ export interface IResponse {
   // when a respondent edited this after a reviewer had already looked at it.
   isTest?: boolean;
   editedAfterReviewAt?: Date | string | null;
+  // The last time the respondent changed their own answers (any edit, reviewed or not), so the owner sees that a response was edited.
+  lastEditedByRespondentAt?: Date | string | null;
   // Sprint 12, BE 0.3 (B5.x): live count, never cached — recomputed on every list/detail read.
   noteCount?: number;
   // Sprint 12, BE 0.5 (B6.1): pooled mean across every reviewer's ScoreEntry rows for every

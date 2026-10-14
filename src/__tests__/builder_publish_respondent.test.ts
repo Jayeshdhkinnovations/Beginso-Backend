@@ -771,8 +771,8 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
     // The form owner sees that it was edited, even though nobody had reviewed it (no after-review flag).
     const detail = await request(app).get(`/api/responses/${response._id}`).set(as(tOwner));
     expect(detail.status).toBe(200);
-    expect(detail.body.lastEditedByRespondentAt ?? detail.body.data?.lastEditedByRespondentAt).toBeTruthy();
-    expect(detail.body.editedAfterReviewAt ?? detail.body.data?.editedAfterReviewAt ?? null).toBeNull();
+    expect(detail.body.response.lastEditedByRespondentAt).toBeTruthy(); // the detail endpoint answers { success, response }
+    expect(detail.body.response.editedAfterReviewAt).toBeNull();
     expect((await request(app).patch(`/api/respond/${tokenFromMail()}`).send({ answers: {} })).status).toBe(422);
   });
 

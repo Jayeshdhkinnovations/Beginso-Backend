@@ -19,6 +19,7 @@ import { defaultAccessModeForNewForms } from "../utils/accessMode";
 import Workspace from "../models/Workspace";
 import User from "../models/User";
 import { queueActivityEmails } from "./notificationEmail.service";
+import { assertStorageQuota, ownerOfForm, publicFormStorageState } from "./storage.service";
 
 const MAX_SLUG_ATTEMPTS = 5;
 
@@ -164,6 +165,7 @@ export class FormService {
   }
 
   async createForm(workspaceId: string | null, formDetails: Partial<IForm>): Promise<IForm> {
+    await assertStorageQuota(await ownerOfForm({ workspaceId, createdBy: formDetails.createdBy }));
     // Seed default page if none provided
     if (!formDetails.pages || formDetails.pages.length === 0) {
       formDetails.pages = [
@@ -634,7 +636,7 @@ export class FormService {
   // fields stripped). submitForm uses it for new submissions; a respondent correcting their own
   // submission (respondent.service.ts) uses it for the merged answers, so an edit can never get past a
   // rule a submission could not. `isTest` exempts file fields: a test submission is JSON-only.
-  validateAnswers(form: IForm, answers: Record<string, any>, options: { isTest?: boolean } = {}): void {
+  validateAnswers(form: IForm, answers: Record<string, any>, options: { isTest?: boolean; uploadsDisabled?: boolean } = {}): void {
     const hiddenFieldIds = getHiddenFieldIds(form.fields, answers);
     const validationErrors: Array<{ field: string; message: string }> = [];
 
@@ -642,7 +644,7 @@ export class FormService {
       if (field.deleted) {
         continue;
       }
-      if (options.isTest && (field.type === "file_upload" || field.type === "image_upload")) {
+      if ((options.isTest || options.uploadsDisabled) && (field.type === "file_upload" || field.type === "image_upload")) {
         continue;
       }
 
@@ -869,7 +871,7 @@ export class FormService {
     responseId?: string,
     // Sprint 13: `isTest` = a builder test submission (CF2.6). `respondentEmail` / `respondentUserId`
     // come from the access mode (D1.1) and win over the "first email field" heuristic.
-    options: { isTest?: boolean; respondentEmail?: string | null; respondentUserId?: unknown; geo?: ResponseGeo | null } = {}
+    options: { isTest?: boolean; uploadsDisabled?: boolean; respondentEmail?: string | null; respondentUserId?: unknown; geo?: ResponseGeo | null } = {}
   ) {
     const form = await this.formRepository.findById(formId);
     if (!form) {
@@ -882,7 +884,7 @@ export class FormService {
     // submission is the owner checking their own form, so it is allowed on a draft, closed or full form.
     if (!options.isTest) await this.checkFormAvailability(form);
 
-    this.validateAnswers(form, answers, { isTest: options.isTest });
+    this.validateAnswers(form, answers, { isTest: options.isTest, uploadsDisabled: options.uploadsDisabled });
 
     // Sprint 12, BE 0.3 (B8.1): allocated atomically, per form, before the document is written -
     // this is the single choke point every submission path (authenticated + public) goes through.
@@ -962,6 +964,7 @@ export class FormService {
 
   async duplicateForm(formId: string, workspaceId: string, createdBy?: unknown): Promise<IForm> {
     const originalForm = await this.getFormById(formId, workspaceId);
+    await assertStorageQuota(await ownerOfForm({ workspaceId: originalForm.workspaceId, createdBy: createdBy ?? originalForm.createdBy }));
 
     // Deep copy fields
     const duplicatedFields = originalForm.fields.map((field) => {
@@ -994,6 +997,13 @@ export class FormService {
   }
 
   private async checkFormAvailability(form: IForm, isPublicRoute: boolean = false, allowWrite: boolean = true): Promise<void> {
+    // Owner is past the hard storage ceiling: the form looks unavailable, with no hint as to why (a respondent
+    // must never learn about the owner's storage). Same 404 a closed form gives.
+    if ((await publicFormStorageState(form)) === "unavailable") {
+      const err = new Error("Form not found");
+      (err as any).statusCode = 404;
+      throw err;
+    }
     if (form.status === "closed") {
       const err = new Error("Form not found");
       (err as any).statusCode = 404;

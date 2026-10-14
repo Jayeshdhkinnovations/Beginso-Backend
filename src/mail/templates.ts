@@ -994,3 +994,44 @@ ${button("Secure my account", i.loginUrl, "danger")}`,
     }),
   };
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Storage warning (80% used / full)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export interface StorageWarningInput {
+  level: "almost_full" | "full";
+  usedBytes: number;
+  quotaBytes: number;
+}
+
+const fmtMb = (b: number): string => `${Math.round(b / (1024 * 1024))} MB`;
+
+export function renderStorageWarningEmail(i: StorageWarningInput): RenderedMail {
+  const full = i.level === "full";
+  const trashUrl = `${APP_URL}/trash`;
+  const headline = full ? "Your Beginso storage is full" : "Your Beginso storage is almost full";
+  const detail = full
+    ? "You can't create forms or upload files until you free up space. Forms that are already published keep working."
+    : "Once it is full you won't be able to create forms or upload files. Emptying Trash is the quickest way to free space.";
+  return {
+    subject: headline,
+    text: `${headline}
+
+You are using ${fmtMb(i.usedBytes)} of ${fmtMb(i.quotaBytes)}.
+
+${detail}
+
+Empty Trash: ${trashUrl}`,
+    html: layout({
+      preheader: `${fmtMb(i.usedBytes)} of ${fmtMb(i.quotaBytes)} used`,
+      accent: full ? "danger" : "warning",
+      content: `
+${heading(headline)}
+${paragraph(`You are using <strong>${esc(fmtMb(i.usedBytes))}</strong> of <strong>${esc(fmtMb(i.quotaBytes))}</strong>.`)}
+${notice(esc(detail), full ? "danger" : "warning")}
+${button("Open Trash", trashUrl, full ? "danger" : "warning")}`,
+      footerNote: "Sent because your account is close to its storage limit.",
+    }),
+  };
+}

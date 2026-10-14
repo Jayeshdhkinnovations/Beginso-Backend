@@ -4,6 +4,7 @@ import { deleteWorkspaceData } from "../services/cleanup.service";
 import { assertVerifiedWorkspace } from "../utils/requestContext";
 import { recordEvent } from "../services/event.service";
 import mongoose from "mongoose";
+import { assertStorageQuota, assertWorkspaceLimit, reconcileUser } from "../services/storage.service";
 import Workspace from "../models/Workspace";
 import User from "../models/User";
 import Membership from "../models/Membership";
@@ -18,6 +19,9 @@ export const createWorkspace = async (req: Request, res: Response, next: NextFun
 
     // Zod rejects a missing/oversized name, a bad or reserved slug and an invalid timezone (400).
     const { name, slug, timezone, description, logo } = createWorkspaceSchema.parse(req.body ?? {});
+
+    await assertStorageQuota(authReq.user._id);
+    await assertWorkspaceLimit(authReq.user._id);
 
     const workspaceData: any = {
       name,
@@ -402,6 +406,8 @@ export const transferOwnership = async (req: Request, res: Response, next: NextF
     workspace.owner = target.userId as any;
     await workspace.save();
     await Membership.updateOne({ workspaceId: workspace._id, userId: previousOwnerId }, { $set: { role: "admin" } });
+    // Storage is charged to the owner: re-measure both sides instead of guessing the workspace's size.
+    await Promise.all([reconcileUser(previousOwnerId), reconcileUser(target.userId)]);
 
     const newOwner = await User.findById(target.userId).select("email").lean();
     await recordEvent(req, workspace._id, "workspace.transfer_ownership", { id: workspace._id, type: "workspace", label: workspace.name }, {

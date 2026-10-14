@@ -27,7 +27,8 @@ export type AuthMailType =
   | "new_device_signin"
   | "respondent_receipt"
   | "weekly_digest"
-  | "workspace_deleted";
+  | "workspace_deleted"
+  | "storage_warning";
 
 // One typed payload per data-carrying template, instead of widening SendMailOptions with more optionals.
 export type MailPayload =
@@ -42,7 +43,8 @@ export type MailPayload =
   | { template: "new_device_signin"; data: T.NewDeviceSigninInput }
   | { template: "respondent_receipt"; data: T.RespondentReceiptInput }
   | { template: "weekly_digest"; data: T.WeeklyDigestInput }
-  | { template: "workspace_deleted"; data: T.WorkspaceDeletedInput };
+  | { template: "workspace_deleted"; data: T.WorkspaceDeletedInput }
+  | { template: "storage_warning"; data: T.StorageWarningInput };
 
 export interface SendMailOptions {
   to: string;
@@ -84,6 +86,7 @@ const PAYLOAD_RENDERERS: Partial<Record<AuthMailType, (d: any) => RenderedMail>>
   respondent_receipt: T.renderRespondentReceiptEmail,
   weekly_digest: T.renderWeeklyDigestEmail,
   workspace_deleted: T.renderWorkspaceDeletedEmail,
+  storage_warning: T.renderStorageWarningEmail,
 };
 
 const maskEmail = (e: string): string => e.replace(/^(.).*(@.*)$/, "$1***$2");

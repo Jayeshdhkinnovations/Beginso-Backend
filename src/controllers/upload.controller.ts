@@ -14,6 +14,7 @@ import SessionModel from "../models/Session";
 import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { UploadResponse } from "../types/upload";
+import { assertStorageQuota, ownerOfFormId } from "../services/storage.service";
 
 // ponytail: This implementation utilizes local disk storage for keeping uploaded assets.
 // This introduces a local-disk storage ceiling, has no CDN caching, and creates issues
@@ -77,6 +78,21 @@ export const uploadFile = async (
       res.status(400).json({ success: false, message: "formId must be a valid id" });
       return;
     }
+    // Storage is charged to the workspace owner (or the personal form's creator), not to whoever uploads.
+    const chargedTo = (formId && (await ownerOfFormId(formId))) || req.user._id;
+    try {
+      await assertStorageQuota(chargedTo, { bytesToAdd: file.size });
+    } catch (quotaErr: any) {
+      if (file.path && fs.existsSync(file.path)) {
+        await deleteFileAndEmptyParents(file.path, getUploadDir());
+      }
+      res.status(quotaErr.statusCode ?? 403).json({
+        success: false,
+        message: quotaErr.message,
+        error: { code: quotaErr.code, message: quotaErr.message },
+      });
+      return;
+    }
     const isBanner =
       file.fieldname === "cover" ||
       file.fieldname === "banner" ||
@@ -125,6 +141,7 @@ export const uploadFile = async (
       type: file.mimetype,
       path: relativePath,
       owner: req.user._id,
+      chargedTo,
       uploadTime: new Date(),
       isBranding,
     });

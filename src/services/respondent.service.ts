@@ -1,3 +1,4 @@
+import { trackResponseWrite } from "./storage.service";
 import crypto from "crypto";
 import mongoose from "mongoose";
 import Form, { IForm } from "../models/Form";
@@ -248,7 +249,7 @@ export const editResponse = async (
   };
   if (reviewed) set.editedAfterReviewAt = now;
   // Stage, assignee, tags, notes and score are deliberately NOT touched by a respondent edit (B6.4).
-  await ResponseModel.updateOne({ _id: response._id }, { $set: set });
+  await trackResponseWrite(response._id, response.formId, () => ResponseModel.updateOne({ _id: response._id }, { $set: set }));
 
   if (reviewed) await notifyEditedAfterReview(form, response);
   return { editedAfterReview: reviewed };

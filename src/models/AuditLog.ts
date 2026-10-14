@@ -5,9 +5,9 @@ export interface IAuditLog extends Document {
   actorId: mongoose.Types.ObjectId;
   actorEmail: string;
   actorName: string;
-  action: "admin.create" | "admin.edit" | "admin.suspend" | "admin.reactivate" | "admin.delete";
+  action: "admin.create" | "admin.edit" | "admin.suspend" | "admin.reactivate" | "admin.delete" | "admin.limits" | "workspace.delete" | "template.create" | "template.edit" | "template.delete" | "session.revoke" | "report.retry";
   targetId: string;
-  targetType: "admin" | "workspace" | "form";
+  targetType: "admin" | "workspace" | "form" | "template" | "session" | "report";
   before?: Record<string, any>;
   after?: Record<string, any>;
 }

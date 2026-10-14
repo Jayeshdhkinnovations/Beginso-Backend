@@ -137,7 +137,10 @@ describe("Super Admin Stats & Abuse Endpoints Integration Tests", () => {
       expect(res.body.stats.totalForms).toBe(1);
       expect(res.body.stats.publishedForms).toBe(1);
       expect(res.body.stats.totalResponses).toBe(1);
-      expect(res.body.stats.totalStorageUsed).toBe(2048);
+      // Storage is the sum of the users' running counters: the 2048 bytes of uploads plus the form and response documents.
+      const counters = await User.aggregate([{ $group: { _id: null, total: { $sum: "$storageUsedBytes" } } }]);
+      expect(res.body.stats.totalStorageUsed).toBe(counters[0].total);
+      expect(res.body.stats.totalStorageUsed).toBeGreaterThanOrEqual(2048);
       expect(res.body.stats.responsesLast24h).toBe(1);
 
       // Recent Signups checks

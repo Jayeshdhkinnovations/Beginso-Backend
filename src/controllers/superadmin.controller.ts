@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { superAdminService } from "../services/superadmin.service";
 import { createAdminSchema, updateAdminSchema } from "../validations/superadmin.validator";
 
@@ -212,6 +212,45 @@ export const getAuditLogs = async (req: Request, res: Response, next: NextFuncti
       success: true,
       ...auditData,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const limitsSchema = z
+  .object({
+    storageQuotaBytes: z.number().int().min(0).optional(),
+    workspaceLimit: z.number().int().min(0).max(1000).optional(),
+  })
+  .refine((v) => v.storageQuotaBytes !== undefined || v.workspaceLimit !== undefined, { message: "Nothing to change" });
+
+export const updateAdminLimits = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const data = limitsSchema.parse(req.body);
+    const actor = (req as any).user;
+    const result = await superAdminService.updateLimits(
+      { id: actor._id.toString(), email: actor.email, fullName: actor.fullName },
+      String(req.params.id),
+      data
+    );
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getOverQuota = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    res.status(200).json({ success: true, ...(await superAdminService.listOverQuota(Number(req.query.limit) || 50)) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const reconcileStorage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const id = typeof req.body?.userId === "string" ? req.body.userId : undefined;
+    res.status(200).json({ success: true, ...(await superAdminService.reconcileStorage(id)) });
   } catch (error) {
     next(error);
   }

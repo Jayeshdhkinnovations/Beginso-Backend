@@ -29,6 +29,7 @@ import { normaliseLayout } from "../utils/layout";
 import { redeemSubmitTicket, issueSubmitTicket } from "../services/submitTicket";
 import { sendSubmissionLink } from "../services/respondent.service";
 import { z } from "zod";
+import { publicFormStorageState } from "../services/storage.service";
 
 const formService = new FormService();
 
@@ -961,13 +962,17 @@ export const getPublicFormBySlug = async (
 
     // Strip internal properties (workspaceId, preview slug, honeypot settings) and soft-deleted fields
     const fields = (form.fields || []).filter((f: any) => !f.deleted);
+    // Owner is past their base storage quota: file fields behave as if uploads were switched off.
+    const uploadsDisabled = (await publicFormStorageState(form)) === "no_files";
     const publicFields = fields.map((raw: any) => {
+      const isUpload = raw.type === "file_upload" || raw.type === "image_upload";
       const cleanField: any = {
         fieldId: raw.fieldId,
         pageId: raw.pageId,
         label: raw.label,
         type: raw.type,
-        required: raw.required,
+        required: uploadsDisabled && isUpload ? false : raw.required,
+        ...(uploadsDisabled && isUpload ? { uploadsDisabled: true } : {}),
         placeholder: raw.placeholder !== undefined ? raw.placeholder : "",
         helpText: raw.helpText !== undefined ? raw.helpText : "",
       };
@@ -1293,6 +1298,14 @@ export const submitPublicForm = async (
       respondentEmail = candidate;
     }
 
+    // Past the base quota (but under the hard ceiling) attachments are refused while text answers still go
+    // through. Over the ceiling the form is already unavailable (checkFormAvailability).
+    const uploadsDisabled = (await publicFormStorageState(form)) === "no_files";
+    if (uploadsDisabled && req.files && Array.isArray(req.files) && req.files.length > 0) {
+      await cleanupUploadedFiles(req.files as Express.Multer.File[]);
+      req.files = [];
+    }
+
     // Enforce 100 MB absolute limit on all uploaded files
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files as Express.Multer.File[]) {
@@ -1480,6 +1493,7 @@ export const submitPublicForm = async (
       respondentEmail,
       respondentUserId,
       geo: lookupGeo(clientIp),
+      uploadsDisabled,
     });
     submissionSuccess = true;
 
@@ -1539,6 +1553,11 @@ export const submitPublicForm = async (
       submission: submissionObj,
     });
   } catch (error) {
+    // Clean up before answering, so the error response never races the removal of the rows it implies.
+    if (!submissionSuccess && req.files && Array.isArray(req.files) && req.files.length > 0) {
+      await cleanupUploadedFiles(req.files as Express.Multer.File[], true);
+      req.files = [];
+    }
     next(error);
   } finally {
     if (!submissionSuccess && req.files && Array.isArray(req.files) && req.files.length > 0) {

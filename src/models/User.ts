@@ -27,6 +27,10 @@ export interface IUser extends Document {
   onboardingCompleted: boolean;
   theme?: "light" | "dark" | "system" | null;
   lastLogin: Date;
+  // Running counter (see storage.service.ts) - never recomputed on read. Charged to the workspace OWNER.
+  storageUsedBytes: number;
+  storageQuotaBytes: number;
+  workspaceLimit: number;
   loginHistory: ILoginEntry[];
   createdAt?: Date;
   updatedAt?: Date;
@@ -99,6 +103,10 @@ const UserSchema = new Schema<IUser>(
       type: Date,
     },
 
+    storageUsedBytes: { type: Number, default: 0 },
+    storageQuotaBytes: { type: Number, default: 500 * 1024 * 1024 },
+    workspaceLimit: { type: Number, default: 10 },
+
     loginHistory: [
       {
         timestamp: { type: Date, default: Date.now },
@@ -118,6 +126,9 @@ const UserSchema = new Schema<IUser>(
     timestamps: true,
   }
 );
+
+// "Accounts over quota, worst first" for the admin dashboard.
+UserSchema.index({ storageUsedBytes: -1 });
 
 const User = mongoose.model<IUser>("User", UserSchema);
 

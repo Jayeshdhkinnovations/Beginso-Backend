@@ -1,4 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { attachStorageHooks } from "../services/storage.service";
+import "./Form"; // the storage hooks resolve a response's owner through its form
 
 export interface IResponse extends Document {
   formId: mongoose.Types.ObjectId;
@@ -166,6 +168,8 @@ ResponseSchema.index({ tagIds: 1 });
 
 // Submissions listing sorts by createdAt within a form.
 ResponseSchema.index({ formId: 1, createdAt: -1 });
+
+attachStorageHooks(ResponseSchema, "response");
 
 const ResponseModel = mongoose.model<IResponse>("Response", ResponseSchema);
 export default ResponseModel;

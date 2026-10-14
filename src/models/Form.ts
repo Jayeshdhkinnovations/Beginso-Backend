@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { attachStorageHooks } from "../services/storage.service";
 
 export interface ICondition {
   fieldId: string;
@@ -398,6 +399,8 @@ FormSchema.pre(["find", "findOne", "countDocuments", "findOneAndUpdate"], functi
   if (Object.prototype.hasOwnProperty.call(filter, "deletedAt")) return;
   this.where({ deletedAt: null });
 });
+
+attachStorageHooks(FormSchema, "form");
 
 const Form = mongoose.model<IForm>("Form", FormSchema);
 export default Form;

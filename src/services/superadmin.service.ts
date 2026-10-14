@@ -3,6 +3,7 @@ import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import Upload from "../models/Upload";
+import Template from "../models/Template";
 import { SystemLog } from "../models/SystemLog";
 import { AuditLog } from "../models/AuditLog";
 import { MailLog } from "../models/MailLog";
@@ -14,7 +15,10 @@ import crypto from "crypto";
 import { mailService } from "./mail.service";
 import { escapeRegex } from "../utils/safeInput";
 import path from "path";
-import { getUploadDir, deleteFileAndEmptyParents } from "../controllers/upload.controller";
+import { DEFAULT_STORAGE_QUOTA_BYTES, DEFAULT_WORKSPACE_LIMIT, reconcileUser } from "./storage.service";
+import { getUploadDir } from "../controllers/upload.controller";
+import { deleteAccountData } from "./cleanup.service";
+import { workspacesOfUser } from "./superadminOps.service";
 
 export class SuperAdminService {
   async getPlatformStats() {
@@ -25,10 +29,12 @@ export class SuperAdminService {
     const totalForms = await Form.countDocuments();
     const publishedForms = await Form.countDocuments({ status: "published" });
     const totalResponses = await ResponseModel.countDocuments();
+    // estimatedDocumentCount reads collection metadata: no scan, unlike the counts around it.
+    const totalTemplates = await Template.estimatedDocumentCount();
 
     // Cumulative storage used in bytes
-    const storageUsedResult = await Upload.aggregate([
-      { $group: { _id: null, total: { $sum: "$size" } } },
+    const storageUsedResult = await User.aggregate([
+      { $group: { _id: null, total: { $sum: "$storageUsedBytes" } } },
     ]);
     const totalStorageUsed = storageUsedResult[0]?.total || 0;
 
@@ -65,6 +71,7 @@ export class SuperAdminService {
           suspended: suspendedAdmins,
         },
         totalWorkspaces,
+        totalTemplates,
         totalForms,
         publishedForms,
         totalResponses,
@@ -369,11 +376,7 @@ export class SuperAdminService {
         const formIds = formDocs.map((f) => f._id);
         responseCount = await ResponseModel.countDocuments({ formId: { $in: formIds } });
       }
-      const storageResult = await Upload.aggregate([
-        { $match: { owner: admin._id } },
-        { $group: { _id: null, total: { $sum: "$size" } } },
-      ]);
-      const storageUsed = storageResult[0]?.total || 0;
+      const storageUsed = admin.storageUsedBytes ?? 0;
 
       adminList.push({
         id: admin._id.toString(),
@@ -383,6 +386,7 @@ export class SuperAdminService {
         formCount,
         responseCount,
         storageUsed,
+        storageQuota: admin.storageQuotaBytes ?? DEFAULT_STORAGE_QUOTA_BYTES,
         lastLogin: (admin as any).updatedAt || (admin as any).createdAt,
         status: admin.status || "active",
       });
@@ -415,11 +419,7 @@ export class SuperAdminService {
       const formIds = formDocs.map((f) => f._id);
       responseCount = await ResponseModel.countDocuments({ formId: { $in: formIds } });
     }
-    const storageResult = await Upload.aggregate([
-      { $match: { owner: admin._id } },
-      { $group: { _id: null, total: { $sum: "$size" } } },
-    ]);
-    const storageUsed = storageResult[0]?.total || 0;
+    const storageUsed = admin.storageUsedBytes ?? 0;
 
     return {
       profile: {
@@ -439,7 +439,11 @@ export class SuperAdminService {
         formCount,
         responseCount,
         storageUsed,
+        storageQuota: admin.storageQuotaBytes ?? DEFAULT_STORAGE_QUOTA_BYTES,
+        workspaceLimit: admin.workspaceLimit ?? DEFAULT_WORKSPACE_LIMIT,
+        workspaceCount: await Workspace.countDocuments({ owner: admin._id }),
       },
+      workspaces: await workspacesOfUser(admin._id),
       loginHistory: (admin as any).loginHistory?.length
         ? (admin as any).loginHistory.slice(-5).reverse().map((e: any) => ({
             timestamp: e.timestamp,
@@ -630,6 +634,62 @@ export class SuperAdminService {
     };
   }
 
+  // Accounts over their base quota, most over first.
+  async listOverQuota(limit = 50) {
+    const rows = await User.aggregate([
+      { $addFields: { overBy: { $subtract: ["$storageUsedBytes", "$storageQuotaBytes"] } } },
+      { $match: { overBy: { $gt: 0 } } },
+      { $sort: { overBy: -1 } },
+      { $limit: Math.min(200, Math.max(1, limit)) },
+      { $project: { fullName: 1, email: 1, storageUsedBytes: 1, storageQuotaBytes: 1, overBy: 1 } },
+    ]);
+    return {
+      accounts: rows.map((u: any) => ({
+        id: String(u._id),
+        name: u.fullName,
+        email: u.email,
+        storageUsed: u.storageUsedBytes,
+        storageQuota: u.storageQuotaBytes,
+        overBy: u.overBy,
+      })),
+    };
+  }
+
+  async updateLimits(
+    actor: { id: string; email: string; fullName: string },
+    id: string,
+    data: { storageQuotaBytes?: number; workspaceLimit?: number }
+  ) {
+    const user = await User.findById(id);
+    if (!user) {
+      throw Object.assign(new Error("Admin not found"), { statusCode: 404 });
+    }
+    const before = { storageQuotaBytes: user.storageQuotaBytes, workspaceLimit: user.workspaceLimit };
+    if (data.storageQuotaBytes !== undefined) user.storageQuotaBytes = data.storageQuotaBytes;
+    if (data.workspaceLimit !== undefined) user.workspaceLimit = data.workspaceLimit;
+    await user.save();
+    const after = { storageQuotaBytes: user.storageQuotaBytes, workspaceLimit: user.workspaceLimit };
+    await AuditLog.create({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      actorName: actor.fullName,
+      action: "admin.limits",
+      targetId: user._id.toString(),
+      targetType: "admin",
+      before,
+      after,
+    });
+    return { limits: after };
+  }
+
+  // Recompute from scratch and correct the counter. One user, or everyone when no id is given.
+  async reconcileStorage(id?: string) {
+    const ids = id ? [id] : (await User.find().select("_id").lean()).map((u: any) => u._id);
+    const results = [];
+    for (const uid of ids) results.push(await reconcileUser(uid));
+    return { results: results.filter((r) => r.drift !== 0), checked: results.length };
+  }
+
   async deleteAdmin(
     actor: { id: string; email: string; fullName: string },
     id: string,
@@ -650,7 +710,7 @@ export class SuperAdminService {
 
     const wsId = (admin.workspaceId as any)?._id || admin.workspaceId;
 
-    // 1. Delete Firebase user + MongoDB user
+    // Firebase first: a failure there is logged, never blocks the operator.
     try {
       if (admin.firebaseUid) {
         await auth.deleteUser(admin.firebaseUid);
@@ -658,54 +718,26 @@ export class SuperAdminService {
     } catch (fbErr: any) {
       console.warn("⚠️ Firebase user deletion error:", fbErr.message);
     }
-    await User.deleteOne({ _id: admin._id });
-    const userDeleted = true;
 
-    // 2. Find forms by workspace
+    // Count what is about to go (for the report), then let the shared cascade remove it: every workspace this
+    // account owns, its personal forms, memberships, invitations, sessions, notifications and files. This is the
+    // same path DELETE /api/users/profile uses, so an operator-initiated delete leaves no orphans either.
+    const ownedIds = (await Workspace.find({ owner: admin._id }).select("_id").lean()).map((w) => w._id);
+    const formFilter = { $or: [{ workspaceId: { $in: ownedIds } }, { createdBy: admin._id, workspaceId: null }] };
     // includeDeleted: Trash is not a place data survives account deletion.
-    const forms = wsId ? await Form.find({ workspaceId: wsId }).setOptions({ includeDeleted: true }) : [];
-    const formIds = forms.map((f) => f._id);
-
-    // 3. Find file metadata by owner
-    const uploads = await Upload.find({ owner: admin._id });
-
-    // 4. Delete physical storage objects then their upload docs
-    let filesSuccessCount = 0;
-    let filesFailedCount = 0;
+    const formIds = (await Form.find(formFilter).setOptions({ includeDeleted: true }).select("_id").lean()).map((f) => f._id);
+    const responsesDeleted = formIds.length ? await ResponseModel.countDocuments({ formId: { $in: formIds } }).setOptions({ includeTest: true }) : 0;
     const uploadDir = getUploadDir();
+    const filePaths = (await Upload.find({ owner: admin._id }).select("path").lean())
+      .map((u) => (path.isAbsolute(u.path) ? u.path : path.join(uploadDir, u.path)));
 
-    for (const up of uploads) {
-      if (up.path) {
-        const fullPath = path.isAbsolute(up.path)
-          ? up.path
-          : path.join(uploadDir, up.path);
-        try {
-          if (fs.existsSync(fullPath)) {
-            await deleteFileAndEmptyParents(fullPath, uploadDir);
-          }
-          filesSuccessCount++;
-        } catch (err) {
-          console.error(`Failed to delete physical file: ${fullPath}`, err);
-          filesFailedCount++;
-        }
-      }
-    }
-    await Upload.deleteMany({ owner: admin._id });
+    await deleteAccountData(admin);
 
-    // 5. Delete responses
-    const respResult = formIds.length > 0 ? await ResponseModel.deleteMany({ formId: { $in: formIds } }) : { deletedCount: 0 };
-    const responsesDeleted = respResult.deletedCount || 0;
-
-    // 6. Delete forms
-    const formsResult = wsId ? await Form.deleteMany({ workspaceId: wsId }) : { deletedCount: 0 };
-    const formsDeleted = formsResult.deletedCount || forms.length;
-
-    // 7. Delete workspace
-    let workspaceDeleted = false;
-    if (wsId) {
-      await Workspace.deleteOne({ _id: wsId });
-      workspaceDeleted = true;
-    }
+    const filesFailedCount = filePaths.filter((f) => fs.existsSync(f)).length;
+    const filesSuccessCount = filePaths.length - filesFailedCount;
+    const userDeleted = true;
+    const formsDeleted = formIds.length;
+    const workspaceDeleted = ownedIds.length > 0;
 
     // 8. Write audit log: admin.delete
     await AuditLog.create({

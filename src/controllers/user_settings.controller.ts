@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import User from "../models/User";
 import Notification from "../models/Notification";
+import Workspace from "../models/Workspace";
+import { DEFAULT_STORAGE_QUOTA_BYTES, DEFAULT_WORKSPACE_LIMIT, trashBytesOf } from "../services/storage.service";
 
 const profilePatchSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -24,6 +26,10 @@ export const getProfileMe = async (req: Request, res: Response, next: NextFuncti
     }
 
     const u = authReq.user;
+    const [workspaceCount, trashBytes] = await Promise.all([
+      Workspace.countDocuments({ owner: u._id }),
+      trashBytesOf(u._id),
+    ]);
     res.status(200).json({
       success: true,
       user: {
@@ -39,6 +45,11 @@ export const getProfileMe = async (req: Request, res: Response, next: NextFuncti
         theme: u.theme || "system",
         createdAt: u.createdAt,
         lastLoginAt: u.lastLogin || null,
+        storageUsedBytes: u.storageUsedBytes ?? 0,
+        storageTrashBytes: Math.min(trashBytes, u.storageUsedBytes ?? 0),
+        storageQuotaBytes: u.storageQuotaBytes ?? DEFAULT_STORAGE_QUOTA_BYTES,
+        workspaceCount,
+        workspaceLimit: u.workspaceLimit ?? DEFAULT_WORKSPACE_LIMIT,
       },
     });
   } catch (error) {

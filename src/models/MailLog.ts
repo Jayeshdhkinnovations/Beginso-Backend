@@ -13,7 +13,7 @@ export type MailLogTemplate =
   | "role_changed" | "member_removed" | "invitation_accepted" | "invitation_reminder" | "form_shared"
   | "export_ready" | "export_failed" | "response_limit_reached" | "new_device_signin" | "respondent_receipt"
   | "weekly_digest" | "workspace_deleted" | "email_verified_success" | "password_changed_success"
-  | "respondent_submission_link";
+  | "respondent_submission_link" | "storage_warning";
 
 export interface IMailLog extends Document {
   template: MailLogTemplate;
@@ -33,7 +33,7 @@ const MailLogSchema = new Schema<IMailLog>(
   {
     template: {
       type: String,
-      enum: ["verification", "password_reset", "welcome", "new_response", "mention", "assignment", "role_changed", "member_removed", "invitation_accepted", "invitation_reminder", "form_shared", "export_ready", "export_failed", "response_limit_reached", "new_device_signin", "respondent_receipt", "weekly_digest", "workspace_deleted", "email_verified_success", "password_changed_success", "respondent_submission_link"],
+      enum: ["verification", "password_reset", "welcome", "new_response", "mention", "assignment", "role_changed", "member_removed", "invitation_accepted", "invitation_reminder", "form_shared", "export_ready", "export_failed", "response_limit_reached", "new_device_signin", "respondent_receipt", "weekly_digest", "workspace_deleted", "email_verified_success", "password_changed_success", "respondent_submission_link", "storage_warning"],
       required: true,
       index: true,
     },

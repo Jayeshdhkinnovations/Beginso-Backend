@@ -1,4 +1,6 @@
 // POST /api/auth/forgot-password answers truthfully: only an address that can really get a reset link gets a 202.
+import { MongoMemoryServer } from "mongodb-memory-server";
+import mongoose from "mongoose";
 import request from "supertest";
 import { getAuth } from "firebase-admin/auth";
 import app from "../app";
@@ -21,6 +23,15 @@ const post = (email: unknown) => request(app).post("/api/auth/forgot-password").
 let n = 0;
 const fresh = () => `reset${++n}-${Date.now()}@example.com`; // a new address each time keeps the per-email rate limit out of the way
 
+// The per-IP and per-address rate limiters keep their counters in Mongo: without a connection every request would wait out
+// mongoose's 10 s buffering timeout (and log "failed open") before being answered.
+let mongoServer: MongoMemoryServer;
+beforeAll(async () => {
+  await mongoose.disconnect();
+  mongoServer = await MongoMemoryServer.create();
+  await mongoose.connect(mongoServer.getUri());
+});
+
 beforeEach(() => {
   sent = [];
   auth.generatePasswordResetLink = async () => "https://x.firebaseapp.com/__/auth/action?oobCode=abc&apiKey=k";
@@ -29,7 +40,9 @@ beforeEach(() => {
   };
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await mongoose.disconnect();
+  if (mongoServer) await mongoServer.stop();
   auth.getUserByEmail = realLookup;
   auth.generatePasswordResetLink = realLink;
   (mailService as any).sendMail = realSend;

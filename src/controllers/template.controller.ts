@@ -18,10 +18,11 @@ const BUILT_IN = { $or: [{ workspaceId: null }, { workspaceId: { $exists: false 
 // Sprint 13 (B6.1): two sources. Built-in Beginso templates are visible to everyone; a workspace's own
 // templates are visible ONLY to that workspace (`workspaceId` passed in, already authorized by the route).
 // The public gallery passes nothing, so it can never leak a workspace's templates.
-const fetchActiveTemplates = async (workspaceId?: string | null) => {
+const fetchActiveTemplates = async (workspaceId?: string | null, publicGallery = false) => {
   const query: any = workspaceId
     ? { isActive: true, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }, { workspaceId }] }
     : { isActive: true, ...BUILT_IN };
+  if (publicGallery) query.showInGallery = { $ne: false }; // internal/demo templates stay out of the public gallery
   const templates = await Template.find(query);
   return templates.map((t) => ({
     _id: t._id.toString(),
@@ -34,6 +35,7 @@ const fetchActiveTemplates = async (workspaceId?: string | null) => {
     pages: t.pages,
     theme: t.theme,
     isActive: t.isActive,
+    showInGallery: t.showInGallery !== false,
     source: t.workspaceId ? ("workspace" as const) : ("beginso" as const),
   }));
 };
@@ -58,7 +60,7 @@ export const getTemplates = async (req: Request, res: Response): Promise<void> =
 // GET /api/templates/public - Returns all active templates (unauthenticated, public gallery)
 export const getPublicTemplates = async (req: Request, res: Response): Promise<void> => {
   try {
-    const data = await fetchActiveTemplates();
+    const data = await fetchActiveTemplates(undefined, true);
     res.status(200).json({ success: true, data });
   } catch (error: any) {
     console.error("Error fetching public templates:", error);

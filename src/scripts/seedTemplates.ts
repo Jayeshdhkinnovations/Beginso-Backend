@@ -121,6 +121,7 @@ const seedTemplates = async () => {
         category: "General",
         theme: "classic-light",
         isActive: true,
+        showInGallery: false, // internal test content: not shown to guests
         pages: [
           { id: "page-1", order: 0, title: "Personal Information", description: "Let's start with your basic contact details." },
           { id: "page-2", order: 1, title: "Professional Background", description: "Tell us about your work experience and credentials." },

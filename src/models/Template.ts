@@ -11,6 +11,8 @@ export interface ITemplate extends Document {
   pages?: any[];
   theme: string;
   isActive: boolean;
+  // false = internal/demo template: hidden from the PUBLIC gallery (and so from the guest builder), still listed for signed-in users.
+  showInGallery?: boolean;
   // Sprint 13 (B6.1): null/absent = a built-in Beginso template; set = that workspace's own template.
   workspaceId?: mongoose.Types.ObjectId | null;
   createdBy?: mongoose.Types.ObjectId | null;
@@ -59,6 +61,7 @@ const TemplateSchema = new Schema<ITemplate>(
       default: true,
       required: true,
     },
+    showInGallery: { type: Boolean, default: true },
     workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", default: null, index: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     sourceFormId: { type: Schema.Types.ObjectId, ref: "Form", default: null },

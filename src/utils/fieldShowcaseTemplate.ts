@@ -15,6 +15,7 @@ export const fieldShowcaseTemplate = {
   category: "General",
   theme: "classic-light",
   isActive: true,
+  showInGallery: false, // a demo of every field type, for signed-in users only
   pages: [
     { id: "page-1", order: 0, title: "About you", description: "Text, contact and choice fields." },
     { id: "page-2", order: 1, title: "Dates, money and links", description: "Date, time, currency, address and website fields." },

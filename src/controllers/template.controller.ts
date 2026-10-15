@@ -31,6 +31,7 @@ const fetchActiveTemplates = async (workspaceId?: string | null) => {
     settings: { ...getTemplateSettings(), ...t.toObject().settings },
     category: t.category,
     fields: t.fields,
+    pages: t.pages,
     theme: t.theme,
     isActive: t.isActive,
     source: t.workspaceId ? ("workspace" as const) : ("beginso" as const),

@@ -985,6 +985,14 @@ export class FormService {
       return fieldObj;
     });
 
+    // A copy keeps the original's pages (fields point at them by pageId), its look and its settings. Without these a
+    // duplicate lost every page title, the colours, logo, cover, font and the access mode (QA A4b-001). Plain copies, so
+    // nothing is shared with the original. The closing date is NOT carried over: it belongs to the original's schedule,
+    // and a copy that was already past it would be closed the moment it is published.
+    const plain = <T>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
+    const duplicatedSettings = plain((originalForm.settings as any)?.toObject ? (originalForm.settings as any).toObject() : originalForm.settings) as any;
+    if (duplicatedSettings) delete duplicatedSettings.closeDate;
+
     // Create a fresh unique slug
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     const originalSlug = originalForm.slug || originalForm.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -999,6 +1007,9 @@ export class FormService {
       ...(createdBy ? { createdBy } : {}),
       status: "draft",
       fields: duplicatedFields,
+      pages: plain(originalForm.pages ?? []),
+      branding: plain((originalForm.branding as any)?.toObject ? (originalForm.branding as any).toObject() : originalForm.branding),
+      ...(duplicatedSettings ? { settings: duplicatedSettings } : {}),
       schemaVersion: 1,
       slug: freshSlug,
       // Do NOT carry over a publishedSlug or publishedAt — a duplicate always starts as a draft

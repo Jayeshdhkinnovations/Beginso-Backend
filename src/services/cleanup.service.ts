@@ -62,6 +62,36 @@ const removeUploads = async (filter: Record<string, unknown>, dirEndsAt?: string
   if (uploads.length) await Upload.deleteMany({ _id: { $in: uploads.map((u) => u._id) } });
 };
 
+// An avatar is uploaded through the generic upload endpoint and then saved on the profile as a URL. Replacing or removing
+// it only changed that URL, so the old file and its Upload row stayed forever and kept counting against the owner's
+// storage (QA A8-003). This removes them, but ONLY when the old URL is this user's own user-level upload
+// (<userId>/brand/brand_logo/<file>, never a form's folder) and no form or workspace still uses the same file as a logo
+// or cover. Anything else is left alone. It is best effort: it never throws, so it can never fail the profile update.
+export const deleteReplacedAvatar = async (userId: string, oldUrl: string | null | undefined, newUrl: string | null | undefined): Promise<boolean> => {
+  try {
+    if (!oldUrl || oldUrl === newUrl) return false;
+    const prefix = "/api/upload/file/";
+    const pathname = new URL(oldUrl).pathname;
+    if (!pathname.startsWith(prefix)) return false;
+    const segments = pathname.slice(prefix.length).split("/").map(decodeURIComponent);
+    if (segments.length !== 4 || segments[0] !== userId || segments[1] !== "brand" || segments[2] !== "brand_logo" || segments.some((s) => !s || s === "..")) return false;
+
+    const stillUsed =
+      (await Form.exists({ $or: [{ "branding.logoUrl": oldUrl }, { "branding.coverImageUrl": oldUrl }, { "branding.backgroundImageUrl": oldUrl }] }).setOptions({ includeDeleted: true })) ||
+      (await Workspace.exists({ $or: [{ logo: oldUrl }, { logoUrl: oldUrl }, { "branding.logoUrl": oldUrl }, { "branding.coverImageUrl": oldUrl }] })) ||
+      (await User.exists({ _id: { $ne: userId }, avatarUrl: oldUrl }));
+    if (stillUsed) return false;
+
+    // Upload.path uses the platform's separator, so match either one between segments.
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = segments.map(escapeRegex).join("[\\\\/]");
+    await removeUploads({ owner: userId, path: { $regex: new RegExp("^" + escaped + "$") } });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const segmentPattern = (...parts: string[]): RegExp => new RegExp(`(^|[\\\\/])${parts.join("[\\\\/]")}[\\\\/]`);
 
 export const deleteResponseFiles = async (responseId: string, formId: string): Promise<void> => {

@@ -16,7 +16,7 @@ import { logWorkspaceEvent } from "./event.service";
 import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
 import { evaluateReadiness } from "./readiness.service";
 import { defaultAccessModeForNewForms } from "../utils/accessMode";
-import { staleFormError } from "../utils/staleForm";
+import { staleFormError, versionOf } from "../utils/staleForm";
 import Workspace from "../models/Workspace";
 import User from "../models/User";
 import { queueActivityEmails } from "./notificationEmail.service";
@@ -391,7 +391,7 @@ export class FormService {
     formId: string,
     workspaceId: string,
     patchDetails: Partial<IForm>,
-    expectedUpdatedAt?: Date
+    expected?: { contentVersion: number; saveId?: string }
   ): Promise<IForm> {
     if (patchDetails.pages && patchDetails.pages.length === 0) {
       const err = new Error("Pages array must not be empty");
@@ -414,13 +414,17 @@ export class FormService {
       }
     }
 
-    const updated = await this.formRepository.update(formId, workspaceId, patchDetails, expectedUpdatedAt);
+    const updated = await this.formRepository.update(formId, workspaceId, patchDetails, expected);
     if (!updated) {
-      // With a precondition, "no match" is either a stale write (the form exists, someone saved first) or a form
-      // that is gone. Tell them apart so a deleted form stays a 404.
-      if (expectedUpdatedAt) {
+      // With a precondition, "no match" is either a stale write (the form exists, someone saved first), a retry of
+      // a save that already went through (same saveId: the reply was lost, so report success), or a form that is
+      // gone. Tell them apart so a deleted form stays a 404.
+      if (expected) {
         const current = await this.formRepository.findById(formId, workspaceId).catch(() => null);
-        if (current) throw staleFormError(current.updatedAt);
+        if (current) {
+          if (expected.saveId && current.lastSaveId === expected.saveId) return current;
+          throw staleFormError(versionOf(current));
+        }
       }
       const err = new Error("Form not found for update");
       (err as any).statusCode = 404;

@@ -189,6 +189,10 @@ export interface IForm extends Document {
   deletedAt?: Date | null;
   deletedBy?: mongoose.Types.ObjectId | null;
   viewsCount?: number;
+  // Bumped only by a save that changes builder content; the stale-save check compares it (see utils/staleForm.ts).
+  contentVersion?: number;
+  // The saveId of the last content save, so a retry of a save whose reply was lost is recognised and not refused.
+  lastSaveId?: string | null;
   // Sprint 14 (B1.2): set only when the form was created from a template (POST /api/templates/:id/use). Null
   // for every other form, and for forms made before Sprint 14 - there is no backfill (OQ-4).
   templateId?: mongoose.Types.ObjectId | null;
@@ -363,6 +367,8 @@ const FormSchema = new Schema<IForm>(
     deletedAt: { type: Date, default: null, index: true },
     deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     viewsCount: { type: Number, default: 0 },
+    contentVersion: { type: Number, default: 0 },
+    lastSaveId: { type: String, default: null },
     templateId: { type: Schema.Types.ObjectId, ref: "Template", default: null },
     templateCategory: { type: String, default: null },
     branding: { type: BrandingSchema, default: {} },

@@ -17,6 +17,7 @@ import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
 import { evaluateReadiness } from "./readiness.service";
 import { defaultAccessModeForNewForms } from "../utils/accessMode";
 import { staleFormError, versionOf } from "../utils/staleForm";
+import { copyBrandingFiles } from "./formFiles";
 import { FORM_CLOSE_DATE_PASSED, FORM_CLOSED, FORM_RESPONSE_LIMIT_REACHED, FormClosedCode, formClosedError, formNotFoundError } from "../utils/formUnavailable";
 import Workspace from "../models/Workspace";
 import User from "../models/User";

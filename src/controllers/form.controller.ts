@@ -4,6 +4,7 @@ import { reconcilePinsAfterMove } from "../services/pin.service";
 import { recordEvent } from "../services/event.service";
 import { FormService } from "../services/form.service";
 import { createFormSchema, patchFormSchema } from "../validations/form.validator";
+import { FORM_STALE, staleFormBody, staleFormError, versionOf } from "../utils/staleForm";
 import mongoose from "mongoose";
 import Form from "../models/Form";
 import Membership from "../models/Membership";
@@ -348,6 +349,7 @@ export const createForm = async (req: Request, res: Response, next: NextFunction
       schemaVersion: form.schemaVersion,
       createdAt: form.createdAt,
       updatedAt: form.updatedAt,
+      contentVersion: versionOf(form as any),
       // For compatibility
       success: true,
       message: "Form created successfully",
@@ -425,6 +427,7 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
       schemaVersion: form.schemaVersion,
       createdAt: form.createdAt,
       updatedAt: form.updatedAt,
+      contentVersion: versionOf(form as any),
       // The caller's own role on THIS form: a per-form grant's role, else their workspace role, else
       // owner (a personal form they created). The UI uses it to show only the pages that role can use.
       myRole,
@@ -548,7 +551,17 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
     }
 
     // Validate payload using Zod patch schema
-    const validatedData = patchFormSchema.parse(req.body);
+    const { expectedContentVersion, saveId, ...validatedData } = patchFormSchema.parse(req.body);
+    // Optimistic concurrency (A4b-002): refuse a save based on an out-of-date copy, before doing any work. The
+    // repository applies the same condition atomically, which is what closes the race between two saves.
+    const expected = expectedContentVersion !== undefined ? { contentVersion: expectedContentVersion, saveId } : undefined;
+    // A retry of a save whose reply was lost carries the same saveId the server already stored: that save DID go
+    // through, so answer with the current form instead of reporting a conflict with the user's own edit.
+    let replay = false;
+    if (expected && versionOf(formDoc as any) !== expected.contentVersion) {
+      if (saveId && (formDoc as any).lastSaveId === saveId) replay = true;
+      else throw staleFormError(versionOf(formDoc as any));
+    }
 
     if (validatedData.status !== undefined && validatedData.status !== formDoc.status && !canChangeStatus(authReq)) {
       res.status(403).json({
@@ -563,10 +576,11 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
     }
 
     // Publishing through PATCH/PUT returns the same full form payload as any other update.
-    const form =
-      validatedData.status === "published"
+    const form = replay
+      ? formDoc
+      : validatedData.status === "published"
         ? await formService.publishForm(formId as string, workspaceId, validatedData)
-        : await formService.patchForm(formId as string, workspaceId, validatedData);
+        : await formService.patchForm(formId as string, workspaceId, validatedData, expected);
 
     if (validatedData.status !== undefined && validatedData.status !== formDoc.status) {
       const action = validatedData.status === "published" ? "form.publish" : validatedData.status === "closed" ? "form.close" : "form.unpublish";
@@ -589,12 +603,18 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
       schemaVersion: form.schemaVersion,
       createdAt: form.createdAt,
       updatedAt: form.updatedAt,
+      contentVersion: versionOf(form as any),
       // For compatibility
       success: true,
       message: "Form updated successfully",
       form,
     });
-  } catch (error) {
+  } catch (error: any) {
+    // A stale save is an expected conflict, not a fault: say so, and hand back the current updatedAt.
+    if (error?.code === FORM_STALE) {
+      res.status(409).json(staleFormBody(error));
+      return;
+    }
     next(error);
   }
 };
@@ -938,6 +958,7 @@ export const duplicateForm = async (req: Request, res: Response, next: NextFunct
       schemaVersion: form.schemaVersion,
       createdAt: form.createdAt,
       updatedAt: form.updatedAt,
+      contentVersion: versionOf(form as any),
       // For compatibility
       success: true,
       message: "Form duplicated successfully",

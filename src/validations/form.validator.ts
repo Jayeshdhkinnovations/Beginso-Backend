@@ -339,6 +339,11 @@ export const patchFormSchema = z
     pages: z.array(formPageSchema).min(1, "Pages array must not be empty").optional(),
     branding: brandingSchema.optional(),
     settings: settingsSchema.optional(),
+    // Optimistic concurrency: the contentVersion the client last saw, and an id for this save so a retry of a save
+    // whose reply was lost is recognised. Both optional (older clients keep working) and both are preconditions,
+    // never data: the controller removes them before anything is written.
+    expectedContentVersion: z.number().int().min(0).optional(),
+    saveId: z.string().trim().min(1).max(64).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.pages && data.fields) {

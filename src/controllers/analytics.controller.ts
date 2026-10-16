@@ -7,6 +7,7 @@ import ResponseModel from "../models/Response";
 import StageModel from "../models/Stage";
 import { parseToDate } from "../utils/dateRange";
 import { computeCompletionRate, lifetimeSubmissionCounts } from "../utils/completionRate";
+import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
 import {
   AnalyticsOverviewResponse,
   AnalyticsQuestionsResponse,
@@ -236,22 +237,13 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
     const activeFields = (form.fields || []).filter((f: any) => !f.deleted);
 
     // Helper to resolve field answer value from response.answers under any keying scheme (fieldId, label, id, _id)
+    const answerKeys = buildAnswerKeyMap(form.fields || []);
     const getFieldValue = (answers: Record<string, any> | undefined, field: any): any => {
       if (!answers || typeof answers !== "object") return undefined;
-      if (field.fieldId && answers[field.fieldId] !== undefined) {
-        return answers[field.fieldId];
-      }
-      if (field.label && answers[field.label] !== undefined) {
-        return answers[field.label];
-      }
-      if (field.label && answers[String(field.label).trim()] !== undefined) {
-        return answers[String(field.label).trim()];
-      }
-      const altId = field.id || (field._id ? field._id.toString() : undefined);
-      if (altId && answers[altId] !== undefined) {
-        return answers[altId];
-      }
-      return undefined;
+      const own = readFieldAnswer(answers, field, answerKeys);
+      if (own !== undefined) return own;
+      const altId = field.id;
+      return altId && answers[altId] !== undefined ? answers[altId] : undefined;
     };
 
     const questionsAnalytics = activeFields.map((field: any) => {

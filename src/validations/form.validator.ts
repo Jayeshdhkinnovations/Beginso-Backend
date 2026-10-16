@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
+import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
 import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, IMAGE_MAX_COUNTS, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
@@ -423,6 +424,7 @@ export function validateFieldsIntegrity(fields: IFormField[], pages?: IFormPage[
 
 export const getHiddenFieldIds = (fields: any[], answers: Record<string, any>): Set<string> => {
   const hiddenFieldIds = new Set<string>();
+  const keyMap = buildAnswerKeyMap(fields);
 
   // 1. Map fields by fieldId
   const fieldMap = new Map<string, any>();
@@ -462,7 +464,7 @@ export const getHiddenFieldIds = (fields: any[], answers: Record<string, any>): 
     }
     if (!srcField) return false;
 
-    const val = (srcField.fieldId && answers[srcField.fieldId] !== undefined) ? answers[srcField.fieldId] : answers[srcField.label];
+    const val = readFieldAnswer(answers, srcField, keyMap);
     if (val === undefined || val === null) return false;
 
     const targetVal = rule.condition ? rule.condition.value : rule.value;

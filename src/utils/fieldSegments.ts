@@ -1,4 +1,5 @@
 import ResponseModel from "../models/Response";
+import { answerKeyOf } from "./answerKeys";
 import { submittedAtRange } from "./dateRange";
 
 // Field-level segments (Sprint 14 follow-up, charts v2). ONE definition of "which value(s) did this response
@@ -60,8 +61,11 @@ export const optionLabels = (field: any): string[] => {
   return out;
 };
 
+// `field.answerKey` (set by withAnswerKey) is the question's own storage key. A second question that shares a label has a
+// different key and must NOT fall back to the plain label, which belongs to the first one.
 const rawExpr = (field: any): any => {
-  const keys = [...new Set([field.fieldId, field.label, field.label && String(field.label).trim(), field._id && String(field._id)].filter(Boolean))] as string[];
+  const own = field.answerKey && field.answerKey !== field.label;
+  const keys = [...new Set([field.fieldId, field.answerKey, !own && field.label, !own && field.label && String(field.label).trim(), field._id && String(field._id)].filter(Boolean))] as string[];
   return { $ifNull: [...keys.map((k) => ({ $getField: { field: { $literal: k }, input: "$answers" } })), null] };
 };
 const asArray = { $cond: [{ $isArray: "$$v" }, "$$v", ["$$v"]] };
@@ -122,8 +126,15 @@ const predicate = (field: any, value: string, granularity: Granularity): any => 
 };
 
 // The Response filter for `?field=&value=&granularity=`. Throws SegmentError (400) on anything unusable.
+// A plain copy of the question that also carries its answer key, for the Mongo lookups below.
+export const withAnswerKey = (form: any, field: any): any => ({
+  fieldId: field.fieldId, label: field.label, type: field.type, options: field.options, _id: field._id,
+  answerKey: answerKeyOf(form.fields || [], field),
+});
+
 export const fieldSegmentFilter = (form: any, fieldId: unknown, value: unknown, granularity?: unknown): any => {
-  const field = (form.fields || []).find((f: any) => f.fieldId === fieldId && !f.deleted);
+  const found = (form.fields || []).find((f: any) => f.fieldId === fieldId && !f.deleted);
+  const field = found && withAnswerKey(form, found);
   if (typeof fieldId !== "string" || !field) throw new SegmentError(400, "FIELD_NOT_FOUND", "That question is not on this form");
   if (!fieldKind(field)) throw new SegmentError(400, "FIELD_NOT_CHARTABLE", "That question type cannot be filtered by value");
   if (typeof value !== "string") throw new SegmentError(400, "INVALID_FILTER_VALUE", "value is required with field");
@@ -150,6 +161,7 @@ export const aggregateField = async (
   field: any,
   opts: { from?: unknown; to?: unknown; granularity?: Granularity; includeTest?: boolean }
 ): Promise<FieldAggregate> => {
+  field = withAnswerKey(form, field);
   const kind = fieldKind(field)!;
   const granularity = opts.granularity ?? "day";
   const match: any = { formId: form._id, deletedAt: null };

@@ -14,6 +14,7 @@ import { logWorkspaceEvent } from "./event.service";
 import { keyedHash } from "../utils/pepper";
 import { buildSearchText } from "../utils/responseSearch";
 import { getAccessMode } from "../utils/accessMode";
+import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
 
 // Sprint 13, BE 0.10 / 0.12 (A5.1-A5.4). Everything a respondent can do to a response they own, whether
 // they hold a signed link or a signed-in account. Three rules shape it:
@@ -180,8 +181,9 @@ const answersView = (form: IForm, response: IResponse) => {
     .filter((f) => !f.deleted)
     .sort((a, b) => (pageOrder.get(a.pageId ?? "") ?? 0) - (pageOrder.get(b.pageId ?? "") ?? 0));
   const answers: Record<string, any> = (response.answers as any) ?? {};
+  const keyMap = buildAnswerKeyMap(form.fields ?? []);
   return fields.map((f) => {
-    const raw = answers[f.label] ?? (f.fieldId ? answers[f.fieldId] : undefined);
+    const raw = readFieldAnswer(answers, f, keyMap);
     return {
       fieldId: f.fieldId,
       label: f.label,

@@ -23,6 +23,7 @@ import Workspace from "../models/Workspace";
 import User from "../models/User";
 import { queueActivityEmails } from "./notificationEmail.service";
 import { assertStorageQuota, ownerOfForm, publicFormStorageState } from "./storage.service";
+import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
 
 const MAX_SLUG_ATTEMPTS = 5;
 
@@ -652,6 +653,7 @@ export class FormService {
   // rule a submission could not. `isTest` exempts file fields: a test submission is JSON-only.
   validateAnswers(form: IForm, answers: Record<string, any>, options: { isTest?: boolean; uploadsDisabled?: boolean } = {}): void {
     const hiddenFieldIds = getHiddenFieldIds(form.fields, answers);
+    const keyMap = buildAnswerKeyMap(form.fields);
     const validationErrors: Array<{ field: string; message: string }> = [];
 
     for (const field of form.fields) {
@@ -667,9 +669,9 @@ export class FormService {
         continue;
       }
 
-      let value = (field.fieldId && answers[field.fieldId] !== undefined) ? answers[field.fieldId] : answers[field.label];
+      let value = readFieldAnswer(answers, field, keyMap);
       if (field.type === "file_upload" || field.type === "image_upload") {
-        value = answers[field.label];
+        value = answers[keyMap.get(field) ?? field.label];
       }
       
       // 1. Required check
@@ -872,7 +874,7 @@ export class FormService {
     for (const field of form.fields) {
       if (field.fieldId && hiddenFieldIds.has(field.fieldId)) {
         delete answers[field.fieldId];
-        delete answers[field.label];
+        delete answers[keyMap.get(field) ?? field.label];
       }
     }
 

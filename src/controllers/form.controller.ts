@@ -1,3 +1,4 @@
+import { buildAnswerKeyMap, activeAnswerKeys } from "../utils/answerKeys";
 import { lookupGeo } from "../utils/geo";
 import { Request, Response, NextFunction } from "express";
 import { reconcilePinsAfterMove } from "../services/pin.service";
@@ -1162,6 +1163,13 @@ export const submitPublicForm = async (
     // Retrieve the published form first to use its fields for answers normalization
     const formDoc = await formService.getPublicFormBySlug(slug);
     const form = formDoc.toObject();
+    // Each question has its own storage key (the label, or "Label (2)" for a repeated label) so two questions that
+    // share a label can never overwrite one another's answer.
+    const answerKeys = buildAnswerKeyMap(form.fields);
+    const keyOf = (f: any): string => answerKeys.get(f) ?? f.label;
+    const findFieldByKey = (key: string): any =>
+      form.fields.find((f: any) => (f.fieldId && String(f.fieldId) === String(key)) || (f._id && String(f._id) === String(key))) ??
+      form.fields.find((f: any) => (f.label && f.label.trim() === key.trim()) || keyOf(f) === key);
 
     // Parse answers JSON
     const answers: Record<string, any> = {};
@@ -1188,18 +1196,19 @@ export const submitPublicForm = async (
         // Array of answer objects (reconciled frontend shape)
         for (const ans of parsed.answers) {
           if (ans && typeof ans === "object") {
-            const field = form.fields.find(
-              (f: any) =>
-                (f.fieldId && String(f.fieldId) === String(ans.fieldId)) ||
-                (f._id && String(f._id) === String(ans.fieldId)) ||
-                (f.label && ans.fieldLabel && f.label.trim() === ans.fieldLabel.trim()) ||
-                (f.label && ans.label && f.label.trim() === ans.label.trim())
-            );
+            // An exact field id wins over a label, so two questions that share a label are told apart by id.
+            const field =
+              form.fields.find((f: any) => (f.fieldId && String(f.fieldId) === String(ans.fieldId)) || (f._id && String(f._id) === String(ans.fieldId))) ??
+              form.fields.find(
+                (f: any) =>
+                  (f.label && ans.fieldLabel && f.label.trim() === ans.fieldLabel.trim()) ||
+                  (f.label && ans.label && f.label.trim() === ans.label.trim())
+              );
             const value = ans.value;
             if (field) {
               if (field.fieldId) answers[field.fieldId] = value;
               if (field._id) answers[field._id.toString()] = value;
-              answers[field.label] = value;
+              answers[keyOf(field)] = value;
             } else {
               if (ans.fieldId !== undefined) answers[ans.fieldId] = value;
               if (ans.fieldLabel !== undefined) answers[ans.fieldLabel] = value;
@@ -1212,16 +1221,11 @@ export const submitPublicForm = async (
         for (const key of Object.keys(parsed)) {
           if (key !== "data" && key !== "_hp") {
             const val = parsed[key];
-            const field = form.fields.find(
-              (f: any) =>
-                (f.fieldId && String(f.fieldId) === String(key)) ||
-                (f._id && String(f._id) === String(key)) ||
-                (f.label && f.label.trim() === key.trim())
-            );
+            const field = findFieldByKey(key);
             if (field) {
               if (field.fieldId) answers[field.fieldId] = val;
               if (field._id) answers[field._id.toString()] = val;
-              answers[field.label] = val;
+              answers[keyOf(field)] = val;
             } else {
               answers[key] = val;
             }
@@ -1235,16 +1239,11 @@ export const submitPublicForm = async (
       for (const key of Object.keys(req.body)) {
         if (key !== "data" && key !== "_hp") {
           const val = req.body[key];
-          const field = form.fields.find(
-            (f: any) =>
-              (f.fieldId && String(f.fieldId) === String(key)) ||
-              (f._id && String(f._id) === String(key)) ||
-              (f.label && f.label.trim() === key.trim())
-          );
+          const field = findFieldByKey(key);
           if (field) {
             if (field.fieldId) answers[field.fieldId] = val;
             if (field._id) answers[field._id.toString()] = val;
-            answers[field.label] = val;
+            answers[keyOf(field)] = val;
           } else {
             answers[key] = val;
           }
@@ -1417,7 +1416,7 @@ export const submitPublicForm = async (
             // Map safe file URL to response answers key
             const urlPath = relPath.replace(/\\/g, "/");
             const fileUrl = `${req.protocol}://${req.get("host")}/api/upload/file/${urlPath}`;
-            answers[field.label] = {
+            answers[keyOf(field)] = {
               fileName: fileUrl,
               fileSize: file.size,
               mimeType: file.mimetype,
@@ -1483,12 +1482,12 @@ export const submitPublicForm = async (
             isBranding: false,
           });
         }
-        answers[field.label] = files.map((f) => f.filename);
+        answers[keyOf(field)] = files.map((f) => f.filename);
       }
     }
 
     // Strip raw ObjectId/UUID/fieldId keys from answers — only keep human-readable label keys
-    const labelKeys = new Set(form.fields.map((f: any) => f.label));
+    const labelKeys = activeAnswerKeys(form.fields, answerKeys);
     const _fieldIdKeys = new Set(form.fields.map((f: any) => f.fieldId).filter(Boolean));
     const _idPattern = /^[0-9a-fA-F]{24}$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     for (const key of Object.keys(answers)) {

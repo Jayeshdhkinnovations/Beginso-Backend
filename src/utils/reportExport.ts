@@ -35,7 +35,8 @@ export const formatAnswer = (val: unknown, fieldType?: string): string => {
   if (typeof val === "object") {
     const o = val as Record<string, unknown>;
     const named = o.name ?? o.filename ?? o.fileName ?? o.originalName;
-    if (typeof named === "string") return named;
+    // A stored upload answer carries the full download URL in fileName: the spreadsheet wants just the file name (D5-003).
+    if (typeof named === "string") return /[\/]/.test(named) ? basename(named.split("?")[0]) : named;
     if (typeof o.url === "string") return basename(o.url);
     return Object.values(o)
       .map((v) => formatAnswer(v))
@@ -57,6 +58,8 @@ export interface ExportField {
   _id?: any;
   label: string;
   type: string;
+  /** The key this question's answer is stored under (the label, or "Label (2)" for a repeated label). */
+  answerKey?: string;
 }
 
 export interface FormColumns {
@@ -78,7 +81,8 @@ export const buildQuestionColumns = (forms: { id: string; fields: ExportField[] 
       const base = (f.label || "Untitled question").trim() || "Untitled question";
       const n = (seen.get(base) ?? 0) + 1;
       seen.set(base, n);
-      const name = n === 1 ? base : `${base} (${n})`;
+      // The stored answer key doubles as the column name, so the header is exactly what the answers are filed under.
+      const name = f.answerKey ?? (n === 1 ? base : `${base} (${n})`);
       if (!known.has(name)) {
         if (columns.length >= MAX_QUESTION_COLUMNS) return null;
         known.add(name);
@@ -93,7 +97,7 @@ export const buildQuestionColumns = (forms: { id: string; fields: ExportField[] 
 
 /** Reads one answer the way the stored data is keyed: by label, field id, or the field's _id. */
 export const readAnswer = (answers: Record<string, unknown>, f: ExportField): { key?: string; value: unknown } => {
-  for (const key of [f.label, f.fieldId, f._id ? String(f._id) : undefined]) {
+  for (const key of [f.answerKey ?? f.label, f.fieldId, f._id ? String(f._id) : undefined]) {
     if (key && Object.prototype.hasOwnProperty.call(answers, key)) return { key, value: answers[key] };
   }
   return { value: undefined };
@@ -111,7 +115,7 @@ export const rowCells = (
   const overflow: string[] = [];
   fields.forEach((f, i) => {
     const { key, value } = readAnswer(answers, f);
-    for (const k of [f.label, f.fieldId, f._id ? String(f._id) : undefined]) if (k) claimed.add(k);
+    for (const k of [f.answerKey ?? f.label, f.fieldId, f._id ? String(f._id) : undefined]) if (k) claimed.add(k);
     if (key === undefined) return;
     const text = formatAnswer(value, f.type);
     if (names[i]) byName.set(names[i]!, text);

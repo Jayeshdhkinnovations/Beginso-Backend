@@ -1,4 +1,5 @@
 import ResponseModel from "../models/Response";
+import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
 
 // Sprint 12, BE 0.6 (B4.10/B8.3, OQ-6). "Which field counts as the email" is an open product
 // question (requirements.md OQ-6) — this file records the assumption rather than blocking on it:
@@ -22,7 +23,7 @@ export const extractRespondentEmail = (
   const emailField = fields.find((f) => f.type === "email" && !f.deleted);
   if (!emailField) return null;
 
-  const raw = (emailField.label && answers[emailField.label]) ?? (emailField.fieldId && answers[emailField.fieldId]);
+  const raw = readFieldAnswer(answers, emailField, buildAnswerKeyMap(fields));
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim().toLowerCase();
   return trimmed || null;

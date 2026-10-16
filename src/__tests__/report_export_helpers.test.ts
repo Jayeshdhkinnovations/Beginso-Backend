@@ -27,6 +27,8 @@ describe("formatAnswer", () => {
     expect(formatAnswer("/api/uploads/file/u/f/ab12-cv%20final.pdf", "file_upload")).toBe("ab12-cv final.pdf");
     expect(formatAnswer({ street: "1 Main St", city: "Pune", zip: "" })).toBe("1 Main St, Pune");
     expect(formatAnswer(true)).toBe("Yes");
+    // an upload answer stores the full download URL in fileName; the spreadsheet shows only the file name (D5-003)
+    expect(formatAnswer({ fileName: "https://api.example.com/api/upload/file/u/f/responses/r/ab12-att.txt", fileSize: 3, mimeType: "text/plain" }, "file_upload")).toBe("ab12-att.txt");
   });
 });
 

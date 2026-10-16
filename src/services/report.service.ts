@@ -9,6 +9,7 @@ import { buildResponseFilterQuery } from "../utils/responseFilters";
 import { reportFormsFilter } from "../utils/formAccess";
 import { ScoreService } from "./score.service";
 import Stage from "../models/Stage";
+import { buildAnswerKeyMap } from "../utils/answerKeys";
 import { csvCell, buildQuestionColumns, rowCells, statusLabel, niceAxis, createQuestionTally, OTHER_COLUMN, type ExportField } from "../utils/reportExport";
 
 const scoreService = new ScoreService();
@@ -171,10 +172,14 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
       // One column per question (header = the question's label) after the fixed metadata columns.
       // "Reference" is the per-form sequential id (e.g. "#142"); notes never belong in this export.
       // "Score Average"/"Score Count" mirror the response read path (pooled mean, distinct reviewers).
-      const exportForms = (filters.formId ? forms.filter((f) => f._id.toString() === filters.formId) : forms).map((f) => ({
-        id: f._id.toString(),
-        fields: ((f.fields as any[]) ?? []).map((x) => ({ fieldId: x.fieldId, _id: x._id, label: x.label, type: x.type }) as ExportField),
-      }));
+      const exportForms = (filters.formId ? forms.filter((f) => f._id.toString() === filters.formId) : forms).map((f) => {
+        const raw = (f.fields as any[]) ?? [];
+        const keys = buildAnswerKeyMap(raw);
+        return {
+          id: f._id.toString(),
+          fields: raw.map((x) => ({ fieldId: x.fieldId, _id: x._id, label: x.label, type: x.type, answerKey: keys.get(x) }) as ExportField),
+        };
+      });
       const { columns, byForm } = buildQuestionColumns(exportForms);
       const fieldsByForm = new Map(exportForms.map((f) => [f.id, f.fields]));
       const meta = ["Response ID", "Reference", "Form ID", "Form Title", "Status", "Submitted At", "Score Average", "Score Count"];
@@ -270,9 +275,9 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
       // Per-question tallies over every matching response (streamed), only meaningful for one form.
       let questionSummary: ReturnType<ReturnType<typeof createQuestionTally>["summary"]> | null = null;
       if (filters.formId && formMap.has(filters.formId)) {
-        const qFields = ((formMap.get(filters.formId)!.fields as any[]) ?? []).map(
-          (x) => ({ fieldId: x.fieldId, _id: x._id, label: x.label, type: x.type }) as ExportField
-        );
+        const rawFields = (formMap.get(filters.formId)!.fields as any[]) ?? [];
+        const qKeys = buildAnswerKeyMap(rawFields);
+        const qFields = rawFields.map((x) => ({ fieldId: x.fieldId, _id: x._id, label: x.label, type: x.type, answerKey: qKeys.get(x) }) as ExportField);
         const tally = createQuestionTally(qFields);
         const qCursor = ResponseModel.find(query).select("answers").lean().cursor();
         for (let r = await qCursor.next(); r != null; r = await qCursor.next()) tally.add((r as any).answers ?? {});

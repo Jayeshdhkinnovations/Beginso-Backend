@@ -228,7 +228,8 @@ describe("CSV export carries the score columns", () => {
     expect(done!.status).toBe("completed");
 
     const lines = fs.readFileSync(done!.filePath as string, "utf8").trim().split("\n");
-    expect(lines[0]).toBe("Response ID,Reference,Form ID,Form Title,Status,Submitted At,Score Average,Score Count,Answers");
+    // (trim() above also strips the BOM; the BOM itself is asserted in report_export_files.test.ts)
+    expect(lines[0]).toBe('"Response ID","Reference","Form ID","Form Title","Status","Submitted At","Score Average","Score Count","Name","Other answers"');
     const row = (ref: string) => lines.find((l) => l.includes(ref))!.split(",").map((c) => c.replace(/^"|"$/g, ""));
     expect(row("#1").slice(6, 8)).toEqual(["9.00", "4"]);
     expect(row("#2").slice(6, 8)).toEqual(["5.00", "2"]);

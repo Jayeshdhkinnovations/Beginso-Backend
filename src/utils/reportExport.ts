@@ -1,6 +1,7 @@
 // Pure helpers for the CSV / PDF report exports (kept out of report.service.ts so they can be unit-tested without Mongo).
 
 export const MAX_QUESTION_COLUMNS = 200;
+const MAX_DISTINCT_VALUES = 1000;
 export const OTHER_COLUMN = "Other answers";
 
 /** Escapes one CSV cell. Guards spreadsheet formula injection, but leaves plain numbers ("-5", "+91...") alone. */
@@ -176,7 +177,11 @@ export const createQuestionTally = (fields: ExportField[]) => {
         tallies[i].answered++;
         if (!CHOICE_TYPES.has(f.type)) return;
         const parts = Array.isArray(value) ? value.map((v) => formatAnswer(v)).filter(Boolean) : [text];
-        for (const p of parts) tallies[i].counts.set(p, (tallies[i].counts.get(p) ?? 0) + 1);
+        for (const p of parts) {
+          const c = tallies[i].counts;
+          // bound memory: a choice question holds a handful of options, but legacy free-text values could be unbounded
+          if (c.has(p) || c.size < MAX_DISTINCT_VALUES) c.set(p, (c.get(p) ?? 0) + 1);
+        }
       });
     },
     summary(): QuestionSummary[] {

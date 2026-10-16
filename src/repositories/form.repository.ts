@@ -50,7 +50,9 @@ export class FormRepository {
     return await Form.countDocuments(finalQuery);
   }
 
-  async update(id: string, workspaceId: string, data: Partial<IForm>): Promise<IForm | null> {
+  // `expectedUpdatedAt` makes the write conditional ON THE SAME ATOMIC OPERATION: if another save got in first, no
+  // document matches and nothing is written (null). Never read-then-write: that has a race.
+  async update(id: string, workspaceId: string, data: Partial<IForm>, expectedUpdatedAt?: Date): Promise<IForm | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new mongoose.Error.CastError("ObjectId", id, "_id");
     }
@@ -58,6 +60,7 @@ export class FormRepository {
     if (workspaceId !== undefined && workspaceId !== "") {
       query.workspaceId = workspaceId;
     }
+    if (expectedUpdatedAt) query.updatedAt = expectedUpdatedAt;
     return await Form.findOneAndUpdate(query, data, { returnDocument: "after" });
   }
 

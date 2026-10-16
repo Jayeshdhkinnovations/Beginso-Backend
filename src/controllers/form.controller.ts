@@ -4,6 +4,7 @@ import { reconcilePinsAfterMove } from "../services/pin.service";
 import { recordEvent } from "../services/event.service";
 import { FormService } from "../services/form.service";
 import { createFormSchema, patchFormSchema } from "../validations/form.validator";
+import { FORM_STALE, isStaleWrite, staleFormBody, staleFormError } from "../utils/staleForm";
 import mongoose from "mongoose";
 import Form from "../models/Form";
 import Membership from "../models/Membership";
@@ -548,7 +549,13 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
     }
 
     // Validate payload using Zod patch schema
-    const validatedData = patchFormSchema.parse(req.body);
+    const { expectedUpdatedAt: expectedRaw, ...validatedData } = patchFormSchema.parse(req.body);
+    // Optimistic concurrency (A4b-002): refuse a save based on an out-of-date copy, before doing any work. The
+    // repository applies the same condition atomically, which is what closes the race between two saves.
+    const expectedUpdatedAt = expectedRaw ? new Date(expectedRaw) : undefined;
+    if (expectedUpdatedAt && isStaleWrite((formDoc as any).updatedAt, expectedUpdatedAt)) {
+      throw staleFormError((formDoc as any).updatedAt);
+    }
 
     if (validatedData.status !== undefined && validatedData.status !== formDoc.status && !canChangeStatus(authReq)) {
       res.status(403).json({
@@ -566,7 +573,7 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
     const form =
       validatedData.status === "published"
         ? await formService.publishForm(formId as string, workspaceId, validatedData)
-        : await formService.patchForm(formId as string, workspaceId, validatedData);
+        : await formService.patchForm(formId as string, workspaceId, validatedData, expectedUpdatedAt);
 
     if (validatedData.status !== undefined && validatedData.status !== formDoc.status) {
       const action = validatedData.status === "published" ? "form.publish" : validatedData.status === "closed" ? "form.close" : "form.unpublish";
@@ -594,7 +601,12 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
       message: "Form updated successfully",
       form,
     });
-  } catch (error) {
+  } catch (error: any) {
+    // A stale save is an expected conflict, not a fault: say so, and hand back the current updatedAt.
+    if (error?.code === FORM_STALE) {
+      res.status(409).json(staleFormBody(error));
+      return;
+    }
     next(error);
   }
 };

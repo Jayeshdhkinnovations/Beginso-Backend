@@ -339,6 +339,12 @@ export const patchFormSchema = z
     pages: z.array(formPageSchema).min(1, "Pages array must not be empty").optional(),
     branding: brandingSchema.optional(),
     settings: settingsSchema.optional(),
+    // Optimistic concurrency: the updatedAt the client last saw. Optional so older clients keep working. It is
+    // a precondition, never data: the controller removes it before anything is written.
+    expectedUpdatedAt: z
+      .string()
+      .refine((v) => !Number.isNaN(Date.parse(v)), "expectedUpdatedAt must be an ISO date")
+      .optional(),
   })
   .superRefine((data, ctx) => {
     if (data.pages && data.fields) {

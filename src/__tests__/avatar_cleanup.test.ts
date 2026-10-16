@@ -12,6 +12,7 @@ import app from "../app";
 import User from "../models/User";
 import Upload from "../models/Upload";
 import Form from "../models/Form";
+import Workspace from "../models/Workspace";
 import { clearRateLimitStore } from "../middleware/rateLimiter";
 import { generateToken } from "../utils/generateToken";
 
@@ -49,6 +50,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   clearRateLimitStore();
   await Upload.deleteMany({});
+  await Workspace.deleteMany({});
   await User.updateMany({}, { $set: { storageUsedBytes: 0, avatarUrl: null } });
 });
 afterAll(async () => {
@@ -133,5 +135,43 @@ describe("avatar files are removed when the avatar is replaced or removed", () =
     await setAvatar(user, null);
     expect(onDisk(res.body.url)).toBe(true);
     expect(await rows()).toBe(1);
+  });
+});
+
+// Files uploaded BEFORE stored names were made unique: two uploads with the same name shared one file on disk.
+describe("legacy files that share a name are never deleted out from under someone else", () => {
+  const legacyAvatar = async (name = "logo.png") => {
+    const rel = [String(user._id), "brand", "brand_logo", name];
+    const abs = path.join(uploadDir, ...rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, Buffer.alloc(2000, "x"));
+    const url = `https://api.old-host.example/api/upload/file/${rel.join("/")}`;
+    return { rel, abs, url };
+  };
+  const row = (rel: string[], owner: any, size = 2000) =>
+    Upload.create({ name: "logo.png", size, type: "image/png", path: rel.join("/"), owner: owner._id, chargedTo: owner._id, uploadTime: new Date(), isBranding: true });
+
+  it("a workspace logo that points at the same stored path through another host or scheme still counts as in use", async () => {
+    const { rel, abs, url } = await legacyAvatar();
+    await row(rel, user);
+    await Workspace.create({ name: "WS", slug: "legacy-ws", owner: user._id, logo: `http://localhost:5000/api/upload/file/${rel.join("/")}` });
+    await setAvatar(user, url);
+    await setAvatar(user, null);
+    expect(fs.existsSync(abs)).toBe(true); // a different URL string, the same file: not deleted
+    expect(await rows()).toBe(1);
+  });
+
+  it("when two records share one file, only this user's record is removed and the file stays", async () => {
+    const { rel, abs, url } = await legacyAvatar();
+    await row(rel, user);
+    await row(rel, other); // someone else's upload that landed on the very same file
+    await setAvatar(user, url);
+    await User.updateOne({ _id: user._id }, { $set: { storageUsedBytes: 2000 } });
+    await setAvatar(user, null);
+
+    expect(fs.existsSync(abs)).toBe(true);
+    expect(await rows(user)).toBe(0);
+    expect(await rows(other)).toBe(1); // the other record, and the file it serves, survive
+    expect(await used()).toBe(0); // and this user gets their share back
   });
 });

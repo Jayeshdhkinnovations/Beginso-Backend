@@ -76,16 +76,28 @@ export const deleteReplacedAvatar = async (userId: string, oldUrl: string | null
     const segments = pathname.slice(prefix.length).split("/").map(decodeURIComponent);
     if (segments.length !== 4 || segments[0] !== userId || segments[1] !== "brand" || segments[2] !== "brand_logo" || segments.some((s) => !s || s === "..")) return false;
 
+    const escapeRegex = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Compare the stored PATH, not the whole URL string: the same file can be linked from another host or scheme
+    // (http vs https, an API alias), and a legacy upload can share its name with another one.
+    const urlEnding = new RegExp(escapeRegex(pathname) + "$");
     const stillUsed =
-      (await Form.exists({ $or: [{ "branding.logoUrl": oldUrl }, { "branding.coverImageUrl": oldUrl }, { "branding.backgroundImageUrl": oldUrl }] }).setOptions({ includeDeleted: true })) ||
-      (await Workspace.exists({ $or: [{ logo: oldUrl }, { logoUrl: oldUrl }, { "branding.logoUrl": oldUrl }, { "branding.coverImageUrl": oldUrl }] })) ||
-      (await User.exists({ _id: { $ne: userId }, avatarUrl: oldUrl }));
+      (await Form.exists({ $or: [{ "branding.logoUrl": urlEnding }, { "branding.coverImageUrl": urlEnding }, { "branding.backgroundImageUrl": urlEnding }] }).setOptions({ includeDeleted: true })) ||
+      (await Workspace.exists({ $or: [{ logo: urlEnding }, { logoUrl: urlEnding }, { "branding.logoUrl": urlEnding }, { "branding.coverImageUrl": urlEnding }] })) ||
+      (await User.exists({ _id: { $ne: userId }, avatarUrl: urlEnding }));
     if (stillUsed) return false;
 
     // Upload.path uses the platform's separator, so match either one between segments.
-    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const escaped = segments.map(escapeRegex).join("[\\\\/]");
-    await removeUploads({ owner: userId, path: { $regex: new RegExp("^" + escaped + "$") } });
+    const pathRegex = new RegExp("^" + segments.map(escapeRegex).join("[\\\\/]") + "$");
+    // Before names were made unique, two uploads called the same thing shared ONE file and had one row each. If more
+    // than one row points here the file may still serve someone else: only this user's own record goes (which gives their
+    // share back) and the file stays.
+    const rows = await Upload.find({ path: pathRegex }).select("_id owner").lean();
+    if (rows.length > 1) {
+      const mine = rows.find((r) => String(r.owner) === userId);
+      if (mine) await Upload.deleteMany({ _id: mine._id });
+      return !!mine;
+    }
+    await removeUploads({ owner: userId, path: pathRegex });
     return true;
   } catch {
     return false;

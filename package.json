@@ -19,6 +19,7 @@
     "migrate:charts-v2": "ts-node src/scripts/migrateChartsV2.ts",
     "time:search-analytics": "ts-node src/scripts/timeSearchAndAnalytics.ts",
     "reconcile:storage": "ts-node src/scripts/reconcileStorage.ts",
+    "audit:uploads": "ts-node src/scripts/auditUploads.ts",
     "backfill:readstate": "ts-node src/scripts/backfillReadState.ts",
     "backfill:search": "ts-node src/scripts/backfillResponseSearchText.ts",
     "backfill:duplicates": "ts-node src/scripts/backfillDuplicateDetection.ts",

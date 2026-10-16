@@ -211,20 +211,27 @@ export const requirePermission = (
               userId: user._id,
             }).lean();
 
-            // A grant can only add access, never lower it: the form's owner (personal creator,
-            // workspace owner) and workspace admins always resolve through the normal role check below.
+            // A grant can only add access, never lower it. The form's owner (personal creator, workspace owner) and
+            // workspace admins always resolve through the normal role check below, and so does any other member whose
+            // OWN workspace role already allows this action: a workspace Editor given a per-form "Reviewer" grant used to
+            // lose the right to edit that form, because the grant's smaller role was checked instead of theirs (QA A9-004).
+            // A grant is only used when it allows something the membership does not (a viewer given edit on one form).
             if (grant) {
-              let fullAccess = false;
+              let membershipSuffices = false;
               if (!targetForm.workspaceId) {
-                fullAccess = String(targetForm.createdBy) === String(user._id);
+                membershipSuffices = String(targetForm.createdBy) === String(user._id);
               } else {
                 const [m, ws] = await Promise.all([
                   Membership.findOne({ userId: user._id, workspaceId: targetForm.workspaceId }).select("role").lean(),
                   Workspace.findById(targetForm.workspaceId).select("owner").lean(),
                 ]);
-                fullAccess = m?.role === "owner" || m?.role === "admin" || String(ws?.owner) === String(user._id);
+                membershipSuffices =
+                  m?.role === "owner" ||
+                  m?.role === "admin" ||
+                  String(ws?.owner) === String(user._id) ||
+                  (!!m && (!permission || hasPermission(m.role as WorkspaceRole, permission)));
               }
-              if (fullAccess) grant = null;
+              if (membershipSuffices) grant = null;
             }
 
             if (grant) {

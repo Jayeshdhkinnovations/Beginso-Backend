@@ -93,23 +93,41 @@ export const listWorkspaceAudit = async (req: Request, res: Response) => {
 
     const query: any = { workspaceId };
 
-    if (req.query.actorId) {
-      query.actorId = req.query.actorId;
-    } else if (req.query.actorEmail) {
-      query.actorEmail = { $regex: String(req.query.actorEmail).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    // Filters come straight from the query string, so each is checked before it reaches Mongo. A malformed value used
+    // to fail inside the query ("Cast to ObjectId failed" / "Cast to date failed") as a logged 500 (QA A16-010). A
+    // repeated filter (?action=a&action=b) arrives as an array and is refused for the same reason.
+    const bad = (message: string) => res.status(400).json({ success: false, message, error: { code: "INVALID_FILTER", message } });
+    const one = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
+    for (const key of ["actorId", "actorEmail", "action", "from", "to"] as const) {
+      const v = req.query[key];
+      if (v !== undefined && typeof v !== "string") return bad(`${key} must be a single value`);
     }
 
-    if (req.query.action) {
-      query.action = req.query.action;
+    const actorId = one(req.query.actorId);
+    const actorEmail = one(req.query.actorEmail);
+    if (actorId) {
+      if (!/^[0-9a-fA-F]{24}$/.test(actorId)) return bad("actorId must be a valid id");
+      query.actorId = actorId;
+    } else if (actorEmail) {
+      query.actorEmail = { $regex: actorEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     }
 
-    if (req.query.from || req.query.to) {
+    const action = one(req.query.action);
+    if (action) query.action = action;
+
+    const from = one(req.query.from);
+    const to = one(req.query.to);
+    if (from || to) {
       query.createdAt = {};
-      if (req.query.from) {
-        query.createdAt.$gte = new Date(req.query.from as string);
+      if (from) {
+        const d = new Date(from);
+        if (Number.isNaN(d.getTime())) return bad("from must be a valid date");
+        query.createdAt.$gte = d;
       }
-      if (req.query.to) {
-        query.createdAt.$lte = new Date(req.query.to as string);
+      if (to) {
+        const d = new Date(to);
+        if (Number.isNaN(d.getTime())) return bad("to must be a valid date");
+        query.createdAt.$lte = d;
       }
     }
 

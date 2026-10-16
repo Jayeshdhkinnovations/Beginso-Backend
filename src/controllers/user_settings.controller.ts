@@ -4,6 +4,7 @@ import User from "../models/User";
 import Notification from "../models/Notification";
 import Workspace from "../models/Workspace";
 import { DEFAULT_STORAGE_QUOTA_BYTES, DEFAULT_WORKSPACE_LIMIT, trashBytesOf } from "../services/storage.service";
+import { deleteReplacedAvatar } from "../services/cleanup.service";
 
 const profilePatchSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -103,9 +104,13 @@ export const patchProfileMe = async (req: Request, res: Response, next: NextFunc
       updates.theme = theme;
     }
 
+    // The avatar being replaced or removed: remembered so its file can be deleted once the new value is saved.
+    const previousAvatar = avatarUrl !== undefined ? ((await User.findById(authReq.user._id).select("avatarUrl").lean()) as any)?.avatarUrl : undefined;
+
     const updatedUser = await User.findByIdAndUpdate(authReq.user._id, updates, {
       returnDocument: "after",
     });
+    if (avatarUrl !== undefined) await deleteReplacedAvatar(authReq.user._id.toString(), previousAvatar, updatedUser?.avatarUrl);
 
     res.status(200).json({
       success: true,

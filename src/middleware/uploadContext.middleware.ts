@@ -12,7 +12,13 @@ export const prepareUploadContext = async (req: any, res: Response, next: NextFu
     let form: any;
     try {
       form = await new FormService().getPublicFormBySlug(slug as string);
-    } catch {
+    } catch (err: any) {
+      // A form its owner closed answers 410 with the reason (closed, deadline passed, limit reached) so the respondent
+      // sees why; every other failure stays the same indistinguishable 404.
+      if (err?.statusCode === 410 && err.code) {
+        res.status(410).json({ success: false, message: err.message, error: { code: err.code, message: err.message } });
+        return;
+      }
       res.status(404).json({ success: false, message: "Form not found" });
       return;
     }

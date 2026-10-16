@@ -42,7 +42,7 @@ afterAll(async () => {
 });
 
 describe("Public Form closeDate & responseLimit Integration Tests", () => {
-  it("should return 404 on fetch and submit if closeDate has passed, and the sweep closes it", async () => {
+  it("should return 410 FORM_CLOSE_DATE_PASSED on fetch and submit if closeDate has passed, and the sweep closes it", async () => {
     // 1. Create a form with closeDate in the past
     const createRes = await request(app)
       .post("/api/forms")
@@ -68,9 +68,10 @@ describe("Public Form closeDate & responseLimit Integration Tests", () => {
     let formInDb = await Form.findById(formId);
     expect(formInDb?.status).toBe("published");
 
-    // 3. Try to fetch public schema -> should return 404
+    // 3. Try to fetch public schema -> 410 with the reason
     const fetchRes = await request(app).get(`/api/public/${slug}`);
-    expect(fetchRes.status).toBe(404);
+    expect(fetchRes.status).toBe(410);
+    expect(fetchRes.body.error.code).toBe("FORM_CLOSE_DATE_PASSED");
 
     // A public GET never writes: the stored status is still "published" ...
     formInDb = await Form.findById(formId);
@@ -80,13 +81,14 @@ describe("Public Form closeDate & responseLimit Integration Tests", () => {
     formInDb = await Form.findById(formId);
     expect(formInDb?.status).toBe("closed");
 
-    // 4. Try to submit -> should return 404
+    // 4. Try to submit -> 410 with the same reason (also after the sweep stored it as plain "closed")
     const submitRes = await request(app)
       .post(`/api/public/${slug}/submit`)
       .send({
         answers: [{ fieldLabel: "Email", value: "test@example.com" }]
       });
-    expect(submitRes.status).toBe(404);
+    expect(submitRes.status).toBe(410);
+    expect(submitRes.body.error.code).toBe("FORM_CLOSE_DATE_PASSED");
   });
 
   it("should return 200 on fetch and 201 on submit if closeDate is in the future", async () => {
@@ -122,7 +124,7 @@ describe("Public Form closeDate & responseLimit Integration Tests", () => {
     expect(submitRes.status).toBe(200);
   });
 
-  it("should return 404 on fetch and submit if responseLimit has been reached, and lazily flip status to closed", async () => {
+  it("should return 410 FORM_RESPONSE_LIMIT_REACHED on fetch and submit if responseLimit has been reached, and lazily flip status to closed", async () => {
     // 1. Create a form with responseLimit = 1 (responseLimitEnabled = true)
     const createRes = await request(app)
       .post("/api/forms")
@@ -153,9 +155,10 @@ describe("Public Form closeDate & responseLimit Integration Tests", () => {
     let formInDb = await Form.findById(formId);
     expect(formInDb?.status).toBe("published");
 
-    // 4. Try to fetch public schema -> should return 404
+    // 4. Try to fetch public schema -> 410 with the reason
     const fetchRes = await request(app).get(`/api/public/${slug}`);
-    expect(fetchRes.status).toBe(404);
+    expect(fetchRes.status).toBe(410);
+    expect(fetchRes.body.error.code).toBe("FORM_RESPONSE_LIMIT_REACHED");
 
     // A public GET never writes, so the form is still marked published ...
     formInDb = await Form.findById(formId);
@@ -167,7 +170,8 @@ describe("Public Form closeDate & responseLimit Integration Tests", () => {
       .send({
         answers: [{ fieldLabel: "Email", value: "second@example.com" }]
       });
-    expect(submitRes.status).toBe(404);
+    expect(submitRes.status).toBe(410);
+    expect(submitRes.body.error.code).toBe("FORM_RESPONSE_LIMIT_REACHED");
     formInDb = await Form.findById(formId);
     expect(formInDb?.status).toBe("closed");
   });

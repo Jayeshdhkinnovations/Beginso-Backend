@@ -98,7 +98,8 @@ describe("nothing is written before the form is known to accept responses", () =
   it("a closed form takes no files either", async () => {
     const closed: any = await mkForm({ status: "closed" });
     const res = await submit(closed.publishedSlug).field("data", "{}").attach("CV", pdf(), "cv.pdf");
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(410); // the reason still reaches the respondent through the upload middleware
+    expect(res.body.error.code).toBe("FORM_CLOSED");
     expect(files()).toEqual([]);
   });
 });

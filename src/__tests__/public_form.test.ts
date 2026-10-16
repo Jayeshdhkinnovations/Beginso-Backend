@@ -118,7 +118,7 @@ describe("GET /api/public/:slug Integration Tests", () => {
     expect(publicRes.status).toBe(404);
   });
 
-  it("should return 404 for a closed form slug", async () => {
+  it("should return 410 FORM_CLOSED for a form its owner closed", async () => {
     // 1. Create and publish form
     const createRes = await request(app)
       .post("/api/forms")
@@ -142,11 +142,12 @@ describe("GET /api/public/:slug Integration Tests", () => {
       .set("Authorization", `Bearer ${tokenA}`);
     expect(closeRes.status).toBe(200);
 
-    // 3. Fetch public form by slug - must return 404
+    // 3. Fetch public form by slug - 410 with the reason, so the respondent is told it is closed (not "not found")
     const publicRes = await request(app)
       .get(`/api/public/${slug}`);
     
-    expect(publicRes.status).toBe(404);
+    expect(publicRes.status).toBe(410);
+    expect(publicRes.body.error.code).toBe("FORM_CLOSED");
   });
 
   it("should return 404 for an unknown slug", async () => {

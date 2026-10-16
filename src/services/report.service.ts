@@ -8,6 +8,8 @@ import ResponseModel from "../models/Response";
 import { buildResponseFilterQuery } from "../utils/responseFilters";
 import { reportFormsFilter } from "../utils/formAccess";
 import { ScoreService } from "./score.service";
+import Stage from "../models/Stage";
+import { csvCell, buildQuestionColumns, rowCells, statusLabel, niceAxis, createQuestionTally, OTHER_COLUMN, type ExportField } from "../utils/reportExport";
 
 const scoreService = new ScoreService();
 
@@ -17,27 +19,6 @@ const ensureReportsDir = (): void => {
   if (!fs.existsSync(UPLOADS_REPORTS_DIR)) {
     fs.mkdirSync(UPLOADS_REPORTS_DIR, { recursive: true });
   }
-};
-
-/**
- * Escapes special characters for CSV values & prevents formula injection.
- */
-const escapeCsv = (val: any): string => {
-  if (val === null || val === undefined) return '""';
-  if (Array.isArray(val)) {
-    val = val.join("; ");
-  } else if (typeof val === "object") {
-    val = JSON.stringify(val);
-  }
-  let str = String(val);
-
-  // Prevent CSV formula injection for spreadsheet software
-  if (/^[=+\-@\t\r]/.test(str)) {
-    str = "'" + str;
-  }
-
-  const escaped = str.replace(/"/g, '""');
-  return `"${escaped}"`;
 };
 
 /**
@@ -187,36 +168,57 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
     if (report.format === "csv") {
       const writeStream = fs.createWriteStream(targetFilePath, { encoding: "utf8" });
 
-      // CSV Header. "Reference" (Sprint 12, BE 0.3 / B8.1) is the per-form sequential id (e.g.
-      // "#142") — never a note, note count, or anything note-derived belongs in this export.
-      // "Score Average"/"Score Count" (Sprint 12, BE 0.5 / B6.1) mirror the same fields returned
-      // on the response read path — pooled mean across every reviewer's rows, distinct-reviewer count.
-      writeStream.write(`Response ID,Reference,Form ID,Form Title,Status,Submitted At,Score Average,Score Count,Answers\n`);
+      // One column per question (header = the question's label) after the fixed metadata columns.
+      // "Reference" is the per-form sequential id (e.g. "#142"); notes never belong in this export.
+      // "Score Average"/"Score Count" mirror the response read path (pooled mean, distinct reviewers).
+      const exportForms = (filters.formId ? forms.filter((f) => f._id.toString() === filters.formId) : forms).map((f) => ({
+        id: f._id.toString(),
+        fields: ((f.fields as any[]) ?? []).map((x) => ({ fieldId: x.fieldId, _id: x._id, label: x.label, type: x.type }) as ExportField),
+      }));
+      const { columns, byForm } = buildQuestionColumns(exportForms);
+      const fieldsByForm = new Map(exportForms.map((f) => [f.id, f.fields]));
+      const meta = ["Response ID", "Reference", "Form ID", "Form Title", "Status", "Submitted At", "Score Average", "Score Count"];
+      // UTF-8 BOM so Excel reads accented / non-Latin text correctly.
+      writeStream.write("﻿" + [...meta, ...columns, OTHER_COLUMN].map(csvCell).join(",") + "\n");
 
-      // Stream responses to prevent in-memory spikes. Scores are fetched in batches (not per-row)
-      // to avoid N+1 while still streaming — same filters-respecting pattern as the rest of the
-      // query above.
+      const stageNames = new Map<string, string>();
+      const loadStageNames = async (rows: any[]) => {
+        const missing = [...new Set(rows.map((r) => r.stageId?.toString()).filter((id) => id && !stageNames.has(id)))];
+        if (missing.length === 0) return;
+        const found = await Stage.find({ _id: { $in: missing } }).select("name").lean();
+        missing.forEach((id) => stageNames.set(id as string, ""));
+        found.forEach((st: any) => stageNames.set(st._id.toString(), st.name));
+      };
+
       const SCORE_BATCH_SIZE = 200;
       let batch: any[] = [];
       const flushBatch = async () => {
         if (batch.length === 0) return;
         const scoreMap = await scoreService.aggregateForMany(batch.map((r) => r._id.toString()));
+        await loadStageNames(batch);
         for (const r of batch) {
-          const formTitle = formMap.get(r.formId.toString())?.title || "Form Response";
-          // A drawn signature is a base64 PNG (up to ~300 KB): export a marker, not the image bytes.
-          const exportable = Object.fromEntries(
-            Object.entries((r.answers as Record<string, unknown>) ?? {}).map(([k, v]) => [k, typeof v === "string" && v.startsWith("data:image/") ? "[drawn signature]" : v])
+          const formId = r.formId.toString();
+          const formTitle = formMap.get(formId)?.title || "Form Response";
+          const { cells, other } = rowCells(
+            (r.answers as Record<string, unknown>) ?? {},
+            fieldsByForm.get(formId) ?? [],
+            byForm.get(formId) ?? [],
+            columns
           );
-          const answersFormatted = escapeCsv(exportable);
           const agg = scoreMap.get(r._id.toString()) || { scoreAverage: null, scoreCount: 0 };
-          const line = `${escapeCsv(r._id.toString())},${escapeCsv(r.reference || "")},${escapeCsv(
-            r.formId.toString()
-          )},${escapeCsv(formTitle)},${escapeCsv(r.status || "new")},${escapeCsv(
-            r.submittedAt ? r.submittedAt.toISOString() : r.createdAt.toISOString()
-          )},${escapeCsv(agg.scoreAverage !== null ? agg.scoreAverage.toFixed(2) : "")},${escapeCsv(
-            agg.scoreCount
-          )},${answersFormatted}\n`;
-          writeStream.write(line);
+          const row = [
+            r._id.toString(),
+            r.reference || "",
+            formId,
+            formTitle,
+            statusLabel(r.status, r.stageId ? stageNames.get(r.stageId.toString()) : null),
+            (r.submittedAt ?? r.createdAt).toISOString(),
+            agg.scoreAverage !== null ? agg.scoreAverage.toFixed(2) : "",
+            agg.scoreCount,
+            ...cells,
+            other,
+          ];
+          writeStream.write(row.map(csvCell).join(",") + "\n");
         }
         batch = [];
       };
@@ -264,6 +266,18 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
       const rangeStart = fromDateObj ?? (dayKeys.length > 0 ? new Date(dayKeys[0]) : new Date(Date.now() - 29 * 86400000));
       const rangeEnd = toDateObj ?? new Date();
       const trendBuckets = buildTrendBuckets(rangeStart, rangeEnd, countsByDay);
+
+      // Per-question tallies over every matching response (streamed), only meaningful for one form.
+      let questionSummary: ReturnType<ReturnType<typeof createQuestionTally>["summary"]> | null = null;
+      if (filters.formId && formMap.has(filters.formId)) {
+        const qFields = ((formMap.get(filters.formId)!.fields as any[]) ?? []).map(
+          (x) => ({ fieldId: x.fieldId, _id: x._id, label: x.label, type: x.type }) as ExportField
+        );
+        const tally = createQuestionTally(qFields);
+        const qCursor = ResponseModel.find(query).select("answers").lean().cursor();
+        for (let r = await qCursor.next(); r != null; r = await qCursor.next()) tally.add((r as any).answers ?? {});
+        questionSummary = tally.summary();
+      }
 
       const listResponses = await ResponseModel.find(query).sort({ submittedAt: -1 }).limit(APPENDIX_LIMIT);
 
@@ -399,10 +413,9 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
         const plotY = chartY + 8;
         const plotH = chartH - chartPadBottom - 16;
 
-        const maxCount = Math.max(1, ...trendBuckets.map((b) => b.count));
-        const yTicks = 4;
-        for (let i = 0; i <= yTicks; i++) {
-          const val = Math.round((maxCount / yTicks) * i);
+        const axis = niceAxis(Math.max(1, ...trendBuckets.map((b) => b.count)));
+        const maxCount = axis.max;
+        for (const val of axis.ticks) {
           const y = plotY + plotH - (val / maxCount) * plotH;
           doc.moveTo(plotX, y).lineTo(plotX + plotW, y).strokeColor("#F1F5F9").lineWidth(0.5).stroke();
           doc
@@ -440,6 +453,31 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
         }
 
         currentY = chartY + chartH + 18;
+
+        // --- 4b. PER-QUESTION BREAKDOWN (single-form reports; computed over the full matching set) ---
+        // All-forms reports skip this section (a breakdown only makes sense for one form's questions).
+        if (questionSummary) {
+          doc.fillColor("#0F172A").fontSize(12).font("Helvetica-Bold").text("Question Breakdown", 40, currentY);
+          currentY += 16;
+          for (const q of questionSummary) {
+            const rows = q.counts ? q.counts.slice(0, 8) : [];
+            if (currentY + 22 + rows.length * 11 > 760) {
+              doc.addPage();
+              currentY = 40;
+            }
+            doc.fillColor("#334155").fontSize(9).font("Helvetica-Bold").text(q.label, 40, currentY, { width: 515, lineBreak: false, ellipsis: true });
+            doc.fillColor("#94A3B8").fontSize(8).font("Helvetica").text(`${q.answered} of ${totalCount} answered`, 40, currentY + 11);
+            currentY += 24;
+            for (const c of rows) {
+              const pct = q.answered > 0 ? Math.round((c.count / q.answered) * 100) : 0;
+              doc.fillColor("#475569").fontSize(8).font("Helvetica").text(c.value, 52, currentY, { width: 330, lineBreak: false, ellipsis: true });
+              doc.text(`${c.count} (${pct}%)`, 400, currentY, { width: 100, align: "right", lineBreak: false });
+              currentY += 11;
+            }
+            currentY += 6;
+          }
+          currentY += 8;
+        }
 
         // --- 5. RESPONSE RECORDS APPENDIX TABLE ---
         doc.fillColor("#0F172A").fontSize(12).font("Helvetica-Bold").text("Response Records Appendix", 40, currentY);

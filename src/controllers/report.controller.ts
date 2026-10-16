@@ -9,6 +9,7 @@ import Form from "../models/Form";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { kickReportQueue } from "../services/reportQueue";
 import { countReportRows } from "../services/report.service";
+import { exportFilename } from "../utils/reportExport";
 import { userHasAccessToForm, reportFormsFilter } from "../utils/formAccess";
 import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
 
@@ -385,10 +386,13 @@ export const getReportFile = async (req: Request, res: Response, next: NextFunct
     }
 
     const contentType = report.format === "csv" ? "text/csv" : "application/pdf";
-    const filename = `beginso_report_${report._id.toString()}.${report.format}`;
+    // Readable name (form title + date); the stored file and download URL are unchanged.
+    const reportFormId = report.filters?.formId;
+    const titledForm = reportFormId && mongoose.Types.ObjectId.isValid(reportFormId) ? await Form.findById(reportFormId).select("title").lean() : null;
+    const filename = exportFilename(titledForm?.title, (report as any).createdAt ?? new Date(), report.format);
 
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
 
     // Sprint 14 (B1.4): record the download once the file has actually gone out; an aborted or failed
     // transfer never fires "finish", so it is never logged as a success.

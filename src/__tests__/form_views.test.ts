@@ -91,7 +91,7 @@ describe("view counting", () => {
 });
 
 describe("completion rate on the form overview", () => {
-  it("is null until a view is counted, then responses divided by views, capped at 100", async () => {
+  it("is null until a view is counted, then responses divided by views; null again if responses exceed views", async () => {
     await ResponseModel.create([{ formId: form._id, answers: {} }, { formId: form._id, answers: {} }]);
     expect((await overview()).body.overview.completionRate).toBeNull();
 
@@ -99,6 +99,9 @@ describe("completion rate on the form overview", () => {
     expect((await overview()).body.overview.completionRate).toBe(25);
 
     await Form.updateOne({ _id: form._id }, { $set: { viewsCount: 1 } }); // more responses than views (older responses)
+    expect((await overview()).body.overview.completionRate).toBeNull(); // never a fabricated 100%
+
+    await Form.updateOne({ _id: form._id }, { $set: { viewsCount: 2 } }); // exactly all viewers submitted
     expect((await overview()).body.overview.completionRate).toBe(100);
   });
 });

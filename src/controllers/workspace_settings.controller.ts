@@ -12,6 +12,7 @@ import Upload from "../models/Upload";
 import User from "../models/User";
 import Notification from "../models/Notification";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
+import { updateWorkspaceSchema } from "../validations/workspace.validator";
 
 const UPLOADS_EXPORTS_DIR = path.join(process.cwd(), "uploads", "exports");
 
@@ -47,6 +48,8 @@ const purgeExpiredExports = (): void => {
 };
 
 const workspacePatchSchema = z.object({
+  // Same rules as PATCH /api/workspaces/:id. Without them Zod strips both keys and the save is a silent no-op.
+  ...updateWorkspaceSchema.pick({ description: true, timezone: true }).shape,
   name: z.string().min(1).max(100).optional(),
   logoUrl: z.union([z.string().url(), z.null()]).optional(),
   branding: z.record(z.any(), z.any()).optional(),
@@ -91,6 +94,8 @@ export const getCurrentWorkspace = async (req: Request, res: Response, next: Nex
       workspace: {
         id: workspace._id.toString(),
         name: workspace.name,
+        description: workspace.description || "",
+        timezone: workspace.timezone || "UTC",
         logoUrl: workspace.logoUrl || workspace.logo || null,
         branding: workspace.branding || {},
         notificationPreferences: prefs,
@@ -128,7 +133,7 @@ export const patchCurrentWorkspace = async (req: Request, res: Response, next: N
       return;
     }
 
-    const { name, logoUrl, branding, notificationPreferences } = parseResult.data;
+    const { name, logoUrl, branding, notificationPreferences, description, timezone } = parseResult.data;
 
     if (name) {
       workspace.name = name;
@@ -154,6 +159,8 @@ export const patchCurrentWorkspace = async (req: Request, res: Response, next: N
       }
     }
 
+    if (description !== undefined) workspace.description = description ?? "";
+    if (timezone !== undefined) workspace.timezone = timezone;
     if (logoUrl !== undefined) {
       workspace.logoUrl = logoUrl;
       workspace.logo = logoUrl || "";
@@ -181,6 +188,8 @@ export const patchCurrentWorkspace = async (req: Request, res: Response, next: N
       workspace: {
         id: workspace._id.toString(),
         name: workspace.name,
+        description: workspace.description || "",
+        timezone: workspace.timezone || "UTC",
         logoUrl: workspace.logoUrl || workspace.logo || null,
         branding: workspace.branding || {},
         notificationPreferences: workspace.notificationPreferences,

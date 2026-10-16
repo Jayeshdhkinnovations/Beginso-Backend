@@ -19,6 +19,7 @@ import path from "path";
 import fs from "fs";
 import { getUploadDir } from "./upload.controller";
 import { getRealClientIp, hashIp } from "../utils/ip";
+import { computeCompletionRate } from "../utils/completionRate";
 import { keyedHash } from "../utils/pepper";
 import { RateLimitBucket } from "../models/RateLimitBucket";
 import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
@@ -2043,10 +2044,7 @@ export const getFormOverview = async (req: Request, res: Response, next: NextFun
 
     // completionRate is nullable (null when view tracking isn't live yet, not a fabricated number)
     const views = (formDoc as any).viewsCount || (formDoc as any).views || null;
-    const completionRate =
-      views && typeof views === "number" && views > 0
-        ? Math.min(100, Number(((totalResponses / views) * 100).toFixed(2))) // responses can predate view counting
-        : null;
+    const completionRate = computeCompletionRate(totalResponses, typeof views === "number" ? views : null);
 
     res.status(200).json({
       success: true,

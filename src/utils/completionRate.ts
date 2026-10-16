@@ -7,8 +7,10 @@ import ResponseModel from "../models/Response";
 //     preview loads (`?preview=1`) or a form that is not open.
 //   - submissions: lifetime, non-deleted, non-test responses (the Response query hooks drop `isTest`).
 // The old stage-based figure (completed / total) is now `reviewedRate` everywhere it used to be returned.
+// More submissions than views means view counting is incomplete (older responses predate it): there is no
+// truthful rate, so return null instead of a capped 100.
 export const computeCompletionRate = (submissions: number, views: number | null | undefined): number | null =>
-  typeof views === "number" && views > 0 ? Math.min(100, Number(((submissions / views) * 100).toFixed(2))) : null;
+  typeof views === "number" && views > 0 && submissions <= views ? Number(((submissions / views) * 100).toFixed(2)) : null;
 
 // ponytail: one indexed grouped query per page of forms (<= 50) instead of a stored counter that has to be
 // kept in step with deletes/restores. Add Form.submissionsCount only if this shows up in the load test.

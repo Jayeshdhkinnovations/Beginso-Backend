@@ -114,6 +114,29 @@ describe("bulk actions on personal forms", () => {
     expect(res.body.succeeded).toEqual([r1._id.toString()]);
   });
 
+  it("changes the stage of personal responses by writing the status, and returns the old status for undo (QA A6-003)", async () => {
+    const stage = (stageId: string) =>
+      request(app)
+        .post("/api/responses/bulk")
+        .set({ ...auth(tOwner), "x-workspace-slug": "personal" })
+        .send({ target: { ids: [r1._id.toString()] }, action: { type: "stage", stageId } });
+
+    const res = await stage("completed");
+    expect(res.status).toBe(200);
+    expect(res.body.failed).toEqual([]);
+    expect(res.body.succeeded).toEqual([r1._id.toString()]);
+    expect((await ResponseModel.findById(r1._id).lean())?.status).toBe("completed");
+    expect(res.body.previous[0].stageId).toBe("new");
+
+    const back = await stage(res.body.previous[0].stageId);
+    expect(back.body.succeeded).toEqual([r1._id.toString()]);
+    expect((await ResponseModel.findById(r1._id).lean())?.status).toBe("new");
+
+    const bad = await stage("not-a-stage");
+    expect(bad.body.succeeded).toEqual([]);
+    expect(bad.body.failed).toHaveLength(1);
+  });
+
   it("a workspace member cannot bulk act on another user's personal response", async () => {
     const res = await request(app)
       .post("/api/responses/bulk")

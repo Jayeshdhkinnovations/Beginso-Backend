@@ -14,6 +14,8 @@ import { logWorkspaceEvent } from "./event.service";
 import { buildResponseFilterQuery, ResponseFilters } from "../utils/responseFilters";
 import { MAX_BULK_BATCH_SIZE, BulkAction, BulkTarget } from "../validations/bulk.validator";
 
+const PERSONAL_STATUSES = ["new", "in_progress", "completed"];
+
 export interface BulkPrevious {
   id: string;
   stageId?: string | null;
@@ -186,8 +188,15 @@ export class BulkService {
     switch (action.type) {
       case "stage": {
         const scopeWorkspaceId = form.workspaceId ? form.workspaceId.toString() : null;
-        if (!scopeWorkspaceId) badRequest("This response's form has no workspace to resolve stages against");
-        const stage = await this.stageService.getStageInWorkspace(scopeWorkspaceId!, action.stageId);
+        if (!scopeWorkspaceId) {
+          // A personal response has no Stage document (Stage.workspaceId is required). Same as
+          // PATCH /responses/:id: write the raw status. The personal stage ids ARE the status values,
+          // so the previous status doubles as the undo target.
+          if (!PERSONAL_STATUSES.includes(action.stageId)) badRequest("Unknown stage for a personal response", 422);
+          await ResponseModel.updateOne({ _id: response._id }, { $set: { status: action.stageId } });
+          return { id, stageId: response.status ?? null };
+        }
+        const stage = await this.stageService.getStageInWorkspace(scopeWorkspaceId, action.stageId);
         const prevStageId = response.stageId ? response.stageId.toString() : null;
         await ResponseModel.updateOne(
           { _id: response._id },

@@ -47,7 +47,7 @@ Cookie flags: `auth.controller.ts` sets the `token` cookie with `httpOnly: true,
 
 ## 4. Health check
 
-`curl https://<api-host>/api/health` returns `success: true` plus `commit`, `commitMessage`, `deployedAt` (from `dist/version.json`, written by the deploy workflow). After deploy, `commit` must equal the commit you intended; `null` means the version file was not written.
+`curl https://<api-host>/api/health` returns `success: true` plus `commit` (the short id from `dist/version.json`, written by the deploy workflow; the commit message and deploy time are only on the authenticated `/api/superadmin/health`). After deploy, `commit` must equal the commit you intended; `null` means the version file was not written.
 
 ## 5. R2 lifecycle rule (suggestion)
 

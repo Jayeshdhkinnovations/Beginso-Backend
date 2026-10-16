@@ -26,7 +26,7 @@ import respondRoutes from "./routes/respond.routes";
 import mySubmissionsRoutes from "./routes/mySubmissions.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { normalizeErrorShape } from "./middleware/errorShape.middleware";
-import { buildInfo, describeBuild } from "./utils/buildInfo";
+import { buildInfo, publicBuildInfo } from "./utils/buildInfo";
 
 // Continuous Deployment Test Comment
 const app = express();
@@ -81,8 +81,8 @@ if (process.env.NODE_ENV !== "test") {
 // Test comment to trigger CD self-hosted deployment verification
 app.get("/", (req, res) => {
     res.json({
-        message: `Backend Running Successfully (${describeBuild(buildInfo)})`,
-        ...buildInfo
+        message: `Backend Running Successfully (${buildInfo.commit ?? "version unknown"})`,
+        ...publicBuildInfo(buildInfo)
     });
 });
 app.use("/api/auth", authRoutes);

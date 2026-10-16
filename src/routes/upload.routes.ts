@@ -37,7 +37,10 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-    cb(null, safeName);
+    // A random prefix keeps the original name readable but makes the stored path unique. Without it two uploads called
+    // "logo.png" (or an avatar and a workspace logo) landed on the SAME file: the second silently replaced the first,
+    // both Upload rows were charged for one file, and deleting one removed the other's image.
+    cb(null, `${crypto.randomBytes(4).toString("hex")}-${safeName}`);
   },
 });
 

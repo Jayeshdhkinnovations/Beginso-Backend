@@ -808,10 +808,11 @@ describe("BE 0.11 / 0.12 - additive migration + health", () => {
     await migrateInsightsIndexes(); // and forward again
   });
 
-  it("GET /api/health still answers and carries the build info keys", async () => {
+  it("GET /api/health still answers and carries the commit id, but not the commit message or deploy time (QA A15-005)", async () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    for (const key of ["commit", "commitMessage", "deployedAt"]) expect(res.body).toHaveProperty(key);
+    expect(res.body).toHaveProperty("commit");
+    for (const key of ["commitMessage", "deployedAt"]) expect(res.body).not.toHaveProperty(key);
   });
 });

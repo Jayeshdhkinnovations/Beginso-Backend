@@ -30,4 +30,23 @@ describe("Build info on GET /", () => {
     expect(res.body.message).toMatch(/^Backend Running Successfully \(/);
     expect(res.body).toHaveProperty("commit");
   });
+
+  // QA A15-005: the public routes used to publish the commit message and the deploy time as well.
+  it("the public routes expose only the commit id, never the commit message or the deploy time", async () => {
+    for (const url of ["/", "/api/health"]) {
+      const res = await request(app).get(url);
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).filter((k) => ["commitMessage", "deployedAt"].includes(k))).toEqual([]);
+      expect(JSON.stringify(res.body)).not.toMatch(/commitMessage|deployedAt/);
+      expect(res.body).toHaveProperty("commit");
+    }
+  });
+
+  it("the deploy check still works: the body contains the short commit id", async () => {
+    // .github/workflows/deploy.yml greps GET / for the commit it just shipped.
+    const info = require("../utils/buildInfo");
+    const withCommit = { commit: "abc1234", commitMessage: "secret message", deployedAt: "2026-10-16T00:00:00.000Z" };
+    expect(JSON.stringify(info.publicBuildInfo(withCommit))).toContain("abc1234");
+    expect(JSON.stringify(info.publicBuildInfo(withCommit))).not.toContain("secret message");
+  });
 });

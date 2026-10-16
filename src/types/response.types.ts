@@ -51,6 +51,9 @@ export interface IResponse {
   status?: "new" | "in_progress" | "completed" | string;
   submittedAt?: Date | string;
   ipHash?: string;
+  // Who submitted, for forms that know: the account email on a signed-in-only form, the address the respondent gave on a
+  // tracked form. Null on an open form. It was stored all along but never returned, so the inbox could not show it.
+  respondentEmail?: string | null;
   response_files?: IResponseFile[];
   tagIds?: string[];
   // Populated alongside `tagIds`/`assigneeId` — the frontend's TagPicker/AssigneePicker render

@@ -9,6 +9,15 @@ describe("csvCell", () => {
     expect(csvCell("+919876543210")).toBe('"+919876543210"');
     expect(csvCell(null)).toBe('""');
   });
+
+  it("neutralises everything that could be a formula", () => {
+    const TAB = String.fromCharCode(9), CR = String.fromCharCode(13);
+    for (const v of ["=1+1", "+SUM(1,1)", "-2+3", "@SUM(A1)", TAB + "=1+1", CR + "=1+1", TAB + "abc", "-", "+", "=", "-5a", "+91 98765"]) {
+      expect(csvCell(v).startsWith(`"'`)).toBe(true);
+    }
+    expect(csvCell("1+1")).toBe('"1+1"');
+    expect(csvCell("-5.25")).toBe('"-5.25"');
+  });
 });
 
 describe("formatAnswer", () => {
@@ -46,6 +55,20 @@ describe("misc", () => {
     expect(exportFilename("Customer Feedback 2026!", new Date("2026-10-16T10:00:00Z"), "csv")).toBe("beginso-customer-feedback-2026-2026-10-16.csv");
     expect(exportFilename(undefined, new Date("2026-10-16T10:00:00Z"), "pdf")).toBe("beginso-all-forms-2026-10-16.pdf");
     expect(exportFilename("???", new Date("2026-10-16T10:00:00Z"), "pdf")).toBe("beginso-report-2026-10-16.pdf");
+  });
+
+  it("filename survives hostile titles", () => {
+    const d = new Date("2026-10-16T10:00:00Z");
+    const names = [
+      exportFilename('Q1 "Survey" / 2026 🎉', d, "csv"),
+      exportFilename("a\r\nSet-Cookie: x=1", d, "csv"),
+      exportFilename("../../etc/passwd", d, "pdf"),
+      exportFilename("x".repeat(500), d, "pdf"),
+      exportFilename("🎉🎉", d, "csv"),
+    ];
+    expect(names[0]).toBe("beginso-q1-survey-2026-2026-10-16.csv");
+    for (const n of names) expect(n).toMatch(/^beginso-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.(csv|pdf)$/);
+    expect(names[3].length).toBeLessThan(80);
   });
 
   it("y-axis ticks are whole and evenly spaced", () => {

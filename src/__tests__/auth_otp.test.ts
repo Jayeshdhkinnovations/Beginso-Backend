@@ -185,6 +185,8 @@ describe("Auth OTP & Extended API Requirements", () => {
       .set("Authorization", `Bearer ${userAToken}`)
       .send({ answers: {} });
 
-    expect(res.status).toBe(404);
+    // Same availability rule as the public route: a closed form is refused with its reason, not a bare 404.
+    expect(res.status).toBe(410);
+    expect(res.body.error.code).toBe("FORM_CLOSED");
   });
 });

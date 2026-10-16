@@ -17,6 +17,7 @@ import { extractRespondentEmail, findDuplicateOf } from "./duplicate.service";
 import { evaluateReadiness } from "./readiness.service";
 import { defaultAccessModeForNewForms } from "../utils/accessMode";
 import { staleFormError, versionOf } from "../utils/staleForm";
+import { FORM_CLOSE_DATE_PASSED, FORM_CLOSED, FORM_RESPONSE_LIMIT_REACHED, FormClosedCode, formClosedError, formNotFoundError } from "../utils/formUnavailable";
 import Workspace from "../models/Workspace";
 import User from "../models/User";
 import { queueActivityEmails } from "./notificationEmail.service";
@@ -1016,54 +1017,39 @@ export class FormService {
       (err as any).statusCode = 404;
       throw err;
     }
-    if (form.status === "closed") {
-      const err = new Error("Form not found");
-      (err as any).statusCode = 404;
-      throw err;
-    }
-    // An archived form is finished: its link is down (Sprint 13, CF5.6). Trashed forms never get here -
-    // the Form query hook hides them from every lookup.
-    if (isPublicRoute && form.archivedAt) {
-      const err = new Error("Form not found");
-      (err as any).statusCode = 404;
-      throw err;
-    }
-    if (isPublicRoute && form.status !== "published") {
-      const err = new Error("Form not found");
-      (err as any).statusCode = 404;
-      throw err;
+    // An archived form is finished: its link is down (Sprint 13, CF5.6), and a draft is not public yet. Both stay an
+    // indistinguishable 404, and are decided BEFORE any closed reason so a draft never reveals its closing date.
+    // Trashed forms never get here - the Form query hook hides them from every lookup.
+    if (isPublicRoute && (form.archivedAt || form.status === "draft")) {
+      throw formNotFoundError();
     }
 
-    let shouldClose = false;
-
-    // 1. Check closeDate
+    // Why the form is closed, in the order a respondent would care about: a passed closing date, a full response
+    // limit, then the owner closing it by hand. A form that auto-closed is stored as status "closed", so the reason
+    // is worked out from the settings, not from the status.
+    let reason: FormClosedCode | null = null;
     if (form.settings?.closeDate) {
       const closeTime = new Date(form.settings.closeDate).getTime();
-      const now = new Date().getTime();
-      if (!isNaN(closeTime) && now > closeTime) {
-        shouldClose = true;
-      }
+      if (!isNaN(closeTime) && Date.now() > closeTime) reason = FORM_CLOSE_DATE_PASSED;
     }
-
-    // 2. Check responseLimit
-    if (!shouldClose && form.settings?.responseLimitEnabled && form.settings.responseLimit !== undefined) {
+    if (!reason && form.settings?.responseLimitEnabled && form.settings.responseLimit !== undefined) {
       const responseCount = await ResponseModel.countDocuments({ formId: form._id });
-      if (responseCount >= form.settings.responseLimit) {
-        shouldClose = true;
-      }
+      if (responseCount >= form.settings.responseLimit) reason = FORM_RESPONSE_LIMIT_REACHED;
     }
+    if (!reason && form.status === "closed") reason = FORM_CLOSED;
 
-    if (shouldClose) {
+    if (reason) {
       // A public GET (readOnly) must not write to the database: anyone can call it. The stored
       // status is brought in line by closeExpiredForms() on a timer, and by a submit attempt.
-      if (allowWrite) {
+      if (allowWrite && form.status !== "closed") {
         form.status = "closed";
         await Form.updateOne({ _id: form._id }, { status: "closed" });
       }
+      throw formClosedError(reason);
+    }
 
-      const err = new Error("Form not found");
-      (err as any).statusCode = 404;
-      throw err;
+    if (isPublicRoute && form.status !== "published") {
+      throw formNotFoundError();
     }
   }
 

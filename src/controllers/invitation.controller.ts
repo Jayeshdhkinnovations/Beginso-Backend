@@ -102,6 +102,15 @@ export const listInvitations = async (req: Request, res: Response, next: NextFun
 };
 
 // POST /api/workspaces/:id/invitations or POST /api/invitations
+// A duplicate-key error names the index that collided in keyPattern. Only {workspaceId, email} is the
+// "one pending invitation per email" rule; anything else is a bug or a stale index.
+const isPendingDuplicate = (error: any): boolean => {
+  const key = error?.keyPattern;
+  if (key && "workspaceId" in key && "email" in key) return true;
+  console.error("sendInvitation: unexpected duplicate key", { keyPattern: key, keyValue: error?.keyValue });
+  return false;
+};
+
 export const sendInvitation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
@@ -242,8 +251,10 @@ export const sendInvitation = async (req: Request, res: Response, next: NextFunc
       invitation: publicInvitation(invitation),
     });
   } catch (error: any) {
-    // Two sends for the same email raced: the unique pending index kept only one.
-    if (error?.code === 11000) {
+    // Two sends for the same email raced: the unique pending index kept only one. ONLY that index means
+    // "already pending". Any other duplicate key (a stale unique index on token/tokenHash, say) is a server
+    // fault and must surface as one, not masquerade as a user error (QA A9-001).
+    if (error?.code === 11000 && isPendingDuplicate(error)) {
       res.status(409).json({
         success: false,
         message: "An invitation for this email is already pending",

@@ -24,6 +24,20 @@ import User from "../models/User";
 import { queueActivityEmails } from "./notificationEmail.service";
 import { assertStorageQuota, ownerOfForm, publicFormStorageState } from "./storage.service";
 import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
+import { StageService } from "./stage.service";
+
+const stageService = new StageService();
+
+// The stage a brand-new response is filed under: the workspace's default stage, else its first "new" stage, else its first
+// stage. A failure here never blocks a submission (the response is stored without a stage and still shows by status).
+const defaultStageFor = async (workspaceId: unknown) => {
+  try {
+    const stages = await stageService.ensureDefaultStages(String(workspaceId));
+    return stages.find((s) => s.isDefault) ?? stages.find((s) => s.category === "new") ?? stages[0] ?? null;
+  } catch {
+    return null;
+  }
+};
 
 const MAX_SLUG_ATTEMPTS = 5;
 
@@ -914,9 +928,15 @@ export class FormService {
     const respondentEmail = options.respondentEmail ?? extractRespondentEmail(form.fields as any, answers);
     const duplicateOfId = options.isTest ? null : await findDuplicateOf(formId, respondentEmail);
 
+    // A workspace form's response starts in the workspace's default stage. Without it every new response had no stage: the
+    // drawer said "Unknown stage" and the Board (which lists a stage's responses by stage id) never showed it (QA D5-007).
+    // A personal form has no stages; its status is the whole story.
+    const stageStart = form.workspaceId ? await defaultStageFor(form.workspaceId) : null;
+
     const newResponse = await ResponseModel.create({
       _id: responseId || new mongoose.Types.ObjectId(),
       formId,
+      ...(stageStart ? { stageId: stageStart._id, status: stageStart.category } : {}),
       answers,
       searchText: buildSearchText(answers),
       submittedAt: new Date(),

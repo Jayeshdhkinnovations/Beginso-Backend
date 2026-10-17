@@ -1,0 +1,60 @@
+name: ci
+
+# Runs on every pull request to main and on every push to main. GitHub-hosted runner only: a pull request's code never runs on the
+# self-hosted deploy machine. The one job is called "ci" so branch protection can require a single, stable check name.
+#
+# deploy.yml is separate and unchanged: it still runs its own type-check, lint and tests before it deploys. This workflow adds what
+# deploy.yml does not do: it runs on pull requests (before anything is merged), it looks for conflict markers, and it builds.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A merge once dropped an import and `main` stopped compiling; another committed unresolved conflict markers.
+      - name: Conflict markers
+        run: |
+          if git grep -nE '^(<<<<<<< |>>>>>>> |=======$)' -- . ':!*.md' ':!package-lock.json' ':!*.snap'; then
+            echo "::error::Unresolved merge-conflict markers found (lines above). Resolve them and push again."
+            exit 1
+          fi
+          echo "No conflict markers."
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      # Every suite starts its own in-memory MongoDB (mongodb-memory-server downloads the binary on first use), so no database
+      # service is needed. Two workers: each one holds a mongod, and a private-repo runner has 2 CPUs and 7 GB of memory.
+      - name: Tests
+        run: npm test -- --maxWorkers=2
+
+      - name: Build
+        run: npm run build

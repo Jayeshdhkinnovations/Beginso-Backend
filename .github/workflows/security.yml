@@ -1,0 +1,94 @@
+name: security
+
+# Secret scanning on every pull request and push, plus a weekly dependency report. GitHub-hosted runner only.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: "8.21.2"
+  # SHA-256 of gitleaks_8.21.2_linux_x64.tar.gz, from the release's own checksums file.
+  GITLEAKS_SHA256: 5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba
+
+jobs:
+  secrets:
+    name: secrets
+    # Not on the weekly timer: the scan covers the commits of a pull request or push.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The pinned release binary, checked against its published checksum. (The gitleaks GitHub Action needs a paid licence key
+      # for organisation repositories; the binary does not.)
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      # Only the commits this run adds are scanned, so a secret that is already in old history (and has to be rotated, not
+      # hidden) does not fail every unrelated pull request. A manual run scans the whole history.
+      - name: Scan for secrets
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          case "$EVENT" in
+            pull_request) RANGE="${BASE_SHA}..${HEAD_SHA}" ;;
+            push)
+              if [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then RANGE="${PUSH_BEFORE}..${HEAD_SHA}"; else RANGE="${HEAD_SHA}"; fi ;;
+            *) RANGE="--all" ;;
+          esac
+          echo "Scanning: $RANGE"
+          ./gitleaks detect --source . --config .gitleaks.toml --log-opts="$RANGE" --redact --no-banner --verbose
+
+  dependencies:
+    name: dependencies
+    # On the weekly timer, by hand, and on pull requests that change the dependency files.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Report-only for now: known issues already in the tree must not block every pull request.
+    continue-on-error: true
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Did the dependency files change?
+        id: changed
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if git diff --name-only "$BASE_SHA" HEAD | grep -qE '^(package\.json|package-lock\.json)$'; then echo "changed=true" >> "$GITHUB_OUTPUT"; else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Set up Node
+        if: github.event_name != 'pull_request' || steps.changed.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: npm audit (production dependencies, high and above)
+        if: github.event_name != 'pull_request' || steps.changed.outputs.changed == 'true'
+        run: npm audit --omit=dev --audit-level=high

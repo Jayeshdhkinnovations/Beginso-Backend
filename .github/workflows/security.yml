@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the code (full history)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -72,7 +72,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Check out the code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Did the dependency files change?
         id: changed
@@ -85,7 +85,7 @@ jobs:
 
       - name: Set up Node
         if: github.event_name != 'pull_request' || steps.changed.outputs.changed == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 

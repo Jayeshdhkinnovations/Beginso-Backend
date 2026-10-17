@@ -1545,6 +1545,8 @@ export const submitPublicForm = async (
           userId: ws.owner,
           workspaceId: form.workspaceId,
           type: "form_activity",
+          formId: form._id,
+          responseId: submission._id,
           title: "New Response Received",
           message: `New response submitted for form "${form.title}"`,
         });

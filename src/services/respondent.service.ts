@@ -297,6 +297,8 @@ const notifyEditedAfterReview = async (form: IForm, response: IResponse): Promis
       userId,
       workspaceId: form.workspaceId,
       type: "response_edited",
+      formId: form._id,
+      responseId: response._id,
       title: "Response edited after review",
       message: `A respondent edited response ${ref} on "${form.title}" after it was reviewed.`,
     });

@@ -275,6 +275,8 @@ export const updateResponseStatus = async (
           userId: assigneeParsed.assigneeId,
           workspaceId,
           type: "assignment",
+          formId: updatedResponse?.formId ?? (assignedResponse as any)?.formId,
+          responseId: String(id),
           title: "Response assigned to you",
           message: `${authReq.user.fullName || authReq.user.email} assigned a response to you`,
         }).catch(() => null);

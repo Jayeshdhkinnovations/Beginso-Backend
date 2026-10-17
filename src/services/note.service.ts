@@ -135,6 +135,8 @@ export class NoteService {
         userId,
         workspaceId,
         type: "mention",
+        formId,
+        responseId,
         title: "You were mentioned in a note",
         message: `${authorName} mentioned you in a note`,
       }).catch(() => null);

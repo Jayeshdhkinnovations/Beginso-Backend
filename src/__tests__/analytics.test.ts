@@ -258,6 +258,52 @@ describe("GET /api/analytics/questions", () => {
   });
 });
 
+describe("GET /api/analytics/questions - rating, number and yes/no summaries (QA A7-008)", () => {
+  it("returns an average and spread for ratings and numbers, and a yes/no split, next to the existing sample answers", async () => {
+    const f: any = await Form.create({
+      title: "Summaries Form",
+      workspaceId: workspace._id,
+      status: "published",
+      fields: [
+        { fieldId: "q_rate", label: "Rate us", type: "rating", required: false },
+        { fieldId: "q_qty", label: "How many", type: "number", required: false },
+        { fieldId: "q_yn", label: "Recommend", type: "yes_no", required: false },
+      ] as any,
+    });
+    await ResponseModel.create([
+      { formId: f._id, status: "completed", submittedAt: new Date(), answers: { q_rate: 5, q_qty: 10, q_yn: "Yes" } },
+      { formId: f._id, status: "completed", submittedAt: new Date(), answers: { q_rate: 4, q_qty: 20, q_yn: "Yes" } },
+      { formId: f._id, status: "completed", submittedAt: new Date(), answers: { q_rate: 4, q_qty: 30, q_yn: "No" } },
+      { formId: f._id, status: "completed", submittedAt: new Date(), answers: {} },
+    ]);
+
+    const res = await request(app).get(`/api/analytics/questions?formId=${f._id}`).set("Authorization", `Bearer ${userToken}`);
+    expect(res.status).toBe(200);
+    const byId = (id: string) => res.body.data.questions.find((q: any) => q.fieldId === id);
+
+    const rate = byId("q_rate").summary;
+    expect(rate.rating.average).toBe(4.33);
+    expect(rate.rating.count).toBe(3);
+    expect(rate.rating.distribution.map((d: any) => d.count)).toEqual([0, 0, 0, 2, 1]);
+    expect(rate.text.sampleAnswers.length).toBeGreaterThan(0); // unchanged: still there for older clients
+
+    expect(byId("q_qty").summary.numeric).toEqual({ count: 3, average: 20, min: 10, max: 30, sum: 60 });
+    expect(byId("q_yn").summary.yesNo).toEqual({ yes: 2, no: 1, percentageYes: 66.67 });
+  });
+
+  it("leaves the new summaries out when nobody answered", async () => {
+    const f: any = await Form.create({
+      title: "Empty Summaries",
+      workspaceId: workspace._id,
+      status: "published",
+      fields: [{ fieldId: "q_rate2", label: "Rate", type: "rating", required: false }] as any,
+    });
+    await ResponseModel.create({ formId: f._id, status: "new", submittedAt: new Date(), answers: {} });
+    const res = await request(app).get(`/api/analytics/questions?formId=${f._id}`).set("Authorization", `Bearer ${userToken}`);
+    expect(res.body.data.questions[0].summary.rating).toBeUndefined();
+  });
+});
+
 describe("GET /api/analytics/trends - Day vs Week Bucket Selection", () => {
   it("should aggregate by day when bucket=day", async () => {
     const res = await request(app)

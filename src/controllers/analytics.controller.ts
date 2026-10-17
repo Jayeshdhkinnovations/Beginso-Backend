@@ -1,4 +1,5 @@
 import { safeTimezone } from "../utils/safeInput";
+import { numericSummary, ratingSummary, yesNoSummary } from "../utils/answerSummary";
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import Form from "../models/Form";
@@ -254,6 +255,8 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
       let totalAnswered = 0;
       const optionCountMap = new Map<string, number>();
       const sampleAnswers: string[] = [];
+      // Every single-value answer, for the numeric / rating / yes-no summaries below.
+      const rawValues: unknown[] = [];
 
       // Pre-populate defined options with zero count
       if (field.options && Array.isArray(field.options)) {
@@ -269,6 +272,7 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
         const val = getFieldValue(r.answers, field);
         if (val !== undefined && val !== null && val !== "") {
           totalAnswered++;
+          if (!Array.isArray(val)) rawValues.push(val);
           if (Array.isArray(val)) {
             // Checkbox multi-value answer handling
             for (const item of val) {
@@ -321,6 +325,17 @@ export const getQuestions = async (req: Request, res: Response, next: NextFuncti
         summary.options = optionSummaries;
       } else {
         summary.text = { sampleAnswers };
+      }
+      // Rating, number and yes/no questions also get a real summary (average, spread, split), next to the samples above.
+      if (type === "rating") {
+        const rating = ratingSummary(rawValues, Number(field.max ?? field.maxRating ?? 5));
+        if (rating) summary.rating = rating;
+      } else if (type === "number" || type === "currency") {
+        const numeric = numericSummary(rawValues);
+        if (numeric) summary.numeric = numeric;
+      } else if (type === "yes_no") {
+        const yesNo = yesNoSummary(rawValues);
+        if (yesNo) summary.yesNo = yesNo;
       }
 
       return {

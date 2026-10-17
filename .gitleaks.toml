@@ -1,0 +1,26 @@
+# Secret-scanning configuration (gitleaks). The default rules stay on; only obvious test fixtures and documentation placeholders are
+# allowed. A real finding must be fixed (rotate the secret), never added here.
+title = "Beginso backend gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and documentation placeholders only"
+paths = [
+  '''(^|/)__tests__/''',
+  '''package-lock\.json$''',
+  # Generates seed data; the "keys" it flags are 24-character ObjectIds, not credentials.
+  '''src/scripts/generateSeeds\.ts$''',
+]
+# The patterns below are matched against the whole line, so a placeholder can be recognised by what surrounds it.
+regexTarget = "line"
+regexes = [
+  # A fake PEM key used as a placeholder when no real key file exists.
+  '''-----BEGIN PRIVATE KEY-----\\nMOCK_KEY\\n-----END PRIVATE KEY-----''',
+  # Secrets that say they are for tests.
+  '''(?i)test[-_]only[-_a-z0-9]*''',
+  '''(?i)["']test-[-_a-z0-9]{6,}["']''',
+  # A truncated token shown in a manual-testing guide ("eyJ...").
+  '''"token":\s*"[A-Za-z0-9._-]+\.\.\."''',
+]

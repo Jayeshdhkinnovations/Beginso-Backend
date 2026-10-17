@@ -22,4 +22,6 @@ Merged after: <!-- the branch or pull request this one depends on, or "nothing" 
 ## Before you merge
 
 - [ ] Everything is pushed (the last commit is on this branch)
+- [ ] Tests from this branch are still present after the merge (a merge can silently drop them; check the files list of the merge, not just the green tick)
+- [ ] Dependency upgrades are grouped, and none is merged without the `ci` check green
 - [ ] The `ci` check is green and the branch is up to date with `main`

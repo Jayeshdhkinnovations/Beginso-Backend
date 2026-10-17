@@ -64,7 +64,7 @@
     "@types/node": "^26.0.1",
     "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^6.0.2",
-    "@usebruno/cli": "^3.5.1",
+    "@usebruno/cli": "^4.2.1",
     "eslint": "^9.39.5",
     "fast-check": "^4.8.0",
     "jest": "^29.7.0",

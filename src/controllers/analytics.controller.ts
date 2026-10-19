@@ -1,4 +1,5 @@
 import { safeTimezone } from "../utils/safeInput";
+import { formMark } from "../utils/formMark";
 import { numericSummary, ratingSummary, yesNoSummary } from "../utils/answerSummary";
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
@@ -563,6 +564,8 @@ export const getForms = async (req: Request, res: Response, next: NextFunction):
         views: views > 0 ? views : null,
         templateCategory: form.templateCategory ?? null,
         templateId: form.templateId ? form.templateId.toString() : null,
+        // The form's own logo / icon, so the Form performance table shows the same mark as the Forms list (it showed a generic document).
+        branding: formMark(form),
         sparkline,
         updatedAt: form.updatedAt,
       };

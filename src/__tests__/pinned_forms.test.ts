@@ -227,6 +227,13 @@ describe("list", () => {
     expect(rows.every((x: any) => typeof x.pinned === "boolean")).toBe(true);
   });
 
+  it("shared-with-me rows carry the form's logo and icon, so the card matches the Forms list", async () => {
+    const f = await mkForm({ workspaceId: wsB._id, createdBy: otherOwner._id, branding: { logoUrl: "https://cdn.example.com/a.png", iconName: "star" } });
+    await FormAccessGrant.create({ formId: f._id, userId: grantee._id, role: "viewer" });
+    const row = (await request(app).get("/api/shared-with-me").set(as(t.grantee))).body.forms.find((x: any) => x._id === String(f._id));
+    expect(row.branding).toEqual({ logoUrl: "https://cdn.example.com/a.png", iconName: "star" });
+  });
+
   it("shared-with-me rows carry pinned", async () => {
     const f = await mkForm({ workspaceId: wsB._id, createdBy: otherOwner._id });
     await FormAccessGrant.create({ formId: f._id, userId: grantee._id, role: "viewer" });

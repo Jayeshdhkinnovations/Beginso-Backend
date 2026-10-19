@@ -98,6 +98,9 @@ export class ResponseService {
     limit?: number;
     // Whose unread state to join in (the calling user). Omitted only by callers that don't need it.
     callerUserId?: string;
+    // Sort by submission time across ALL pages (the Inbox table used to reorder only the 50 rows it had loaded). "asc" = oldest first;
+    // anything else (or nothing) = newest first. Other columns are not sortable on the server.
+    order?: string;
     // Sprint 12, BE 0.6 (B4.10): "Show duplicates" filter — true = only flagged responses.
     duplicate?: boolean;
     // Sprint 13 (F15): test submissions are excluded unless the caller opts in.
@@ -229,7 +232,7 @@ export class ResponseService {
     const skip = (page - 1) * limit;
 
     const [responses, total] = await Promise.all([
-      this.responseRepository.findWithPagination(mongoQuery, skip, limit),
+      this.responseRepository.findWithPagination(mongoQuery, skip, limit, params.order === "asc" ? 1 : -1),
       this.responseRepository.count(mongoQuery),
     ]);
 

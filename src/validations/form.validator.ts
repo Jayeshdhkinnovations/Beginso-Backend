@@ -112,6 +112,9 @@ const urlObj = baseFieldSchema.extend({
   type: z.literal("url"),
   urlPreviewStyle: z.enum(URL_PREVIEW_STYLES).optional(),
   urlDisplay: z.enum(URL_DISPLAYS).optional(),
+  urlPreviewPosition: z.enum(PREVIEW_POSITIONS).optional(),
+  urlAspectRatio: z.enum(ASPECT_RATIOS).optional(),
+  urlPreviewSize: z.enum(PREVIEW_SIZES).optional(),
 });
 
 const currencyObj = baseFieldSchema.extend({

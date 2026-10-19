@@ -84,6 +84,9 @@ export interface IFormField {
   previewSize?: PreviewSize;
   urlPreviewStyle?: UrlPreviewStyle;
   urlDisplay?: UrlDisplay;
+  urlPreviewPosition?: PreviewPosition;
+  urlAspectRatio?: AspectRatio;
+  urlPreviewSize?: PreviewSize;
   logicRules?: ILogicRule[];
 }
 
@@ -269,6 +272,9 @@ export const FormFieldSchema = new Schema<IFormField>({
   previewSize: { type: String, enum: PREVIEW_SIZES },
   urlPreviewStyle: { type: String, enum: URL_PREVIEW_STYLES },
   urlDisplay: { type: String, enum: URL_DISPLAYS },
+  urlPreviewPosition: { type: String, enum: PREVIEW_POSITIONS },
+  urlAspectRatio: { type: String, enum: ASPECT_RATIOS },
+  urlPreviewSize: { type: String, enum: PREVIEW_SIZES },
   logicRules: { type: [LogicRuleSchema], default: [] },
 });
 

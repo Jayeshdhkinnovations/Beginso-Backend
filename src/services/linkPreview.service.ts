@@ -68,6 +68,20 @@ const parseSafeUrl = (raw: string): URL | null => {
   return u;
 };
 
+// Facebook, Instagram, and LinkedIn serve OG metadata (including profile photos) only to known browser
+// or social-crawler UAs. facebookexternalhit is Facebook's own scraper UA — both FB and Instagram
+// whitelist it and return full og:image, og:title etc. that they block for generic custom UAs.
+const UA_BY_HOST: Record<string, string> = {
+  "facebook.com":  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+  "instagram.com": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+  "linkedin.com":  "LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)",
+};
+
+function uaFor(hostname: string): string {
+  const bare = hostname.replace(/^www\./, "");
+  return UA_BY_HOST[bare] ?? "Mozilla/5.0 (compatible; BeginsoLinkPreview/2.0; +https://beginso.com)";
+}
+
 const getOnce = (u: URL): Promise<{ status: number; location?: string; type: string; body: string }> =>
   new Promise((resolve, reject) => {
     const lib = u.protocol === "https:" ? https : http;
@@ -77,7 +91,11 @@ const getOnce = (u: URL): Promise<{ status: number; location?: string; type: str
         method: "GET",
         lookup: safeLookup,
         timeout: TIMEOUT_MS,
-        headers: { "User-Agent": "BeginsoLinkPreview/1.0", Accept: "text/html,application/xhtml+xml" },
+        headers: {
+          "User-Agent": uaFor(u.hostname),
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
       },
       (res) => {
         const status = res.statusCode ?? 0;

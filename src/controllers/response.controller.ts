@@ -53,7 +53,7 @@ export const getResponses = async (
       return;
     }
 
-    const { formId, status, stageId, search, q, page, limit, duplicate, includeTest, field, value, granularity, assigneeId, unread, from, to } = req.query;
+    const { formId, status, stageId, search, q, page, limit, order, duplicate, includeTest, field, value, granularity, assigneeId, unread, from, to } = req.query;
     // tagIds arrives as ?tagIds=a,b, ?tagIds=a&tagIds=b or ?tagIds[]=a
     const tagIds = ([] as unknown[]).concat(req.query.tagIds ?? []).flatMap((t) => String(t).split(",")).filter(Boolean);
     const flag = (v: unknown) => v === "true" || v === "1";
@@ -75,6 +75,7 @@ export const getResponses = async (
       to: typeof to === "string" ? to : undefined,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
+      order: typeof order === "string" ? order : undefined,
       callerUserId: authReq.user._id.toString(),
       duplicate: duplicate === "true" || duplicate === "1",
       includeTest: includeTest === "true" || includeTest === "1",

@@ -1,4 +1,5 @@
 import { trackResponseWrite } from "./storage.service";
+import { formMark } from "../utils/formMark";
 import crypto from "crypto";
 import mongoose from "mongoose";
 import Form, { IForm } from "../models/Form";
@@ -390,6 +391,7 @@ export const listMine = async (userId: mongoose.Types.ObjectId | string) => {
       return {
         id: r._id.toString(),
         formName: form.title,
+        branding: formMark(form),
         ownerName: form.workspaceId ? workspaceName.get(String(form.workspaceId)) ?? "" : "",
         submittedAt: r.submittedAt,
         status: respondentStatusOf(r),

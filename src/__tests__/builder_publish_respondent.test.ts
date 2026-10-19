@@ -875,7 +875,9 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
       expect(list.status).toBe(200);
       expect(list.body.items).toHaveLength(1);
       expect(list.body.items[0]).toMatchObject({ id: String(mine._id), formName: "Tracked intake", ownerName: "Alpha", status: "In review", canEdit: true });
-      expect(Object.keys(list.body.items[0]).sort()).toEqual(["canEdit", "formName", "id", "ownerName", "status", "submittedAt"]);
+      expect(Object.keys(list.body.items[0]).sort()).toEqual(["branding", "canEdit", "formName", "id", "ownerName", "status", "submittedAt"]);
+      // The form's logo/icon (none on this one), so My submissions can show the same mark as the Forms list.
+      expect(list.body.items[0].branding).toEqual({ logoUrl: null, iconName: null });
 
       const theirs = (await ResponseModel.findOne({ respondentEmail: "somebody@else.test" }))!;
       expect((await request(app).get(`/api/my-submissions/${theirs._id}`).set({ Authorization: `Bearer ${tPortal}` })).status).toBe(404);

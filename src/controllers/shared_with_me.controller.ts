@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { formMark } from "../utils/formMark";
 import FormAccessGrant from "../models/FormAccessGrant";
 import Form from "../models/Form";
 import Workspace from "../models/Workspace";
@@ -90,6 +91,7 @@ export const getSharedWithMe = async (req: Request, res: Response, next: NextFun
           _id: form._id,
           formId: form._id.toString(),
           title: form.title,
+          branding: formMark(form),
           description: form.description || "",
           status: form.status,
           role: g.role,

@@ -16,10 +16,12 @@ export class ResponseRepository {
   async findWithPagination(
     query: any,
     skip: number,
-    limit: number
+    limit: number,
+    // 1 = oldest first. Default is newest first. _id breaks ties so a page boundary never repeats or drops a row.
+    submittedOrder: 1 | -1 = -1
   ): Promise<IResponse[]> {
     return await ResponseModel.find(query)
-      .sort({ submittedAt: -1 })
+      .sort({ submittedAt: submittedOrder, _id: submittedOrder })
       .skip(skip)
       .limit(limit);
   }

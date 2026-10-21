@@ -1,3 +1,4 @@
+import type { NumericSummary, RatingSummary, YesNoSummary } from "../utils/answerSummary";
 export interface IStatusCount {
   status: "completed" | "in_progress" | "new";
   count: number;
@@ -59,6 +60,12 @@ export interface IQuestionAnalytics {
   summary: {
     options?: IQuestionSummaryOption[];
     text?: IQuestionSummaryText;
+    /** rating questions: average, top of the scale, and how many gave each value. */
+    rating?: RatingSummary;
+    /** number / currency questions: count, average, min, max, sum. */
+    numeric?: NumericSummary;
+    /** yes/no questions: how many said each, and the share of yes. */
+    yesNo?: YesNoSummary;
   };
 }
 

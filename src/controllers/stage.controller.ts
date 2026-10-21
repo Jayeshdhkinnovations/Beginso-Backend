@@ -7,6 +7,7 @@ import { hashIp } from "../utils/ip";
 import { recordEvent } from "../services/event.service";
 import { StageService } from "../services/stage.service";
 import { IStage } from "../models/Stage";
+import ResponseModel from "../models/Response";
 import {
   createStageSchema,
   updateStageSchema,
@@ -78,7 +79,17 @@ export const getStages = async (req: Request, res: Response, next: NextFunction)
     if (!workspace) return;
 
     const stages = await stageService.listStages(workspace._id.toString());
-    const json = toStagesJson(stages);
+    // How many responses sit in each stage, in ONE grouped query. The Stages table showed 0 on every row because this list never carried
+    // a count. Same rule as deleting a stage (every response in it, test submissions included), so the number on the row is exactly the
+    // number that makes "Delete" ask where to move them.
+    const grouped: { _id: mongoose.Types.ObjectId; count: number }[] = stages.length
+      ? await ResponseModel.aggregate([
+          { $match: { stageId: { $in: stages.map((s) => s._id) } } },
+          { $group: { _id: "$stageId", count: { $sum: 1 } } },
+        ]).option({ includeTest: true } as any)
+      : [];
+    const countById = new Map(grouped.map((g) => [String(g._id), g.count]));
+    const json = toStagesJson(stages).map((s) => ({ ...s, responseCount: countById.get(s.id) ?? 0 }));
     res.status(200).json({ success: true, stages: json, data: json, total: json.length });
   } catch (error: any) {
     if (error.statusCode) return sendError(res, error);

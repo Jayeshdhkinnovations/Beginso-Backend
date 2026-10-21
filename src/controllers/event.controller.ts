@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Event } from "../models/Event";
 import Workspace from "../models/Workspace";
 import Form from "../models/Form";
+import User from "../models/User";
 import { Logger } from "../utils/logger";
 import { assertVerifiedWorkspace } from "../utils/requestContext";
 
@@ -16,14 +17,31 @@ async function resolveWorkspaceObjectId(rawId: string): Promise<string | null> {
   return ws ? ws._id.toString() : null;
 }
 
-function mapEventItem(event: any) {
+// The profile pictures of the people behind a page of events, in one query. The feeds show an avatar next to each actor, and the
+// members list that would otherwise supply it is admin-only while Activity is open to every member. Only the picture is read, and
+// an actor with no account (an unauthenticated actor) or no picture simply has none.
+async function actorAvatars(events: any[]): Promise<Map<string, string | null>> {
+  const ids = [...new Set(events.map((e) => (e.actorId ? String(e.actorId) : "")).filter((id) => mongoose.Types.ObjectId.isValid(id)))];
+  if (ids.length === 0) return new Map();
+  const users = await User.find({ _id: { $in: ids } }).select("avatarUrl").lean();
+  return new Map(users.map((u: any) => [String(u._id), u.avatarUrl || null]));
+}
+
+async function mapEvents(events: any[]) {
+  const avatars = await actorAvatars(events);
+  return events.map((e) => mapEventItem(e, avatars));
+}
+
+function mapEventItem(event: any, avatars?: Map<string, string | null>) {
+  const actorId = event.actorId ? event.actorId.toString() : "";
   return {
     id: event._id.toString(),
     workspaceId: event.workspaceId.toString(),
     actor: {
-      id: event.actorId ? event.actorId.toString() : "",
+      id: actorId,
       name: event.actorName || event.actorEmail || "Unknown",
-      email: event.actorEmail || ""
+      email: event.actorEmail || "",
+      avatarUrl: (actorId && avatars?.get(actorId)) || null
     },
     action: event.action,
     targetId: event.targetId,
@@ -59,7 +77,7 @@ export const listWorkspaceActivity = async (req: Request, res: Response) => {
       .limit(limit)
       .lean();
 
-    const mappedEvents = events.map(mapEventItem);
+    const mappedEvents = await mapEvents(events);
 
     return res.status(200).json({
       success: true,
@@ -137,7 +155,7 @@ export const listWorkspaceAudit = async (req: Request, res: Response) => {
       .limit(limit)
       .lean();
 
-    const mappedEvents = events.map(mapEventItem);
+    const mappedEvents = await mapEvents(events);
 
     return res.status(200).json({
       success: true,
@@ -184,7 +202,7 @@ export const listFormEvents = async (req: Request, res: Response) => {
       .limit(limit)
       .lean();
 
-    const mappedEvents = events.map(mapEventItem);
+    const mappedEvents = await mapEvents(events);
 
     return res.status(200).json({
       success: true,

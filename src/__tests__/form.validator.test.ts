@@ -267,3 +267,23 @@ describe("createFormSchema / patchFormSchema - branding & settings", () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe("fieldSchema - url preview position, ratio and size", () => {
+  const url = { label: "Site", type: "url", required: false };
+
+  it("keeps the three settings on a url field", () => {
+    const r = fieldSchema.safeParse({ ...url, urlPreviewPosition: "top", urlAspectRatio: "16:9", urlPreviewSize: "small" });
+    expect(r.success).toBe(true);
+    expect(r.success && r.data).toMatchObject({ urlPreviewPosition: "top", urlAspectRatio: "16:9", urlPreviewSize: "small" });
+  });
+
+  it("rejects values outside the allowed lists", () => {
+    expect(fieldSchema.safeParse({ ...url, urlPreviewPosition: "bottom" }).success).toBe(false);
+    expect(fieldSchema.safeParse({ ...url, urlAspectRatio: "4:3" }).success).toBe(false);
+    expect(fieldSchema.safeParse({ ...url, urlPreviewSize: "huge" }).success).toBe(false);
+  });
+
+  it("the settings are optional, so older forms stay valid", () => {
+    expect(fieldSchema.safeParse(url).success).toBe(true);
+  });
+});

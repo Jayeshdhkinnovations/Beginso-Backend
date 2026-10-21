@@ -1,3 +1,5 @@
+import type { ResponseSchemaField, OrphanAnswer } from "../utils/responseSchemaView";
+
 export interface IAnswer {
   fieldId?: string;
   label?: string;
@@ -45,6 +47,10 @@ export interface IResponse {
   // only for responses predating this field and not yet backfilled.
   reference?: string;
   answers: Record<string, any> | IAnswer[];
+  // Detail only (Sprint 15): the form's live questions, the answers keyed by fieldId, and answers whose question was deleted.
+  formSchema?: { fields: ResponseSchemaField[] };
+  answersByFieldId?: Record<string, any>;
+  orphanAnswers?: OrphanAnswer[];
   stageId?: string;
   stage?: IResponseStageSummary | null;
   // DEPRECATED: derived from stage.category, kept for pre-Sprint-12 consumers. See models/Response.ts.

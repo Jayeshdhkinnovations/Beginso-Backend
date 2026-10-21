@@ -1364,7 +1364,7 @@ export const submitPublicForm = async (
                   success: false,
                   message: "Validation failed",
                   errors: [{
-                    field: field.label,
+                    field: field.label, fieldId: field.fieldId,
                     message: `Field "${field.label}" file size exceeds the limit of ${field.maxFileSize} MB.`
                   }],
                   error: { message: "Validation failed" }
@@ -1379,7 +1379,7 @@ export const submitPublicForm = async (
                   success: false,
                   message: "Validation failed",
                   errors: [{
-                    field: field.label,
+                    field: field.label, fieldId: field.fieldId,
                     message: `Field "${field.label}" file type "${file.mimetype}" is not allowed. Allowed types: ${field.allowedMimeTypes.join(", ")}.`
                   }],
                   error: { message: "Validation failed" }
@@ -1458,7 +1458,7 @@ export const submitPublicForm = async (
           res.status(422).json({
             success: false,
             message: "Validation failed",
-            errors: [{ field: field.label, message: `Field "${field.label}" ${problem}` }],
+            errors: [{ field: field.label, fieldId: field.fieldId, message: `Field "${field.label}" ${problem}` }],
             error: { message: "Validation failed" },
           });
           return;
@@ -1545,6 +1545,8 @@ export const submitPublicForm = async (
           userId: ws.owner,
           workspaceId: form.workspaceId,
           type: "form_activity",
+          formId: form._id,
+          responseId: submission._id,
           title: "New Response Received",
           message: `New response submitted for form "${form.title}"`,
         });

@@ -1,4 +1,5 @@
 import { trackResponseWrite } from "./storage.service";
+import { formMark } from "../utils/formMark";
 import crypto from "crypto";
 import mongoose from "mongoose";
 import Form, { IForm } from "../models/Form";
@@ -297,6 +298,8 @@ const notifyEditedAfterReview = async (form: IForm, response: IResponse): Promis
       userId,
       workspaceId: form.workspaceId,
       type: "response_edited",
+      formId: form._id,
+      responseId: response._id,
       title: "Response edited after review",
       message: `A respondent edited response ${ref} on "${form.title}" after it was reviewed.`,
     });
@@ -388,6 +391,7 @@ export const listMine = async (userId: mongoose.Types.ObjectId | string) => {
       return {
         id: r._id.toString(),
         formName: form.title,
+        branding: formMark(form),
         ownerName: form.workspaceId ? workspaceName.get(String(form.workspaceId)) ?? "" : "",
         submittedAt: r.submittedAt,
         status: respondentStatusOf(r),

@@ -15,6 +15,7 @@ const format = (n: any) => ({
   message: n.message,
   read: n.read,
   ...(n.formId ? { formId: String(n.formId) } : {}),
+  ...(n.responseId ? { responseId: String(n.responseId) } : {}),
   createdAt: n.createdAt,
 });
 

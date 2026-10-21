@@ -225,6 +225,9 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
         previewSize: raw.previewSize,
         urlPreviewStyle: raw.urlPreviewStyle,
         urlDisplay: raw.urlDisplay,
+        urlPreviewPosition: raw.urlPreviewPosition,
+        urlAspectRatio: raw.urlAspectRatio,
+        urlPreviewSize: raw.urlPreviewSize,
         logicRules: updatedLogicRules,
       };
     });

@@ -32,6 +32,8 @@ import {
 import { listCharts, createChart, updateChart, deleteChart, getChartData, previewChart, reorderCharts, duplicateChart, getFieldAnalytics } from "../controllers/chart.controller";
 import { pinFormHandler, unpinFormHandler } from "../controllers/pin.controller";
 import { getScoreComparison } from "../controllers/score.controller";
+import { getResponseView, putFormResponseViewDefault } from "../controllers/responseView.controller";
+import { userActionRateLimiter } from "../middleware/rateLimiter";
 
 const router = Router();
 
@@ -69,6 +71,11 @@ router.delete("/:formId/grants/:userId", protect as any, blockSuspended as any, 
 
 router.post("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "form" }) as any, submitForm);
 router.get("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getSubmissions);
+
+// Response layout (Sprint 15). Reading the resolved view needs responses:read; setting the form-wide default needs
+// forms:write (viewers cannot). Both honour per-form grants.
+router.get("/:formId/response-view", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getResponseView);
+router.put("/:formId/response-view-default", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, userActionRateLimiter("response-view-default", 30, 60 * 1000), putFormResponseViewDefault);
 
 // Score comparison (Sprint 12, BE 0.5 / B6.1)
 router.get("/:formId/score-comparison", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getScoreComparison);

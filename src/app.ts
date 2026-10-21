@@ -21,6 +21,7 @@ import searchRoutes from "./routes/search.routes";
 import invitationRoutes from "./routes/invitation.routes";
 import sharedWithMeRoutes from "./routes/shared_with_me.routes";
 import savedViewRoutes from "./routes/savedView.routes";
+import meRoutes from "./routes/me.routes";
 import trashRoutes from "./routes/trash.routes";
 import respondRoutes from "./routes/respond.routes";
 import mySubmissionsRoutes from "./routes/mySubmissions.routes";
@@ -103,6 +104,7 @@ app.use("/api/superadmin", superadminRoutes);
 app.use("/api/invitations", invitationRoutes);
 app.use("/api/shared-with-me", sharedWithMeRoutes);
 app.use("/api/views", savedViewRoutes);
+app.use("/api/me", meRoutes);
 // Sprint 13
 app.use("/api/trash", trashRoutes);
 app.use("/api/respond", respondRoutes);

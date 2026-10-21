@@ -22,6 +22,7 @@ import {
 } from "../types/response.types";
 import mongoose from "mongoose";
 import { escapeRegex } from "../utils/safeInput";
+import { buildResponseSchemaView } from "../utils/responseSchemaView";
 import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
 import { buildResponseFilterQuery } from "../utils/responseFilters";
 
@@ -480,6 +481,7 @@ export class ResponseService {
       formId: response.formId.toString(),
       reference: response.reference,
       answers: cleanAnswers(response.answers),
+      ...buildResponseSchemaView(form as any, response.answers),
       stageId: response.stageId ? response.stageId.toString() : undefined,
       stage: toStageSummary(stage),
       status: response.status || "new",

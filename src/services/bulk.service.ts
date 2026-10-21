@@ -223,6 +223,8 @@ export class BulkService {
             userId: action.assigneeId,
             workspaceId: form.workspaceId,
             type: "assignment",
+            formId: form._id,
+            responseId: response._id,
             title: "Response assigned to you",
             message: `${context.actor.name} assigned a response to you`,
           }).catch(() => null);

@@ -254,6 +254,15 @@ describe("BE 0.2 / 0.4 - completionRate has one meaning (views based), reviewedR
     expect((await Form.findById(form._id))!.viewsCount).toBe(8);
   });
 
+  // The Form performance table showed a generic document for a form whose Forms-list row shows its logo: the rows carried no mark.
+  it("analytics form rows carry the form's logo and icon (null when it has neither)", async () => {
+    const marked = await mkForm({ title: "Marked", branding: { logoUrl: "https://cdn.example.com/kala.png", iconName: "star" } });
+    const bare = await mkForm({ title: "Bare" });
+    const rows = (await request(app).get("/api/analytics/forms?limit=50").set(as(tOwner, "ws-a"))).body.data;
+    expect(rows.find((r: any) => r.formId === String(marked._id)).branding).toEqual({ logoUrl: "https://cdn.example.com/kala.png", iconName: "star" });
+    expect(rows.find((r: any) => r.formId === String(bare._id)).branding).toEqual({ logoUrl: null, iconName: null });
+  });
+
   it("POST /api/templates/:id/use stores templateId + templateCategory, exposed on form read and analytics rows; other forms are null", async () => {
     const tpl = await Template.create({ name: "Event signup", category: "Events", theme: "default", fields: fields().map(({ pageId: _pageId, ...f }) => f) as any });
     const res = await request(app).post(`/api/templates/${tpl._id}/use`).set(as(tOwner, "ws-a")).send({});

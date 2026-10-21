@@ -13,6 +13,13 @@ beforeAll(async () => {
   await mongoose.connect(mongoServer.getUri());
 });
 
+beforeEach(async () => {
+  await Workspace.deleteMany({});
+  await Form.deleteMany({});
+  await ResponseModel.deleteMany({});
+  await StageModel.deleteMany({});
+});
+
 afterAll(async () => {
   await mongoose.disconnect();
   if (mongoServer) await mongoServer.stop();
@@ -72,5 +79,34 @@ describe("migrateStagesFromStatus", () => {
     await ResponseModel.updateOne({ _id: resp._id }, { $set: { stageId: wrongStage._id } });
 
     await expect(migrateStagesFromStatus()).rejects.toThrow(/count mismatch/);
+  });
+
+  it("leaves responses of personal forms (no workspace) alone and does not count them as a mismatch", async () => {
+    const ws = await Workspace.create({ name: "Mixed WS", owner: new mongoose.Types.ObjectId() });
+    const wsForm = await Form.create({ title: "WsForm", workspaceId: ws._id, status: "published", publishedSlug: "mixed-ws", fields: [] });
+    const personal = await Form.create({ title: "Personal", workspaceId: null, status: "published", publishedSlug: "mixed-personal", fields: [] });
+    await ResponseModel.create({ formId: wsForm._id, answers: {}, status: "new" });
+    const p1 = await ResponseModel.create({ formId: personal._id, answers: {}, status: "completed" });
+    await ResponseModel.create({ formId: personal._id, answers: {}, status: "in_progress" });
+
+    const result = await migrateStagesFromStatus();
+    expect(result.responsesWithoutStage).toBeGreaterThanOrEqual(2);
+    expect((await ResponseModel.findById(p1._id))!.stageId).toBeUndefined();
+  });
+
+  it("--dry-run reports what would happen and writes nothing", async () => {
+    const ws = await Workspace.create({ name: "Dry WS", owner: new mongoose.Types.ObjectId() });
+    const form = await Form.create({ title: "DryForm", workspaceId: ws._id, status: "published", publishedSlug: "dry-f", fields: [] });
+    const r = await ResponseModel.create({ formId: form._id, answers: {}, status: "completed" });
+
+    const dry = await migrateStagesFromStatus({ dryRun: true });
+    expect(dry.workspacesSeeded).toBeGreaterThanOrEqual(1);
+    expect(dry.responsesMigrated).toBeGreaterThanOrEqual(1);
+    expect(await StageModel.countDocuments({ workspaceId: ws._id })).toBe(0);
+    expect((await ResponseModel.findById(r._id))!.stageId).toBeUndefined();
+
+    const real = await migrateStagesFromStatus();
+    expect(real.responsesMigrated).toBeGreaterThanOrEqual(1);
+    expect((await ResponseModel.findById(r._id))!.stageId).toBeDefined();
   });
 });

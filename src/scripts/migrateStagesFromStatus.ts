@@ -14,6 +14,10 @@ import { DEFAULT_STAGE_SEEDS } from "../services/stage.service";
 //   3. Assert per-status counts (before) == per-stage-category counts (after) and throw if not —
 //      this must fail loudly, not continue with a silently wrong migration.
 //
+// Only responses of forms that belong to a workspace are in scope (steps 2 and 3). A personal form has no workspace and so no stages, by
+// design: its responses stay without a stageId and show by status. They are counted in `responsesWithoutStage`, never in the assertion.
+// `--dry-run` writes nothing and reports what a real run would do.
+//
 // Rollback (manual, not automated — a full rehearsal-on-clone is a later/Friday task):
 //   - `db.responses.updateMany({}, { $unset: { stageId: "" } })` drops the new field; `status`
 //     was never removed, so every pre-Sprint-12 consumer keeps working immediately.
@@ -29,11 +33,18 @@ type Category = (typeof CATEGORIES)[number];
 export interface MigrationResult {
   workspacesSeeded: number;
   responsesMigrated: number;
+  /** Responses of personal forms (no workspace): intentionally left without a stage. */
+  responsesWithoutStage: number;
 }
 
-export const migrateStagesFromStatus = async (): Promise<MigrationResult> => {
+export const migrateStagesFromStatus = async (opts: { dryRun?: boolean } = {}): Promise<MigrationResult> => {
+  const dryRun = opts.dryRun === true;
+  const workspaceFormIds = await Form.distinct("_id", { workspaceId: { $ne: null } });
+  const responsesWithoutStage = await ResponseModel.countDocuments({ formId: { $nin: workspaceFormIds } });
+
   // Snapshot per-status counts BEFORE any write, for the post-migration assertion.
   const beforeCounts = await ResponseModel.aggregate([
+    { $match: { formId: { $in: workspaceFormIds } } },
     { $group: { _id: { $ifNull: ["$status", "new"] }, count: { $sum: 1 } } },
   ]);
   const beforeByStatus = new Map<string, number>(beforeCounts.map((c: any) => [c._id, c.count]));
@@ -48,9 +59,7 @@ export const migrateStagesFromStatus = async (): Promise<MigrationResult> => {
 
     const existingStageCount = await StageModel.countDocuments({ workspaceId });
     if (existingStageCount === 0) {
-      await StageModel.insertMany(
-        DEFAULT_STAGE_SEEDS.map((s) => ({ ...s, workspaceId }))
-      );
+      if (!dryRun) await StageModel.insertMany(DEFAULT_STAGE_SEEDS.map((s) => ({ ...s, workspaceId })));
       workspacesSeeded += 1;
     }
 
@@ -67,25 +76,28 @@ export const migrateStagesFromStatus = async (): Promise<MigrationResult> => {
       // A workspace whose pre-existing (hand-created) stages happen to omit a category is left
       // alone on Day 1 rather than auto-repaired — that is a data-quality call for a human, not
       // something this script should decide silently.
-      if (!stage) continue;
+      if (!stage && !(dryRun && existingStageCount === 0)) continue;
 
       const statusMatch =
         category === "new"
           ? { $or: [{ status: "new" }, { status: { $exists: false } }, { status: null }] }
           : { status: category };
 
-      const result = await ResponseModel.updateMany(
-        { formId: { $in: formIds }, stageId: { $exists: false }, ...statusMatch },
-        { $set: { stageId: stage._id } }
-      );
+      const filter = { formId: { $in: formIds }, stageId: { $exists: false }, ...statusMatch };
+      if (dryRun) {
+        responsesMigrated += await ResponseModel.countDocuments(filter);
+        continue;
+      }
+      const result = await ResponseModel.updateMany(filter, { $set: { stageId: stage!._id } });
       responsesMigrated += result.modifiedCount;
     }
   }
+  if (dryRun) return { workspacesSeeded, responsesMigrated, responsesWithoutStage };
 
   // Assert: per-status counts before must equal per-stage-category counts after. A mismatch means
   // responses were lost, double-counted, or mapped to the wrong category — refuse to continue.
   const afterCounts = await ResponseModel.aggregate([
-    { $match: { stageId: { $exists: true } } },
+    { $match: { stageId: { $exists: true }, formId: { $in: workspaceFormIds } } },
     { $lookup: { from: StageModel.collection.name, localField: "stageId", foreignField: "_id", as: "stage" } },
     { $unwind: "$stage" },
     { $group: { _id: "$stage.category", count: { $sum: 1 } } },
@@ -107,7 +119,7 @@ export const migrateStagesFromStatus = async (): Promise<MigrationResult> => {
     );
   }
 
-  return { workspacesSeeded, responsesMigrated };
+  return { workspacesSeeded, responsesMigrated, responsesWithoutStage };
 };
 
 if (require.main === module) {
@@ -119,9 +131,12 @@ if (require.main === module) {
       process.exit(1);
     }
     await mongoose.connect(mongoUri);
-    const result = await migrateStagesFromStatus();
+    const dryRun = process.argv.includes("--dry-run");
+    const result = await migrateStagesFromStatus({ dryRun });
     console.log(
-      `Seeded default stages for ${result.workspacesSeeded} workspace(s); set stageId on ${result.responsesMigrated} response(s).`
+      `${dryRun ? "DRY RUN, nothing written. Would seed" : "Seeded"} default stages for ${result.workspacesSeeded} workspace(s); ` +
+        `${dryRun ? "would set" : "set"} stageId on ${result.responsesMigrated} response(s). ` +
+        `${result.responsesWithoutStage} response(s) of personal forms have no stage (by design).`
     );
     await mongoose.disconnect();
   };

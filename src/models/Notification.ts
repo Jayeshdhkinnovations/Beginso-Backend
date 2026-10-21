@@ -5,8 +5,10 @@ export interface INotification extends Document {
   // Sprint 14 (OQ-7): optional. A notification with no usable workspaceId belongs to the user's personal context.
   workspaceId?: mongoose.Types.ObjectId | null;
   type: "welcome" | "password_reset" | "form_activity" | "assignment" | "mention" | "response_edited" | "form_shared" | "storage_warning";
-  /** Set on form_shared: the form that was shared, so the UI can link to it. */
+  /** The form the notification is about (shared, new response, assignment, mention, edit), so the UI can link to it. */
   formId?: mongoose.Types.ObjectId | null;
+  /** The response it is about, when there is one (new response, assignment, mention, edit): the UI opens the Inbox on it. */
+  responseId?: mongoose.Types.ObjectId | null;
   title: string;
   message: string;
   read: boolean;
@@ -35,6 +37,7 @@ const NotificationSchema = new Schema<INotification>(
       required: true,
     },
     formId: { type: Schema.Types.ObjectId, ref: "Form", required: false, default: null },
+    responseId: { type: Schema.Types.ObjectId, ref: "Response", required: false, default: null },
     title: {
       type: String,
       required: true,

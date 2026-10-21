@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import Template from "../models/Template";
 import { fieldShowcaseTemplate } from "../utils/fieldShowcaseTemplate";
+import { kalaChasmaTemplate } from "../data/kalaChasmaTemplate";
 import { refuseInProduction } from "./_guard";
 
 dotenv.config();
@@ -29,6 +30,7 @@ const seedTemplates = async () => {
 
     const templates = [
       fieldShowcaseTemplate,
+      kalaChasmaTemplate,
       {
         name: "Pitch Plan",
         category: "advanced",

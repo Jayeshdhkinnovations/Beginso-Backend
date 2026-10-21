@@ -89,6 +89,29 @@ describe("GET /api/workspaces/:workspaceId/stages", () => {
     expect(res.body.stages[0].isDefault).toBe(true);
   });
 
+  // The Stages table showed 0 on every row: the list never carried a per-stage response count.
+  it("returns how many responses sit in each stage, test submissions included (the rule that makes Delete ask where to move them)", async () => {
+    const stages = await StageModel.find({ workspaceId }).sort({ order: 1 });
+    const [first, second] = stages;
+    await ResponseModel.deleteMany({ formId });
+    await ResponseModel.create([
+      { formId, answers: { a: 1 }, stageId: first._id, status: first.category },
+      { formId, answers: { a: 2 }, stageId: first._id, status: first.category },
+      { formId, answers: { a: 3 }, stageId: first._id, status: first.category, isTest: true },
+      { formId, answers: { a: 4 }, stageId: second._id, status: second.category },
+    ]);
+
+    const res = await request(app).get(`/api/workspaces/${workspaceId}/stages`).set("Authorization", `Bearer ${memberToken}`);
+    expect(res.status).toBe(200);
+    const byId = new Map<string, number>(res.body.stages.map((s: any) => [s.id, s.responseCount]));
+    expect(byId.get(String(first._id))).toBe(3);
+    expect(byId.get(String(second._id))).toBe(1);
+    // A stage nobody is in says 0, not undefined.
+    const untouched = res.body.stages.find((s: any) => s.id !== String(first._id) && s.id !== String(second._id));
+    expect(untouched.responseCount).toBe(0);
+    await ResponseModel.deleteMany({ formId });
+  });
+
   it("always returns >=1 stage even if called repeatedly (idempotent seeding)", async () => {
     await request(app).get(`/api/workspaces/${workspaceId}/stages`).set("Authorization", `Bearer ${memberToken}`);
     const res = await request(app).get(`/api/workspaces/${workspaceId}/stages`).set("Authorization", `Bearer ${memberToken}`);

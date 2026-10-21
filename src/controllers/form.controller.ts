@@ -28,6 +28,7 @@ import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
 import { DEFAULT_IMAGE_MAX_MB, IMAGE_EXT_RE, IMAGE_MIME_TYPES, looksLikeImage } from "../utils/imageUpload";
 import { ACCESS_MODE_VALUES } from "../models/Form";
 import { getAccessMode } from "../utils/accessMode";
+import { requestVerification, confirmLink, statusOf, redeem as redeemEmailVerification, isValidEmail } from "../services/emailVerification.service";
 import { normaliseLayout } from "../utils/layout";
 import { redeemSubmitTicket, issueSubmitTicket } from "../services/submitTicket";
 import { sendSubmissionLink, sendSubmissionConfirmation } from "../services/respondent.service";
@@ -1307,14 +1308,29 @@ export const submitPublicForm = async (
       respondentUserId = account._id.toString();
       respondentEmail = String(account.email).trim().toLowerCase();
     } else if (accessMode === "tracked") {
+      // The address must have been verified (a link in the respondent's inbox) BEFORE this submit, by the same browser: the
+      // verification secret proves it. Single use, so every submission needs its own verified address.
       const rawEmail = (parsed && typeof parsed === "object" ? (parsed as any).respondentEmail : undefined) ?? req.body?.respondentEmail;
       const candidate = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) || candidate.length > 254) {
+      if (!isValidEmail(candidate)) {
         res.status(422).json({
           success: false,
           message: "A valid email address is required",
           errors: [{ field: "respondentEmail", message: "A valid email address is required" }],
           error: { code: "EMAIL_REQUIRED", message: "A valid email address is required" },
+        });
+        return;
+      }
+      const secret =
+        (req.headers["x-email-verification"] as string | undefined) ??
+        (parsed && typeof parsed === "object" ? (parsed as any).emailVerificationId : undefined) ??
+        req.body?.emailVerificationId;
+      if (!(await redeemEmailVerification(form._id.toString(), secret, candidate))) {
+        res.status(422).json({
+          success: false,
+          message: "Verify your email address before submitting",
+          errors: [{ field: "respondentEmail", message: "Verify your email address before submitting" }],
+          error: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email address before submitting" },
         });
         return;
       }
@@ -1614,6 +1630,59 @@ export const issueFormSubmitTicket = async (req: Request, res: Response, next: N
     const { ticket, expiresInSeconds } = issueSubmitTicket(authReq.user._id.toString(), form._id.toString());
     res.set("Cache-Control", "no-store");
     res.status(200).json({ success: true, ticket, expiresInSeconds });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// "Anyone with the link, with their email": ask for a verification email for the address the respondent typed.
+export const requestRespondentEmailVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const form = await formService.getPublicFormBySlug(String(req.params.slug), { readOnly: true });
+    if (getAccessMode(form) !== "tracked") {
+      res.status(409).json({
+        success: false,
+        message: "This form does not ask for a verified email",
+        error: { code: "VERIFICATION_NOT_REQUIRED", message: "This form does not ask for a verified email" },
+      });
+      return;
+    }
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    if (!isValidEmail(email)) {
+      res.status(422).json({
+        success: false,
+        message: "A valid email address is required",
+        errors: [{ field: "email", message: "A valid email address is required" }],
+        error: { code: "EMAIL_REQUIRED", message: "A valid email address is required" },
+      });
+      return;
+    }
+    const { verificationId, linkExpiresAt } = await requestVerification({ formId: form._id, formName: form.title, email });
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ success: true, verificationId, expiresAt: linkExpiresAt });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Polled by the respondent's browser while they open the email. The verification id is the proof it is the same browser.
+export const getRespondentEmailVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const form = await formService.getPublicFormBySlug(String(req.params.slug), { readOnly: true });
+    const result = await statusOf(form._id, req.params.verificationId);
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// The respondent clicked the button in the email. No session: the link token in the body is the proof of the inbox.
+export const confirmRespondentEmailVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await confirmLink(req.body?.token);
+    res.set("Cache-Control", "no-store");
+    res.status(result.state === "invalid" ? 404 : 200).json({ success: result.state === "verified", state: result.state });
   } catch (error) {
     next(error);
   }

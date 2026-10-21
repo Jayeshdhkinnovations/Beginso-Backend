@@ -44,6 +44,14 @@ export const evaluateReadiness = (form: ReadinessSubject, now: Date = new Date()
     }
   }
 
+  // "Anyone with the link, with their email" verifies the address in the form's own email question, so it needs one.
+  if (getAccessMode(form) === "tracked" && !visible.some((f) => f.type === "email")) {
+    blocking.push({
+      code: "TRACKED_NEEDS_EMAIL_FIELD",
+      message: "Add an Email question: \"Anyone with the link, with their email\" verifies the respondent's address in it",
+    });
+  }
+
   // Answers are keyed by label, so an empty or repeated label is a real data problem, not just cosmetics.
   const seen = new Map<string, string | undefined>();
   for (const field of visible) {

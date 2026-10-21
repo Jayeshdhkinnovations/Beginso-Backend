@@ -19,6 +19,9 @@ import Notification from "../models/Notification";
 import Template from "../models/Template";
 import ResponseReadState from "../models/ResponseReadState";
 import { Event } from "../models/Event";
+import EmailVerification from "../models/EmailVerification";
+import { keyedHash } from "../utils/pepper";
+import crypto from "crypto";
 import { generateToken } from "../utils/generateToken";
 import { mailService } from "../services/mail.service";
 import { renderRespondentLinkEmail } from "../services/respondentMail";
@@ -60,6 +63,22 @@ const rawForm = (doc: any): Promise<any> => Form.create(doc);
 
 const publish = async (form: any, t = tOwner) =>
   request(app).post(`/api/forms/${form._id}/publish`).set(as(t)).send({});
+
+// A respondent who already proved the address (what the email-verification flow ends with), without going through the mailer.
+const verifiedFor = async (formId: any, email: string): Promise<string> => {
+  const secret = crypto.randomBytes(32).toString("base64url");
+  await EmailVerification.create({
+    formId,
+    email,
+    linkHash: `link-${secret}`,
+    secretHash: keyedHash(`email-verify-secret:${secret}`),
+    linkExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    verifiedAt: new Date(),
+    proofExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    purgeAt: new Date(Date.now() + DAY),
+  });
+  return secret;
+};
 
 const submitPublic = (slug: string, answers: Record<string, any>, extra: Record<string, any> = {}, headers: Record<string, string> = {}) =>
   request(app)
@@ -285,7 +304,13 @@ describe("B4 - access modes", () => {
       expect(bad.status).toBe(422);
       expect(await ResponseModel.countDocuments({ formId: form._id })).toBe(0);
 
-      const ok = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" }, { respondentEmail: " Bea@Example.com " });
+      const unverified = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" }, { respondentEmail: "bea@example.com" });
+      expect(unverified.status).toBe(422);
+      expect(unverified.body.error.code).toBe("EMAIL_NOT_VERIFIED");
+      expect(await ResponseModel.countDocuments({ formId: form._id })).toBe(0);
+
+      const emailVerificationId = await verifiedFor(form._id, "bea@example.com");
+      const ok = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" }, { respondentEmail: " Bea@Example.com ", emailVerificationId });
       expect(ok.status).toBe(200);
       const stored = await ResponseModel.findOne({ formId: form._id });
       expect(stored!.respondentEmail).toBe("bea@example.com");
@@ -348,7 +373,8 @@ describe("B4 - access modes", () => {
       expect((await submitPublic(openSlug, { "f-name": "Di", "f-email": "di@x.com" })).status).toBe(200);
       expect(spy).not.toHaveBeenCalled();
 
-      expect((await submitPublic(trackedSlug, { "f-name": "Ed", "f-email": "ed@x.com" }, { respondentEmail: "ed@example.com" })).status).toBe(200);
+      const emailVerificationId = await verifiedFor(tracked._id, "ed@example.com");
+      expect((await submitPublic(trackedSlug, { "f-name": "Ed", "f-email": "ed@x.com" }, { respondentEmail: "ed@example.com", emailVerificationId })).status).toBe(200);
       expect(spy).toHaveBeenCalledTimes(1);
       expect((spy.mock.calls[0][0] as any).template).toBe("respondent_submission_link");
       spy.mockRestore();
@@ -654,7 +680,8 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
   let sentLinks: string[];
 
   const submitTracked = async (email: string, name = "Dee") => {
-    const res = await submitPublic(slug, { "f-name": name, "f-email": "typed@x.com" }, { respondentEmail: email });
+    const emailVerificationId = await verifiedFor(form._id, email.toLowerCase());
+    const res = await submitPublic(slug, { "f-name": name, "f-email": "typed@x.com" }, { respondentEmail: email, emailVerificationId });
     expect(res.status).toBe(200);
     return (await ResponseModel.findOne({ formId: form._id, respondentEmail: email.toLowerCase() }).sort({ createdAt: -1 }))!;
   };
@@ -673,7 +700,8 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
 
   it("A5.5 - the respondent email contains no response data, whatever was submitted", async () => {
     const secret = "ZEBRA-SECRET-ANSWER-9981";
-    const res = await submitPublic(slug, { "f-name": secret, "f-email": "top-secret@answer.test" }, { respondentEmail: "reader@example.com" });
+    const emailVerificationId = await verifiedFor(form._id, "reader@example.com");
+    const res = await submitPublic(slug, { "f-name": secret, "f-email": "top-secret@answer.test" }, { respondentEmail: "reader@example.com", emailVerificationId });
     expect(res.status).toBe(200);
 
     expect(spy).toHaveBeenCalledTimes(1);

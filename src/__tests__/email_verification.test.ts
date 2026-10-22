@@ -112,6 +112,17 @@ describe("asking for the code", () => {
     expect(await EmailVerification.countDocuments()).toBe(before);
   });
 
+  it("the code leads where an inbox looks first: the subject, the preview line and the first line of the text", () => {
+    const r = renderEmailCodeEmail({ formName: "Film submissions", code: "482913", expiresAt: new Date(Date.now() + 10 * 60000) });
+    expect(r.subject.startsWith("482913")).toBe(true);
+    expect(r.text.startsWith("482913")).toBe(true);
+    const preheader = /<div style="display: none[^>]*>([^<]*)<\/div>/.exec(r.html)![1];
+    expect(preheader.startsWith("Your code is 482913")).toBe(true); // the first hidden block, before any body copy
+    expect(r.html.indexOf("Your code is 482913")).toBeLessThan(r.html.indexOf("Your code</h1>"));
+    expect(r.html).toContain("Beginso"); // the shared layout: logo, footer
+    expect(r.html).not.toContain("<a "); // nothing to click, so nothing for a mail client to rewrite
+  });
+
   it("the email holds the form name and the code, and escapes a hostile name", () => {
     const rendered = renderEmailCodeEmail({ formName: '<script>alert("x")</script>', code: "123456", expiresAt: new Date(Date.now() + 10 * 60000) });
     expect(rendered.html).not.toContain("<script>");

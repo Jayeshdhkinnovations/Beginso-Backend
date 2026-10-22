@@ -217,6 +217,19 @@ export function detailCard(rows: Array<{ label: string; value: string; badge?: b
 </table>`;
 }
 
+/**
+ * A one-time code, big and centred, in its own tinted block (so it is the first thing the eye lands on, and easy to select).
+ * Letter-spaced, monospace, not a link: nothing here is clickable, so a mail client has nothing to rewrite or track.
+ */
+export function codeBlock(code: string): string {
+  return `
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 24px 0;">
+  <tr><td align="center" style="background-color: ${C.primarySoft}; border: 1px solid #D9E3F7; border-radius: 12px; padding: 22px 12px;">
+    <span style="font-size: 36px; font-weight: 700; letter-spacing: 12px; color: ${C.ink}; font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace; padding-left: 12px;">${esc(code)}</span>
+  </td></tr>
+</table>`;
+}
+
 export function heading(text: string): string {
   return `<h1 style="font-size: 23px; font-weight: 700; color: ${C.ink}; margin: 0 0 12px 0; letter-spacing: -0.3px; line-height: 1.3; font-family: ${FONT};">${esc(text)}</h1>`;
 }

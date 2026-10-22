@@ -18,10 +18,10 @@ const load = (env: Record<string, string | undefined>) => {
 };
 
 describe("mail logo", () => {
-  it("defaults to the hosted light and dark logos", () => {
+  it("defaults to the hosted full logo (icon and wordmark), light and dark", () => {
     const m = load({});
-    expect(m.LOGO_URL).toBe("https://storage.beginso.com/assets/logo-light.svg");
-    expect(m.LOGO_DARK_URL).toBe("https://storage.beginso.com/assets/logo-dark.svg");
+    expect(m.LOGO_URL).toBe("https://storage.beginso.com/assets/logo-full-light.svg");
+    expect(m.LOGO_DARK_URL).toBe("https://storage.beginso.com/assets/logo-full-dark.svg");
   });
 
   it("can be overridden by env", () => {
@@ -33,8 +33,8 @@ describe("mail logo", () => {
   it("renders both logos, hides the dark one by default and swaps on prefers-color-scheme: dark", () => {
     const { renderMail } = require("../services/mail.service");
     const html: string = renderMail({ to: "a@b.test", template: "reset_password", name: "Ann", link: "https://www.beginso.com/reset" })!.html;
-    expect(html).toContain('class="logo-light" src="https://storage.beginso.com/assets/logo-light.svg"');
-    expect(html).toContain('class="logo-dark" src="https://storage.beginso.com/assets/logo-dark.svg"');
+    expect(html).toContain('class="logo-light" src="https://storage.beginso.com/assets/logo-full-light.svg"');
+    expect(html).toContain('class="logo-dark" src="https://storage.beginso.com/assets/logo-full-dark.svg"');
     expect(html).toContain("@media (prefers-color-scheme: dark)");
     expect(html).toContain('content="light dark"');
   });

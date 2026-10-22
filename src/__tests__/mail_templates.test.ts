@@ -12,8 +12,8 @@ describe("mail templates", () => {
     expect(m.subject).toBeTruthy();
     expect(m.text).not.toMatch(/undefined|NaN/);
     expect(m.html).toMatch(/^<!DOCTYPE html>/);
-    expect(m.html).toContain("https://storage.beginso.com/assets/logo-light.svg");
-    expect(m.html).toContain("https://storage.beginso.com/assets/logo-dark.svg");
+    expect(m.html).toContain("https://storage.beginso.com/assets/logo-full-light.svg");
+    expect(m.html).toContain("https://storage.beginso.com/assets/logo-full-dark.svg");
     expect(m.html).not.toContain("#2563EB");
     expect(m.subject).not.toMatch(/[\u{1F300}-\u{1FAFF}✅✉]/u);
   });

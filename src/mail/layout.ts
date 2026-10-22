@@ -57,13 +57,15 @@ export const FONT =
 export const APP_URL = process.env.APP_URL || "https://www.beginso.com";
 
 /**
- * The logo at the top of every mail: the brand's own hosted files, one for light and one for dark. The mail shows the light one
- * and swaps to the dark one when the reader's system is in dark mode (see DARK_CSS). EMAIL_LOGO_URL / EMAIL_LOGO_DARK_URL override.
+ * The logo at the top of every mail: the brand's own hosted FULL logo (icon and wordmark, 1597x440, shown at 168x46), one file for light and
+ * one for dark. The mail shows the light one and swaps to the dark one when the reader's system is in dark mode (see DARK_CSS).
+ * (logo-light.svg / logo-dark.svg are the icon alone, which is why a mail with them showed only the stack mark.)
+ * EMAIL_LOGO_URL / EMAIL_LOGO_DARK_URL override.
  * Note: Gmail and Outlook do not draw SVG at all, so there the logo is blank whatever the address; Apple Mail, iOS Mail and most
- * others do.
+ * others do. If that matters, host a PNG of the same artwork and point EMAIL_LOGO_URL at it.
  */
-export const LOGO_URL = process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-light.svg";
-export const LOGO_DARK_URL = process.env.EMAIL_LOGO_DARK_URL || "https://storage.beginso.com/assets/logo-dark.svg";
+export const LOGO_URL = process.env.EMAIL_LOGO_URL || "https://storage.beginso.com/assets/logo-full-light.svg";
+export const LOGO_DARK_URL = process.env.EMAIL_LOGO_DARK_URL || "https://storage.beginso.com/assets/logo-full-dark.svg";
 
 /**
  * Dark mode for clients that honour prefers-color-scheme (Apple Mail, iOS Mail, others): the page and card go dark and the inline

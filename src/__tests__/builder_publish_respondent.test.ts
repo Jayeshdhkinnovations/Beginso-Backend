@@ -712,6 +712,19 @@ describe("B6 - respondent links, edit-after-review, claim, my submissions", () =
     expect(Object.keys(options).sort()).toEqual(["actionUrl", "expiresAt", "formName", "template", "to"]);
   });
 
+  it("the email offers to link the submissions to an account, through the signed-in My submissions page (no token, no answers)", () => {
+    const r = renderRespondentLinkEmail({ formName: "Tracked intake", actionUrl: "https://beginso.com/r/tok", expiresAt: new Date(Date.now() + DAY) });
+    for (const part of [r.html, r.text]) {
+      expect(part).toContain("Keep all your submissions in one place");
+      expect(part).toContain("Link my submissions to my account");
+      expect(part).toContain("/my-submissions");
+    }
+    expect(r.html.match(/\/my-submissions"/)).not.toBeNull();
+    expect(r.text.split("/my-submissions")[1].startsWith("\n")).toBe(true); // the URL ends there: no token appended
+    const custom = renderRespondentLinkEmail({ formName: "F", actionUrl: "https://x/r/t", expiresAt: new Date(), accountUrl: "https://x/my-submissions" });
+    expect(custom.html).toContain('href="https://x/my-submissions"');
+  });
+
   it("the email escapes a hostile form name instead of injecting markup", () => {
     const html = renderRespondentLinkEmail({ formName: '<script>alert("x")</script>', actionUrl: "https://beginso.com/r/abc", expiresAt: new Date() }).html;
     expect(html).not.toContain("<script>");

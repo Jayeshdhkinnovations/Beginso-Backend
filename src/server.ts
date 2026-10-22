@@ -1,6 +1,7 @@
 import "dotenv/config";
 import app from "./app";
 import connectDB from "./config/database";
+import EmailVerification from "./models/EmailVerification";
 import { closeExpiredForms } from "./services/form.service";
 import { recoverReportQueue } from "./services/reportQueue";
 import { purgeExpiredTrash } from "./services/trash.service";
@@ -31,6 +32,11 @@ process.on("uncaughtException", (error) => {
 const startServer = async () => {
     try {
         await connectDB();
+
+        // The email-verification collection changed shape once (a link became a code), and Mongoose never drops an index the schema no
+        // longer has: a leftover UNIQUE index on the old field made every request after the first fail with a duplicate-key error (11000).
+        // syncIndexes() makes this one collection's indexes match the schema again. It touches only this collection and is idempotent.
+        await EmailVerification.syncIndexes().catch((e) => console.error("EmailVerification.syncIndexes failed:", e));
 
         // Close forms whose close date has passed: once now, then every 5 minutes.
         const sweep = () => closeExpiredForms().catch((e) => console.error("closeExpiredForms failed:", e));

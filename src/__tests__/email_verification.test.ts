@@ -238,6 +238,22 @@ describe("My submissions", () => {
   });
 });
 
+describe("an older database", () => {
+  it("a leftover UNIQUE index from the link-based version made the second request fail (E11000); syncIndexes repairs it", async () => {
+    await EmailVerification.deleteMany({});
+    await EmailVerification.collection.createIndex({ linkHash: 1 }, { unique: true, name: "linkHash_1" });
+    const slug = await publish(await mkForm());
+    expect((await ask(slug, "one@example.com")).status).toBe(200); // the first stores linkHash: null
+    expect((await ask(slug, "two@example.com")).status).toBeGreaterThanOrEqual(500); // the second collides on null
+
+    await EmailVerification.syncIndexes(); // what the server now does at start
+    expect((await ask(slug, "three@example.com")).status).toBe(200);
+    expect((await ask(slug, "four@example.com")).status).toBe(200);
+    const names = (await EmailVerification.collection.indexes()).map((i) => i.name);
+    expect(names).not.toContain("linkHash_1");
+  });
+});
+
 describe("one gate", () => {
   it("a stored \"login\" mode is the same gate as \"tracked\", and no Email question is needed for either", async () => {
     expect(getAccessMode({ settings: { accessMode: "login" } })).toBe("tracked");

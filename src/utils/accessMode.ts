@@ -2,8 +2,11 @@ import { ACCESS_MODE_VALUES, AccessMode } from "../models/Form";
 
 // Sprint 13 (D1.1). A form with no stored accessMode is Mode 1 ("open") - what every form created before
 // Sprint 13 is. Read it through this helper everywhere; never `form.settings.accessMode` directly.
+// There are two modes now: "open" (anyone with the link) and "tracked" (anyone, with a verified email: a code sent to it, Google, or a
+// Beginso sign-in). The old "login" mode (signed-in accounts only) is the same gate with fewer ways in, so a stored "login" reads as "tracked".
 export const getAccessMode = (form: { settings?: { accessMode?: string | null } | null }): AccessMode => {
   const value = form.settings?.accessMode;
+  if (value === "login") return "tracked";
   return ACCESS_MODE_VALUES.includes(value as AccessMode) ? (value as AccessMode) : "open";
 };
 

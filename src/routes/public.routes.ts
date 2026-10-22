@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { getPublicFormBySlug, submitPublicForm, recordFormView, issueFormSubmitTicket, requestRespondentEmailVerification, getRespondentEmailVerification, confirmRespondentEmailVerification } from "../controllers/form.controller";
+import { getPublicFormBySlug, submitPublicForm, recordFormView, issueFormSubmitTicket, requestRespondentEmailVerification, checkRespondentEmailCode } from "../controllers/form.controller";
 import { unsubscribeFromEmails } from "../controllers/notification.controller";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { getUploadDir } from "../controllers/upload.controller";
@@ -52,11 +52,10 @@ const uploadAny = (req: any, res: any, next: any) =>
 router.get("/notifications/unsubscribe/:token", authRateLimiter, unsubscribeFromEmails);
 // RFC 8058 one-click: Gmail/Yahoo POST here with no session and no cookies.
 router.post("/notifications/unsubscribe/:token", authRateLimiter, unsubscribeFromEmails);
-// Verifying the respondent's email on a "with their email" form. Registered before "/:slug" so the fixed path wins.
-router.post("/email-verification/confirm", authRateLimiter, confirmRespondentEmailVerification);
 router.get("/:slug", publicFormReadLimiter, getPublicFormBySlug);
+// "Anyone, with a verified email": send a 6-digit code to the address, then check the code the respondent types.
 router.post("/:slug/verify-email", authRateLimiter, emailTargetRateLimiter, requestRespondentEmailVerification);
-router.get("/:slug/verify-email/:verificationId", publicFormReadLimiter, getRespondentEmailVerification);
+router.post("/:slug/verify-email/:verificationId/code", authRateLimiter, checkRespondentEmailCode);
 router.post("/:slug/view", publicFormReadLimiter, recordFormView);
 // Sprint 13 (Mode 3, OQ-10): a signed-in respondent asks for a one-shot ticket, then submits directly.
 router.post("/:slug/submit-ticket", publicFormReadLimiter, protect as any, blockSuspended as any, issueFormSubmitTicket);

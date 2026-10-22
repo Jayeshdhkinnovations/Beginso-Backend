@@ -28,7 +28,7 @@ import { MAX_UPLOAD_MB, MAX_ANSWERS_BYTES } from "../utils/uploadLimits";
 import { DEFAULT_IMAGE_MAX_MB, IMAGE_EXT_RE, IMAGE_MIME_TYPES, looksLikeImage } from "../utils/imageUpload";
 import { ACCESS_MODE_VALUES } from "../models/Form";
 import { getAccessMode } from "../utils/accessMode";
-import { requestVerification, confirmLink, statusOf, redeem as redeemEmailVerification, isValidEmail } from "../services/emailVerification.service";
+import { requestVerification, verifyCode, redeem as redeemEmailVerification, isValidEmail } from "../services/emailVerification.service";
 import { normaliseLayout } from "../utils/layout";
 import { redeemSubmitTicket, issueSubmitTicket } from "../services/submitTicket";
 import { sendSubmissionLink, sendSubmissionConfirmation } from "../services/respondent.service";
@@ -1283,58 +1283,50 @@ export const submitPublicForm = async (
       return;
     }
 
-    // Sprint 13 (D1.1): who may submit is decided HERE, on the server - never trusted from the client.
-    //  open    - anyone, as before.
-    //  tracked - anyone, but they must give an address; it becomes the response's identity and the link
-    //            to view/correct the submission is emailed to it (a typo is harmless: the email carries
-    //            no response data).
-    //  login   - a signed-in Beginso account only, proven by a short-lived single-use ticket (the browser
-    //            never holds the session token). The address comes from the ACCOUNT, never the request.
+    // Who may submit is decided HERE, on the server - never trusted from the client.
+    //  open    - anyone with the link, as before.
+    //  tracked - anyone, but with a VERIFIED email. Two ways in, both proven server-side, never taken from the request:
+    //            a signed-in Beginso account (Google or password), shown by a short-lived single-use ticket; or an address
+    //            confirmed with a 6-digit code BEFORE the form started, shown by the verification id. The address always comes
+    //            from the account or from the verified record. (A stored "login" mode reads as "tracked": see getAccessMode.)
     const accessMode = getAccessMode(form);
     let respondentEmail: string | null = null;
     let respondentUserId: string | null = null;
-    if (accessMode === "login") {
+    let respondentEmailVerified = false;
+    if (accessMode === "tracked") {
       const ticket = (req.headers["x-submit-ticket"] as string | undefined) ?? (req.body ? req.body.ticket : undefined);
-      const ticketUserId = await redeemSubmitTicket(ticket, form._id.toString());
-      const account = ticketUserId ? await User.findById(ticketUserId) : null;
-      if (!account || account.status === "suspended") {
-        res.status(401).json({
-          success: false,
-          message: "Sign in to submit this form",
-          error: { code: "LOGIN_REQUIRED", message: "Sign in to submit this form" },
-        });
-        return;
+      if (ticket) {
+        const ticketUserId = await redeemSubmitTicket(ticket, form._id.toString());
+        const account = ticketUserId ? await User.findById(ticketUserId) : null;
+        if (!account || account.status === "suspended") {
+          res.status(401).json({
+            success: false,
+            message: "Sign in to submit this form",
+            error: { code: "LOGIN_REQUIRED", message: "Sign in to submit this form" },
+          });
+          return;
+        }
+        respondentUserId = account._id.toString();
+        respondentEmail = String(account.email).trim().toLowerCase();
+        respondentEmailVerified = true;
+      } else {
+        const secret =
+          (req.headers["x-email-verification"] as string | undefined) ??
+          (parsed && typeof parsed === "object" ? (parsed as any).emailVerificationId : undefined) ??
+          req.body?.emailVerificationId;
+        const verifiedEmail = await redeemEmailVerification(form._id.toString(), secret);
+        if (!verifiedEmail) {
+          res.status(422).json({
+            success: false,
+            message: "Verify your email address before submitting",
+            errors: [{ field: "respondentEmail", message: "Verify your email address before submitting" }],
+            error: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email address before submitting" },
+          });
+          return;
+        }
+        respondentEmail = verifiedEmail;
+        respondentEmailVerified = true;
       }
-      respondentUserId = account._id.toString();
-      respondentEmail = String(account.email).trim().toLowerCase();
-    } else if (accessMode === "tracked") {
-      // The address must have been verified (a link in the respondent's inbox) BEFORE this submit, by the same browser: the
-      // verification secret proves it. Single use, so every submission needs its own verified address.
-      const rawEmail = (parsed && typeof parsed === "object" ? (parsed as any).respondentEmail : undefined) ?? req.body?.respondentEmail;
-      const candidate = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
-      if (!isValidEmail(candidate)) {
-        res.status(422).json({
-          success: false,
-          message: "A valid email address is required",
-          errors: [{ field: "respondentEmail", message: "A valid email address is required" }],
-          error: { code: "EMAIL_REQUIRED", message: "A valid email address is required" },
-        });
-        return;
-      }
-      const secret =
-        (req.headers["x-email-verification"] as string | undefined) ??
-        (parsed && typeof parsed === "object" ? (parsed as any).emailVerificationId : undefined) ??
-        req.body?.emailVerificationId;
-      if (!(await redeemEmailVerification(form._id.toString(), secret, candidate))) {
-        res.status(422).json({
-          success: false,
-          message: "Verify your email address before submitting",
-          errors: [{ field: "respondentEmail", message: "Verify your email address before submitting" }],
-          error: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email address before submitting" },
-        });
-        return;
-      }
-      respondentEmail = candidate;
     }
 
     // Past the base quota (but under the hard ceiling) attachments are refused while text answers still go
@@ -1530,27 +1522,20 @@ export const submitPublicForm = async (
     const ctx = (req as any).uploadContext;
     const submission = await formService.submitForm(form._id.toString(), answers, hashedIp, ctx?.responseId, {
       respondentEmail,
+      respondentEmailVerified,
       respondentUserId,
       geo: lookupGeo(clientIp),
       uploadsDisabled,
     });
     submissionSuccess = true;
 
-    // Tracked mode: email the respondent their link. Failure to send never fails the submission.
+    // Verified-email mode. A guest (code) gets the signed link to view or correct the submission; a signed-in account gets a confirmation that
+    // points at My submissions (a signed-in page, no token). Failure to send never fails the submission. Open mode sends nothing.
     if (accessMode === "tracked" && respondentEmail) {
-      const sent = sendSubmissionLink({
-        responseId: submission._id,
-        formId: form._id,
-        formName: form.title,
-        email: respondentEmail,
-      });
+      const sent = respondentUserId
+        ? sendSubmissionConfirmation({ formName: form.title, email: respondentEmail })
+        : sendSubmissionLink({ responseId: submission._id, formId: form._id, formName: form.title, email: respondentEmail });
       if (process.env.NODE_ENV === "test") await sent; // deterministic for tests; fire-and-forget in production
-    }
-
-    // Login mode: confirm to the account's own address, with a link to My submissions (a signed-in page, no token). Open mode sends nothing.
-    if (accessMode === "login" && respondentEmail) {
-      const confirmed = sendSubmissionConfirmation({ formName: form.title, email: respondentEmail });
-      if (process.env.NODE_ENV === "test") await confirmed;
     }
 
     // Create form_activity notification for workspace owner
@@ -1619,7 +1604,7 @@ export const issueFormSubmitTicket = async (req: Request, res: Response, next: N
   try {
     const authReq = req as any;
     const form = await formService.getPublicFormBySlug(String(req.params.slug), { readOnly: true });
-    if (getAccessMode(form) !== "login") {
+    if (getAccessMode(form) !== "tracked") {
       res.status(409).json({
         success: false,
         message: "This form does not require sign-in",
@@ -1635,7 +1620,7 @@ export const issueFormSubmitTicket = async (req: Request, res: Response, next: N
   }
 };
 
-// "Anyone with the link, with their email": ask for a verification email for the address the respondent typed.
+// "Anyone, with a verified email": send a 6-digit code to the address the respondent typed.
 export const requestRespondentEmailVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const form = await formService.getPublicFormBySlug(String(req.params.slug), { readOnly: true });
@@ -1657,32 +1642,26 @@ export const requestRespondentEmailVerification = async (req: Request, res: Resp
       });
       return;
     }
-    const { verificationId, linkExpiresAt } = await requestVerification({ formId: form._id, formName: form.title, email });
+    const { verificationId, expiresAt } = await requestVerification({ formId: form._id, formName: form.title, email });
     res.set("Cache-Control", "no-store");
-    res.status(200).json({ success: true, verificationId, expiresAt: linkExpiresAt });
+    res.status(200).json({ success: true, verificationId, expiresAt });
   } catch (error) {
     next(error);
   }
 };
 
-// Polled by the respondent's browser while they open the email. The verification id is the proof it is the same browser.
-export const getRespondentEmailVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// The respondent typed the code. The verification id in the path is the proof it is the same browser that asked.
+export const checkRespondentEmailCode = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const form = await formService.getPublicFormBySlug(String(req.params.slug), { readOnly: true });
-    const result = await statusOf(form._id, req.params.verificationId);
+    const result = await verifyCode(form._id, req.params.verificationId, req.body?.code);
     res.set("Cache-Control", "no-store");
-    res.status(200).json({ success: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// The respondent clicked the button in the email. No session: the link token in the body is the proof of the inbox.
-export const confirmRespondentEmailVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const result = await confirmLink(req.body?.token);
-    res.set("Cache-Control", "no-store");
-    res.status(result.state === "invalid" ? 404 : 200).json({ success: result.state === "verified", state: result.state });
+    if (result.state === "verified") {
+      res.status(200).json({ success: true, state: "verified", email: result.email });
+      return;
+    }
+    const status = result.state === "wrong" ? 422 : result.state === "locked" ? 429 : result.state === "expired" ? 410 : 404;
+    res.status(status).json({ success: false, ...result, error: { code: `CODE_${result.state.toUpperCase()}`, message: "That code did not work" } });
   } catch (error) {
     next(error);
   }

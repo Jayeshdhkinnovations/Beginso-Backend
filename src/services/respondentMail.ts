@@ -70,25 +70,29 @@ export const renderRespondentLinkEmail = ({ formName, actionUrl, expiresAt }: Re
   return { subject, text, html };
 };
 
-// "Anyone with the link, with their email" forms: the mail that asks the respondent to confirm the address BEFORE they submit.
-// Like the link mail it carries nothing but the form's name and one button.
-export const renderEmailVerifyEmail = ({ formName, actionUrl, expiresAt }: RespondentLinkEmailInput): RenderedEmail => {
+// "Anyone, with a verified email" forms: the mail that carries the 6-digit code, BEFORE the form starts. Like the link mail it carries
+// nothing but the form's name and the code.
+export interface EmailCodeInput {
+  formName: string;
+  code: string;
+  expiresAt: Date;
+}
+
+export const renderEmailCodeEmail = ({ formName, code, expiresAt }: EmailCodeInput): RenderedEmail => {
   const name = formName.trim() || "a form";
-  const subject = `Confirm your email for ${name}`;
+  const subject = `${code} is your code for ${name}`;
   const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000));
   const text = [
-    `Confirm your email address to respond to "${name}".`,
+    `Your code to respond to "${name}":`,
     "",
-    "Open the link below, then go back to the form to finish.",
+    code,
     "",
-    actionUrl,
-    "",
-    `This link works for about ${minutes} minutes.`,
+    `It works for about ${minutes} minutes. Type it into the form to continue.`,
     "",
     "If you did not ask for this, you can ignore this email.",
   ].join("\n");
   const safeName = escapeHtml(name);
-  const safeUrl = escapeHtml(actionUrl);
+  const safeCode = escapeHtml(code);
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(subject)}</title></head>
@@ -97,10 +101,10 @@ export const renderEmailVerifyEmail = ({ formName, actionUrl, expiresAt }: Respo
     <tr><td align="center">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:540px;background-color:#ffffff;border-radius:16px;border:1px solid #E5E7EB;">
         <tr><td style="padding:36px;">
-          <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 12px 0;">Confirm your email</h1>
-          <p style="font-size:15px;color:#4B5563;line-height:1.6;margin:0 0 24px 0;">Confirm this address to respond to <strong>${safeName}</strong>. Then go back to the form to finish.</p>
-          <p style="margin:0 0 24px 0;"><a href="${safeUrl}" style="display:inline-block;background-color:#1D4ED8;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 24px;border-radius:8px;">Confirm my email</a></p>
-          <p style="font-size:13px;color:#6B7280;line-height:1.5;margin:0 0 8px 0;">This link works for about ${minutes} minutes.</p>
+          <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 12px 0;">Your code</h1>
+          <p style="font-size:15px;color:#4B5563;line-height:1.6;margin:0 0 24px 0;">Type this code into the form to respond to <strong>${safeName}</strong>.</p>
+          <p style="font-size:34px;font-weight:700;letter-spacing:8px;color:#111827;margin:0 0 24px 0;">${safeCode}</p>
+          <p style="font-size:13px;color:#6B7280;line-height:1.5;margin:0 0 8px 0;">It works for about ${minutes} minutes.</p>
           <p style="font-size:13px;color:#6B7280;line-height:1.5;margin:0;">If you did not ask for this, you can ignore this email.</p>
         </td></tr>
       </table>

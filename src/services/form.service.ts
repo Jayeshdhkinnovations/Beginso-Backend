@@ -901,7 +901,7 @@ export class FormService {
     responseId?: string,
     // Sprint 13: `isTest` = a builder test submission (CF2.6). `respondentEmail` / `respondentUserId`
     // come from the access mode (D1.1) and win over the "first email field" heuristic.
-    options: { isTest?: boolean; uploadsDisabled?: boolean; respondentEmail?: string | null; respondentUserId?: unknown; geo?: ResponseGeo | null } = {}
+    options: { isTest?: boolean; uploadsDisabled?: boolean; respondentEmail?: string | null; respondentEmailVerified?: boolean; respondentUserId?: unknown; geo?: ResponseGeo | null } = {}
   ) {
     const form = await this.formRepository.findById(formId);
     if (!form) {
@@ -944,6 +944,7 @@ export class FormService {
       geo: options.geo ?? undefined,
       reference,
       respondentEmail,
+      respondentEmailVerified: options.respondentEmailVerified === true,
       duplicateOfId,
       isTest: !!options.isTest,
       respondentUserId: (options.respondentUserId as any) ?? null,

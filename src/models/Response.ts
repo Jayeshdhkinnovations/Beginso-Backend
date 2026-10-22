@@ -35,6 +35,8 @@ export interface IResponse extends Document {
   // recomputed per read) so duplicate lookup is one indexed query, not a per-response answers scan
   // — see duplicate.service.ts for the extraction + lookup logic and the OQ-6 assumption it records.
   respondentEmail?: string | null;
+  // The address was proven (a code sent to it, or a signed-in account). Only then may a later account with this email see the response.
+  respondentEmailVerified?: boolean;
   // Sprint 12, BE 0.6 (B4.10/B8.3): id of the earliest earlier response to the SAME form whose
   // respondentEmail matched (case-insensitive) at submission time. Flag only — never merged or
   // dropped. null = not a duplicate (or no email field on the form).
@@ -121,6 +123,7 @@ const ResponseSchema = new Schema<IResponse>(
       default: null,
       index: true,
     },
+    respondentEmailVerified: { type: Boolean, default: false },
     duplicateOfId: {
       type: Schema.Types.ObjectId,
       ref: "Response",

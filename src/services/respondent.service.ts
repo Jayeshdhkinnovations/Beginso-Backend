@@ -373,7 +373,21 @@ export const resendLink = async (email: unknown, slug: unknown): Promise<void> =
 // The signed-in portal (My Submissions)
 // ---------------------------------------------------------------------------------------------------
 
+// A respondent who proved an address with a code (no account) and later has a Beginso account for that same address sees those
+// submissions under My submissions. Only responses whose address was VERIFIED at submission time attach: an unverified address typed into
+// an old form never hands its response to whoever signs up with it.
+const attachVerifiedSubmissions = async (userId: mongoose.Types.ObjectId | string): Promise<void> => {
+  const user = await User.findById(userId).select("email").lean();
+  const email = user?.email ? String(user.email).trim().toLowerCase() : "";
+  if (!email) return;
+  await ResponseModel.updateMany(
+    { respondentEmail: email, respondentEmailVerified: true, respondentUserId: null, deletedAt: null },
+    { $set: { respondentUserId: userId } }
+  );
+};
+
 export const listMine = async (userId: mongoose.Types.ObjectId | string) => {
+  await attachVerifiedSubmissions(userId);
   const responses = await ResponseModel.find({ respondentUserId: userId, deletedAt: null }).sort({ submittedAt: -1 }).limit(500);
   const formIds = [...new Set(responses.map((r) => String(r.formId)))];
   // Default Form query: a trashed form's submissions drop out of the portal until it is restored.

@@ -1,7 +1,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import crypto from "crypto";
 import { recordMailLog, MailLogTemplate } from "../models/MailLog";
-import { renderRespondentLinkEmail, renderEmailVerifyEmail } from "./respondentMail";
+import { renderRespondentLinkEmail, renderEmailCodeEmail } from "./respondentMail";
 import { renderActivityEmail, ActivityEmailInput } from "./notificationMail";
 import { RenderedMail, APP_URL } from "../mail/layout";
 import * as T from "../mail/templates";
@@ -15,7 +15,7 @@ export type AuthMailType =
   | "password_changed_success"
   | "workspace_invitation"
   | "respondent_submission_link"
-  | "respondent_email_verify"
+  | "respondent_email_code"
   | "respondent_confirmation"
   | "activity_notification"
   | "role_changed"
@@ -128,11 +128,11 @@ export function renderMail(o: SendMailOptions): RenderedMail | null {
         actionUrl: actionUrl || APP_URL,
         expiresAt: o.expiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       });
-    case "respondent_email_verify":
-      return renderEmailVerifyEmail({
+    case "respondent_email_code":
+      return renderEmailCodeEmail({
         formName: o.formName || "",
-        actionUrl: actionUrl || APP_URL,
-        expiresAt: o.expiresAt || new Date(Date.now() + 30 * 60 * 1000),
+        code: o.code || "",
+        expiresAt: o.expiresAt || new Date(Date.now() + 10 * 60 * 1000),
       });
     default: {
       const render = PAYLOAD_RENDERERS[template];

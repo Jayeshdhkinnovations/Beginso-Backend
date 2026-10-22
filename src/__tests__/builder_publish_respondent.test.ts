@@ -70,9 +70,9 @@ const verifiedFor = async (formId: any, email: string): Promise<string> => {
   await EmailVerification.create({
     formId,
     email,
-    linkHash: `link-${secret}`,
+    codeHash: "unused-in-this-helper",
     secretHash: keyedHash(`email-verify-secret:${secret}`),
-    linkExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     verifiedAt: new Date(),
     proofExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
     purgeAt: new Date(Date.now() + DAY),
@@ -292,17 +292,10 @@ describe("B4 - access modes", () => {
   });
 
   describe("Mode 2 - tracked", () => {
-    it("requires a valid email (422 EMAIL_REQUIRED), stores it, and emails a link", async () => {
+    it("requires a verified email (422 EMAIL_NOT_VERIFIED), stores the VERIFIED address, and emails a link", async () => {
       const form = await mkForm({ title: "Tracked form", settings: { accessMode: "tracked" } });
       const slug = (await publish(form)).body.slug;
       const spy = jest.spyOn(mailService, "sendMail").mockResolvedValue(true);
-
-      const missing = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" });
-      expect(missing.status).toBe(422);
-      expect(missing.body.error.code).toBe("EMAIL_REQUIRED");
-      const bad = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" }, { respondentEmail: "not-an-email" });
-      expect(bad.status).toBe(422);
-      expect(await ResponseModel.countDocuments({ formId: form._id })).toBe(0);
 
       const unverified = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" }, { respondentEmail: "bea@example.com" });
       expect(unverified.status).toBe(422);
@@ -310,10 +303,11 @@ describe("B4 - access modes", () => {
       expect(await ResponseModel.countDocuments({ formId: form._id })).toBe(0);
 
       const emailVerificationId = await verifiedFor(form._id, "bea@example.com");
-      const ok = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" }, { respondentEmail: " Bea@Example.com ", emailVerificationId });
+      const ok = await submitPublic(slug, { "f-name": "Bea", "f-email": "bea@x.com" }, { respondentEmail: "attacker@evil.test", emailVerificationId });
       expect(ok.status).toBe(200);
       const stored = await ResponseModel.findOne({ formId: form._id });
-      expect(stored!.respondentEmail).toBe("bea@example.com");
+      expect(stored!.respondentEmail).toBe("bea@example.com"); // the verified address, never the one in the request
+      expect(stored!.respondentEmailVerified).toBe(true);
       expect(await RespondentLink.countDocuments({ responseId: stored!._id })).toBe(1);
       expect(spy).toHaveBeenCalledTimes(1);
       expect(spy.mock.calls[0][0]).toMatchObject({ to: "bea@example.com", template: "respondent_submission_link", formName: "Tracked form" });
@@ -322,13 +316,13 @@ describe("B4 - access modes", () => {
   });
 
   describe("Mode 3 - login (submit ticket)", () => {
-    it("refuses without a ticket, accepts a valid one once, and takes the email from the ACCOUNT", async () => {
+    it("refuses without a ticket or a verified email, accepts a valid ticket once, and takes the email from the ACCOUNT", async () => {
       const form = await mkForm({ settings: { accessMode: "login" } });
       const slug = (await publish(form)).body.slug;
 
       const anon = await submitPublic(slug, { "f-name": "Cy", "f-email": "cy@x.com" });
-      expect(anon.status).toBe(401);
-      expect(anon.body.error.code).toBe("LOGIN_REQUIRED");
+      expect(anon.status).toBe(422);
+      expect(anon.body.error.code).toBe("EMAIL_NOT_VERIFIED");
 
       const ticketRes = await request(app).post(`/api/public/${slug}/submit-ticket`).set({ Authorization: `Bearer ${tRespondent}` });
       expect(ticketRes.status).toBe(200);

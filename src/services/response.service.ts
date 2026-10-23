@@ -86,6 +86,15 @@ export class ResponseService {
   private noteService = new NoteService();
   private scoreService = new ScoreService();
 
+  // Remembered across searches: "no response lacks a searchText" is true almost always, and finding out costs a scan.
+  private static allHaveSearchTextUntil = 0;
+  private async hasResponsesWithoutSearchText(): Promise<boolean> {
+    if (Date.now() < ResponseService.allHaveSearchTextUntil) return false;
+    const missing = await ResponseModel.exists({ searchText: { $exists: false } });
+    if (!missing) ResponseService.allHaveSearchTextUntil = Date.now() + 5 * 60_000;
+    return !!missing;
+  }
+
   async getResponses(params: {
     workspaceId: string;
     // Sprint 12 fix (30 Sep 2026): true Personal-shell listing — forms with no workspaceId,
@@ -220,16 +229,15 @@ export class ResponseService {
       // Responses that have a stored searchText are matched inside MongoDB. Only responses stored
       // before searchText existed (until the backfill script has run) still fall back to the old
       // in-memory scan, capped as before.
-      const legacy = await this.responseRepository.findWithPagination(
-        { ...mongoQuery, searchText: { $exists: false } },
-        0,
-        10000
-      );
-      const legacyIds = legacy
-        .filter((r) => searchRegex.test(JSON.stringify(r.answers || {})))
-        .map((r) => r._id);
+      // That scan reads every response's answers, and runs on every search, so it is only done while some response still lacks a
+      // searchText: once none does, it is skipped (and asked again every few minutes, in case a path that does not write one made a new row).
+      const legacyIds = (await this.hasResponsesWithoutSearchText())
+        ? (await this.responseRepository.findWithPagination({ ...mongoQuery, searchText: { $exists: false } }, 0, 10000))
+            .filter((r) => searchRegex.test(JSON.stringify(r.answers || {})))
+            .map((r) => r._id)
+        : [];
 
-      mongoQuery.$or = [{ searchText: searchRegex }, { _id: { $in: legacyIds } }];
+      mongoQuery.$or = legacyIds.length ? [{ searchText: searchRegex }, { _id: { $in: legacyIds } }] : [{ searchText: searchRegex }];
     }
 
     const skip = (page - 1) * limit;

@@ -5,7 +5,8 @@ import { recordEvent } from "../services/event.service";
 import { ZodError } from "zod";
 import { ResponseService } from "../services/response.service";
 import { ReadStateService } from "../services/readState.service";
-import { updateResponseStatusSchema, updateResponseAssigneeSchema, updateResponseTagsSchema } from "../validations/response.validator";
+import { placeOnBoard } from "../services/boardOrder.service";
+import { boardPositionSchema, updateResponseStatusSchema, updateResponseAssigneeSchema, updateResponseTagsSchema } from "../validations/response.validator";
 import mongoose from "mongoose";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import FormAccessGrant from "../models/FormAccessGrant";
@@ -76,6 +77,7 @@ export const getResponses = async (
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       order: typeof order === "string" ? order : undefined,
+      sort: typeof req.query.sort === "string" ? req.query.sort : undefined,
       callerUserId: authReq.user._id.toString(),
       duplicate: duplicate === "true" || duplicate === "1",
       includeTest: includeTest === "true" || includeTest === "1",
@@ -443,6 +445,28 @@ export const clearEditedAfterReview = async (
     if (result.cleared) {
       await recordEvent(req, workspaceId, "response.clear_edited_after_review", { id: String(id), type: "response", label: String(id) });
     }
+    res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    if (error.statusCode) {
+      res.status(error.statusCode).json({ success: false, message: error.message, error: { message: error.message } });
+      return;
+    }
+    next(error);
+  }
+};
+
+// POST /api/responses/:id/board-position   body: { afterId?: string, beforeId?: string }
+// Puts the card at a chosen place in its Board column (the stage change itself is the PATCH above). Neither id = the top.
+export const placeResponseOnBoard = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized", error: { message: "Not authorized" } });
+      return;
+    }
+    const workspaceId = await getVerifiedWorkspaceId(req);
+    const body = boardPositionSchema.parse(req.body ?? {});
+    const result = await placeOnBoard(workspaceId, authReq.user._id.toString(), String(req.params.id), body);
     res.status(200).json({ success: true, ...result });
   } catch (error: any) {
     if (error.statusCode) {

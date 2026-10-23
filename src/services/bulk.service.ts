@@ -193,14 +193,14 @@ export class BulkService {
           // PATCH /responses/:id: write the raw status. The personal stage ids ARE the status values,
           // so the previous status doubles as the undo target.
           if (!PERSONAL_STATUSES.includes(action.stageId)) badRequest("Unknown stage for a personal response", 422);
-          await ResponseModel.updateOne({ _id: response._id }, { $set: { status: action.stageId } });
+          await ResponseModel.updateOne({ _id: response._id }, { $set: { status: action.stageId }, $unset: { boardRank: "" } });
           return { id, stageId: response.status ?? null };
         }
         const stage = await this.stageService.getStageInWorkspace(scopeWorkspaceId, action.stageId);
         const prevStageId = response.stageId ? response.stageId.toString() : null;
         await ResponseModel.updateOne(
           { _id: response._id },
-          { $set: { stageId: stage._id, status: stage.category } }
+          { $set: { stageId: stage._id, status: stage.category }, $unset: { boardRank: "" } }
         );
         return { id, stageId: prevStageId };
       }

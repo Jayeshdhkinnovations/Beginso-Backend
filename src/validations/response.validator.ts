@@ -16,6 +16,12 @@ export const updateResponseStatusSchema = z
     message: "Either status or stageId is required",
   });
 
+// Where a dropped Board card goes: the card that ends up directly above or directly below it. Neither = the top of the column.
+export const boardPositionSchema = z.object({
+  afterId: z.string().trim().min(1).nullish(),
+  beforeId: z.string().trim().min(1).nullish(),
+});
+
 // Sprint 12, BE 0.2 (B3.2/R4): assigneeId is validated separately from status/stageId so a PATCH
 // can carry either or both in the same request. `null` unassigns; a string id must resolve to a
 // current member with access to the response's form (checked in ResponseService).

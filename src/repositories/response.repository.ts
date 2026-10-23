@@ -1,6 +1,9 @@
 import ResponseModel, { IResponse } from "../models/Response";
 import mongoose from "mongoose";
 
+// Mongo sorts a missing value before any number when ascending, which is what puts never-placed cards on top.
+export const BOARD_SORT = { boardRank: 1, submittedAt: -1, _id: -1 } as const;
+
 export class ResponseRepository {
   async create(data: Partial<IResponse>): Promise<IResponse> {
     return await ResponseModel.create(data);
@@ -18,10 +21,12 @@ export class ResponseRepository {
     skip: number,
     limit: number,
     // 1 = oldest first. Default is newest first. _id breaks ties so a page boundary never repeats or drops a row.
-    submittedOrder: 1 | -1 = -1
+    submittedOrder: 1 | -1 = -1,
+    // The Board's order: cards placed by hand by their rank, with the never-placed ones (no rank) above them, newest first.
+    board = false
   ): Promise<IResponse[]> {
     return await ResponseModel.find(query)
-      .sort({ submittedAt: submittedOrder, _id: submittedOrder })
+      .sort(board ? BOARD_SORT : { submittedAt: submittedOrder, _id: submittedOrder })
       .skip(skip)
       .limit(limit);
   }
@@ -67,7 +72,7 @@ export class ResponseRepository {
     }
     return await ResponseModel.findByIdAndUpdate(
       id,
-      { $set: { status } },
+      { $set: { status }, $unset: { boardRank: "" } },
       { returnDocument: "after", runValidators: true }
     );
   }
@@ -84,7 +89,7 @@ export class ResponseRepository {
     }
     return await ResponseModel.findByIdAndUpdate(
       id,
-      { $set: { stageId, status } },
+      { $set: { stageId, status }, $unset: { boardRank: "" } },
       { returnDocument: "after", runValidators: true }
     );
   }

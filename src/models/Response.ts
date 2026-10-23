@@ -54,6 +54,9 @@ export interface IResponse extends Document {
   editedAfterReviewAt?: Date | null;
   lastEditedByRespondentAt?: Date | null;
   deletedBy?: mongoose.Types.ObjectId | null;
+  // Where the card sits in its Board column. Lower is higher up. Unset = never placed by hand: such a card sorts above every placed card,
+  // newest first (so a new submission lands at the top). Cleared whenever the response changes stage. See boardOrder.service.ts.
+  boardRank?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -134,6 +137,7 @@ const ResponseSchema = new Schema<IResponse>(
     editedAfterReviewAt: { type: Date, default: null },
     lastEditedByRespondentAt: { type: Date, default: null },
     deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    boardRank: { type: Number, default: undefined },
   },
   { timestamps: true }
 );

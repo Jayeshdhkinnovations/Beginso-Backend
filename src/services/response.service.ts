@@ -102,6 +102,8 @@ export class ResponseService {
     // Sort by submission time across ALL pages (the Inbox table used to reorder only the 50 rows it had loaded). "asc" = oldest first;
     // anything else (or nothing) = newest first. Other columns are not sortable on the server.
     order?: string;
+    // "board" = the Board's own order (cards placed by hand, then the rest newest first) instead of by submission time.
+    sort?: string;
     // Sprint 12, BE 0.6 (B4.10): "Show duplicates" filter — true = only flagged responses.
     duplicate?: boolean;
     // Sprint 13 (F15): test submissions are excluded unless the caller opts in.
@@ -233,7 +235,7 @@ export class ResponseService {
     const skip = (page - 1) * limit;
 
     const [responses, total] = await Promise.all([
-      this.responseRepository.findWithPagination(mongoQuery, skip, limit, params.order === "asc" ? 1 : -1),
+      this.responseRepository.findWithPagination(mongoQuery, skip, limit, params.order === "asc" ? 1 : -1, params.sort === "board"),
       this.responseRepository.count(mongoQuery),
     ]);
 
@@ -556,7 +558,7 @@ export class ResponseService {
         throw err;
       }
       const fromStageId = existingResponse.stageId ? existingResponse.stageId.toString() : null;
-      const updated = await ResponseModel.findByIdAndUpdate(responseId, { $set: { status: input.status } }, { returnDocument: "after" });
+      const updated = await ResponseModel.findByIdAndUpdate(responseId, { $set: { status: input.status }, $unset: { boardRank: "" } }, { returnDocument: "after" });
       if (!updated) {
         const err: any = new Error("Response not found");
         err.statusCode = 404;

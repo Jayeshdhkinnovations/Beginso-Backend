@@ -77,6 +77,7 @@ export const getResponses = async (
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       order: typeof order === "string" ? order : undefined,
+      sortBy: typeof req.query.sortBy === "string" ? req.query.sortBy : undefined,
       sort: typeof req.query.sort === "string" ? req.query.sort : undefined,
       callerUserId: authReq.user._id.toString(),
       duplicate: duplicate === "true" || duplicate === "1",

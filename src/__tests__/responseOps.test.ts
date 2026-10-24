@@ -10,7 +10,7 @@ import ResponseModel from "../models/Response";
 import ResponseReadState from "../models/ResponseReadState";
 import Notification from "../models/Notification";
 import { generateToken } from "../utils/generateToken";
-import { MAX_BULK_BATCH_SIZE } from "../validations/bulk.validator";
+import { MAX_BULK_BATCH_SIZE, MAX_BULK_FILTER_SIZE } from "../validations/bulk.validator";
 
 let mongoServer: MongoMemoryServer;
 
@@ -151,6 +151,30 @@ describe("Bulk endpoint (B2.1)", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ target: { ids }, action: { type: "read" } });
     expect(res.status).toBe(413);
+  });
+
+  it("\"Select all N matching\" (a filter) may touch more than a page of ids can: 600 matches are all done, not refused", async () => {
+    const big: any = await Form.create({ title: "Big form", workspaceId: (await Form.findById(formId))!.workspaceId, status: "published", publishedSlug: "ro-big-form", fields: [{ fieldId: "f1", label: "Name", type: "short_text", required: false }] });
+    await ResponseModel.insertMany(Array.from({ length: MAX_BULK_BATCH_SIZE + 100 }, () => ({ formId: big._id, answers: {}, status: "new" })));
+    const res = await request(app)
+      .post(`/api/responses/bulk`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ target: { filter: {}, formId: String(big._id) }, action: { type: "read" } });
+    expect(res.status).toBe(200);
+    expect(res.body.succeeded).toHaveLength(MAX_BULK_BATCH_SIZE + 100);
+    expect(res.body.failed).toHaveLength(0);
+  });
+
+  it("a filter that matches more than the filter limit is refused with a message that says the limit, and nothing is touched", async () => {
+    const huge: any = await Form.create({ title: "Huge form", workspaceId: (await Form.findById(formId))!.workspaceId, status: "published", publishedSlug: "ro-huge-form", fields: [{ fieldId: "f1", label: "Name", type: "short_text", required: false }] });
+    await ResponseModel.insertMany(Array.from({ length: MAX_BULK_FILTER_SIZE + 1 }, () => ({ formId: huge._id, answers: {}, status: "new" })));
+    const res = await request(app)
+      .post(`/api/responses/bulk`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ target: { filter: {}, formId: String(huge._id) }, action: { type: "stage", stageId: "new" } });
+    expect(res.status).toBe(413);
+    expect(res.body.message).toContain("5,000");
+    expect(await ResponseModel.countDocuments({ formId: huge._id, status: "new" })).toBe(MAX_BULK_FILTER_SIZE + 1);
   });
 
   it("never marks a failed id as succeeded when the batch is a mix of allowed/forbidden ids", async () => {

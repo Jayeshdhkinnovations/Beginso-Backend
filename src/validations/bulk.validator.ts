@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 // Max responses a single bulk request may touch. Over this, the request is refused (413) rather
-// than silently truncated to the cap.
+// than silently truncated to the cap. A list of ids (what the table's checkboxes send, a page at a time) stays at 500; "Select all N
+// matching" sends a filter, and a form can have well over 500 matches (it was refused with a bare 413 at 1,170), so a filter may touch more.
 export const MAX_BULK_BATCH_SIZE = 500;
+export const MAX_BULK_FILTER_SIZE = 5000;
 
 const idsTargetSchema = z.object({
   ids: z.array(z.string().trim().min(1)).min(1, "ids must contain at least one id"),

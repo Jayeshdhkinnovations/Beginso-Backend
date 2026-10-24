@@ -1,4 +1,5 @@
-import { ResponseRepository } from "../repositories/response.repository";
+import { ResponseRepository, type ColumnSort } from "../repositories/response.repository";
+import { buildAnswerKeyMap } from "../utils/answerKeys";
 import { FormRepository } from "../repositories/form.repository";
 import Upload from "../models/Upload";
 import Form from "../models/Form";
@@ -78,6 +79,14 @@ const cleanAnswers = (answers: Record<string, any>): Record<string, any> => {
   return Object.keys(cleaned).length > 0 ? cleaned : answers;
 };
 
+/** The column sort asked for (`sortBy`), or none (the submission time). A question that is not on the form sorts like nothing was asked. */
+const columnSortOf = (params: { sortBy?: string; order?: string }, answerKey?: string): ColumnSort | undefined => {
+  const dir = params.order === "asc" ? 1 : -1;
+  if (params.sortBy === "email") return { by: "email", dir };
+  if (params.sortBy?.startsWith("q:") && answerKey !== undefined) return { by: "answer", answerKey, dir };
+  return undefined;
+};
+
 export class ResponseService {
   private responseRepository = new ResponseRepository();
   private formRepository = new FormRepository();
@@ -113,6 +122,9 @@ export class ResponseService {
     order?: string;
     // "board" = the Board's own order (cards placed by hand, then the rest newest first) instead of by submission time.
     sort?: string;
+    // Sort by a column other than the submission time (`order` still gives the direction): "email", or "q:<fieldId>" for one question's
+    // answer (needs formId: answers are filed per form). Anything else is the submission time.
+    sortBy?: string;
     // Sprint 12, BE 0.6 (B4.10): "Show duplicates" filter — true = only flagged responses.
     duplicate?: boolean;
     // Sprint 13 (F15): test submissions are excluded unless the caller opts in.
@@ -140,6 +152,7 @@ export class ResponseService {
     if (limit > 50) limit = 50; // Cap at 50 per page max
 
     const mongoQuery: any = { deletedAt: null };
+    let answerSortKey: string | undefined;
     // Naming `isTest` in the filter is what tells the Response query hook not to apply its default
     // exclusion; matching true, false and absent returns every row.
     if (params.includeTest) mongoQuery.isTest = { $in: [true, false, null] };
@@ -170,6 +183,11 @@ export class ResponseService {
       }
 
       mongoQuery.formId = form._id;
+      if (params.sortBy?.startsWith("q:")) {
+        const wanted = params.sortBy.slice(2);
+        const field = (form.fields ?? []).find((f: any) => f.fieldId === wanted && !f.deleted);
+        if (field) answerSortKey = buildAnswerKeyMap(form.fields as any).get(field as any);
+      }
       if (params.field !== undefined || params.value !== undefined) {
         mongoQuery.$and = [fieldSegmentFilter(form, params.field, params.value, params.granularity)];
       }
@@ -243,7 +261,7 @@ export class ResponseService {
     const skip = (page - 1) * limit;
 
     const [responses, total] = await Promise.all([
-      this.responseRepository.findWithPagination(mongoQuery, skip, limit, params.order === "asc" ? 1 : -1, params.sort === "board"),
+      this.responseRepository.findWithPagination(mongoQuery, skip, limit, params.order === "asc" ? 1 : -1, params.sort === "board", columnSortOf(params, answerSortKey)),
       this.responseRepository.count(mongoQuery),
     ]);
 

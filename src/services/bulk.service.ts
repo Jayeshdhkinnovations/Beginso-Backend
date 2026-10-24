@@ -12,7 +12,7 @@ import { ReadStateService } from "./readState.service";
 import { StageService } from "./stage.service";
 import { logWorkspaceEvent } from "./event.service";
 import { buildResponseFilterQuery, ResponseFilters } from "../utils/responseFilters";
-import { MAX_BULK_BATCH_SIZE, BulkAction, BulkTarget } from "../validations/bulk.validator";
+import { MAX_BULK_BATCH_SIZE, MAX_BULK_FILTER_SIZE, BulkAction, BulkTarget } from "../validations/bulk.validator";
 
 const PERSONAL_STATUSES = ["new", "in_progress", "completed"];
 
@@ -54,7 +54,7 @@ export class BulkService {
   private readStateService = new ReadStateService();
   private stageService = new StageService();
 
-  // Resolves the target into a candidate id list, capped at MAX_BULK_BATCH_SIZE + 1 so an
+  // Resolves the target into a candidate id list, capped at one more than the target's limit so an
   // over-cap request can be told apart from one that exactly fills it.
   private async resolveCandidateIds(
     target: BulkTarget,
@@ -82,7 +82,7 @@ export class BulkService {
       target.formId ? workspaceFormIds.filter((id) => id.toString() === target.formId) : workspaceFormIds,
       callerUserId
     );
-    const matches = await ResponseModel.find(query).select("_id").limit(MAX_BULK_BATCH_SIZE + 1).lean();
+    const matches = await ResponseModel.find(query).select("_id").limit(MAX_BULK_FILTER_SIZE + 1).lean();
     return matches.map((m) => m._id.toString());
   }
 
@@ -93,8 +93,9 @@ export class BulkService {
   ): Promise<BulkResult> {
     const candidateIds = await this.resolveCandidateIds(target, context.callerWorkspaceId, context.actor.id);
 
-    if (candidateIds.length > MAX_BULK_BATCH_SIZE) {
-      badRequest(`Bulk request exceeds the maximum batch size of ${MAX_BULK_BATCH_SIZE}`, 413);
+    const limit = "ids" in target ? MAX_BULK_BATCH_SIZE : MAX_BULK_FILTER_SIZE;
+    if (candidateIds.length > limit) {
+      badRequest(`Too many responses for one action: the limit is ${limit.toLocaleString("en-US")}. Narrow the filter and try again.`, 413);
     }
     if (candidateIds.length === 0) {
       return { succeeded: [], failed: [], previous: [] };
@@ -112,6 +113,10 @@ export class BulkService {
     const succeeded: string[] = [];
     const failed: { id: string; reason: string }[] = [];
     const previous: BulkPrevious[] = [];
+    // Who may act depends on the form, not the response, so it is worked out once per form for the whole batch. The same goes for the
+    // stage a form accepts: looked up once per (form, stage), not once per response.
+    const allowedByForm = new Map<string, boolean>();
+    const applyContext = { ...context, stageCache: new Map<string, Promise<any>>() };
 
     for (const id of candidateIds) {
       const response = responseById.get(id);
@@ -125,14 +130,15 @@ export class BulkService {
         continue;
       }
 
-      const allowed = await this.canAct(form, context, requiredPermission, context.actor.id);
-      if (!allowed) {
+      const formKey = response.formId.toString();
+      if (!allowedByForm.has(formKey)) allowedByForm.set(formKey, await this.canAct(form, context, requiredPermission, context.actor.id));
+      if (!allowedByForm.get(formKey)) {
         failed.push({ id, reason: "Forbidden: insufficient permission for this response" });
         continue;
       }
 
       try {
-        const prev = await this.applyOne(response, form, action, context);
+        const prev = await this.applyOne(response, form, action, applyContext);
         previous.push(prev);
         succeeded.push(id);
 
@@ -181,7 +187,7 @@ export class BulkService {
     response: IResponseDoc,
     form: any,
     action: BulkAction,
-    context: { actor: BulkActor }
+    context: { actor: BulkActor; stageCache: Map<string, Promise<any>> }
   ): Promise<BulkPrevious> {
     const id = response._id.toString();
 
@@ -196,7 +202,9 @@ export class BulkService {
           await ResponseModel.updateOne({ _id: response._id }, { $set: { status: action.stageId }, $unset: { boardRank: "" } });
           return { id, stageId: response.status ?? null };
         }
-        const stage = await this.stageService.getStageForForm(scopeWorkspaceId, String(response.formId), action.stageId);
+        const cacheKey = `${response.formId}:${action.stageId}`;
+        if (!context.stageCache.has(cacheKey)) context.stageCache.set(cacheKey, this.stageService.getStageForForm(scopeWorkspaceId, String(response.formId), action.stageId));
+        const stage = await context.stageCache.get(cacheKey)!;
         const prevStageId = response.stageId ? response.stageId.toString() : null;
         await ResponseModel.updateOne(
           { _id: response._id },

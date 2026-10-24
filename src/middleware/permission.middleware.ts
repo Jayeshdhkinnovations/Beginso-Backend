@@ -26,6 +26,8 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRole, string[]> = {
     "forms:create",
     "forms:write",
     "forms:publish",
+    // How a form Responses page is set up (its stages, table columns, board card): owner and admins, like publishing.
+    "forms:configure",
     // NOTE: forms:delete is strictly OWNER ONLY! Admin does NOT have forms:delete or forms:*
     "responses:*",
     "responses:read",

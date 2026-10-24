@@ -44,7 +44,7 @@ export class StageService {
   // `Stage.workspaceId` is a required field, so a personal/null "workspace" isn't representable
   // here at all.
   async ensureDefaultStages(workspaceId: string): Promise<IStage[]> {
-    const existing = await StageModel.find({ workspaceId }).sort({ order: 1 });
+    const existing = await StageModel.find({ workspaceId, formId: null }).sort({ order: 1 });
     if (existing.length > 0) return existing;
 
     const seeded = await StageModel.insertMany(
@@ -82,7 +82,7 @@ export class StageService {
     data: { name: string; colour: string; category: StageCategory }
   ): Promise<IStage> {
     await this.ensureDefaultStages(workspaceId);
-    const last = await StageModel.findOne({ workspaceId }).sort({ order: -1 }).select("order").lean();
+    const last = await StageModel.findOne({ workspaceId, formId: null }).sort({ order: -1 }).select("order").lean();
     const nextOrder = last ? last.order + 1 : 0;
 
     return await StageModel.create({
@@ -101,7 +101,7 @@ export class StageService {
     data: { name?: string; colour?: string; category?: StageCategory }
   ): Promise<IStage> {
     if (!mongoose.Types.ObjectId.isValid(stageId)) notFound("Stage not found");
-    const stage = await StageModel.findOne({ _id: stageId, workspaceId });
+    const stage = await StageModel.findOne({ _id: stageId, workspaceId, formId: null });
     if (!stage) notFound("Stage not found");
 
     const categoryChanged = data.category !== undefined && data.category !== stage!.category;
@@ -121,7 +121,7 @@ export class StageService {
   }
 
   async reorderStages(workspaceId: string, orderedIds: string[]): Promise<IStage[]> {
-    const stages = await StageModel.find({ workspaceId }).select("_id");
+    const stages = await StageModel.find({ workspaceId, formId: null }).select("_id");
     const knownIds = new Set(stages.map((s) => s._id.toString()));
 
     if (orderedIds.length !== knownIds.size || orderedIds.some((id) => !knownIds.has(id))) {
@@ -130,11 +130,11 @@ export class StageService {
 
     await StageModel.bulkWrite(
       orderedIds.map((id, index) => ({
-        updateOne: { filter: { _id: id, workspaceId }, update: { $set: { order: index } } },
+        updateOne: { filter: { _id: id, workspaceId, formId: null }, update: { $set: { order: index } } },
       }))
     );
 
-    return await StageModel.find({ workspaceId }).sort({ order: 1 });
+    return await StageModel.find({ workspaceId, formId: null }).sort({ order: 1 });
   }
 
   async deleteStage(
@@ -143,7 +143,7 @@ export class StageService {
     options: { reassignTo?: string; actor: StageActor; ip?: string }
   ): Promise<void> {
     if (!mongoose.Types.ObjectId.isValid(stageId)) notFound("Stage not found");
-    const stage = await StageModel.findOne({ _id: stageId, workspaceId });
+    const stage = await StageModel.findOne({ _id: stageId, workspaceId, formId: null });
     if (!stage) notFound("Stage not found");
 
     if (stage!.isDefault) {
@@ -152,6 +152,7 @@ export class StageService {
 
     const siblingsInCategory = await StageModel.countDocuments({
       workspaceId,
+      formId: null,
       category: stage!.category,
       _id: { $ne: stage!._id },
     });
@@ -171,7 +172,7 @@ export class StageService {
         badRequest("reassignTo is required: this stage has responses assigned to it");
       }
       if (!mongoose.Types.ObjectId.isValid(options.reassignTo!)) notFound("reassignTo stage not found");
-      reassignStage = await StageModel.findOne({ _id: options.reassignTo, workspaceId });
+      reassignStage = await StageModel.findOne({ _id: options.reassignTo, workspaceId, formId: null });
       if (!reassignStage) notFound("reassignTo stage not found");
       if (reassignStage!._id.toString() === stage!._id.toString()) {
         badRequest("reassignTo must be a different stage");
@@ -223,5 +224,132 @@ export class StageService {
     } finally {
       await session.endSession();
     }
+  }
+  // ── Per-form stages ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  // A form can have stages of its own (Stage.formId set). A form without any uses the workspace's. Responses always carry
+  // `status` (the stage's category), so a stage change of either kind keeps every status-based consumer correct.
+
+  async listFormStages(formId: string): Promise<IStage[]> {
+    return await StageModel.find({ formId }).sort({ order: 1 });
+  }
+
+  /** The stages a form really uses: its own when it has any, else the workspace's. */
+  async effectiveStages(workspaceId: string, formId: string): Promise<{ stages: IStage[]; own: boolean }> {
+    const own = await this.listFormStages(formId);
+    if (own.length > 0) return { stages: own, own: true };
+    return { stages: await this.ensureDefaultStages(workspaceId), own: false };
+  }
+
+  /**
+   * A stage a response of `formId` may be moved to: one of the form's own stages when it has any, else one of the workspace's.
+   * Moving a response onto the other kind of stage would leave it in a column its form does not show.
+   */
+  async getStageForForm(workspaceId: string, formId: string, stageId: string): Promise<IStage> {
+    const stage = await this.getStageInWorkspace(workspaceId, stageId);
+    if (stage.formId) {
+      if (String(stage.formId) !== String(formId)) badRequest("That stage belongs to another form");
+    } else if (await StageModel.exists({ formId })) {
+      badRequest("This form has its own stages: choose one of them");
+    }
+    return stage;
+  }
+
+  /** Legacy `{status}` writes: a stage of that category from the form's own stages when it has any, else the workspace's. */
+  async resolveStageForForm(workspaceId: string, formId: string, category: StageCategory): Promise<IStage> {
+    const own = await this.listFormStages(formId);
+    if (own.length === 0) return await this.resolveStageForCategory(workspaceId, category);
+    return own.find((s) => s.category === category) ?? own[0];
+  }
+
+  /** The stage a brand-new response of this form starts in. */
+  async startStageForForm(workspaceId: string, formId: string, startStageId?: unknown): Promise<IStage | null> {
+    const { stages, own } = await this.effectiveStages(workspaceId, formId);
+    if (own && startStageId) {
+      const chosen = stages.find((s) => String(s._id) === String(startStageId));
+      if (chosen) return chosen;
+    }
+    return stages.find((s) => s.isDefault) ?? stages.find((s) => s.category === "new") ?? stages[0] ?? null;
+  }
+
+  /**
+   * Makes the form's stages exactly `input`. `workspace` drops the form's own stages; `own` creates, updates (by id), reorders and
+   * deletes so that the form has exactly the given list, in that order. Every response that is not on one of the resulting stages
+   * (it was on a deleted stage, or on a workspace stage) moves to the first stage that counts the same way, else to the first stage.
+   * Returns the stages the form uses afterwards.
+   */
+  async applyFormStages(
+    workspaceId: string,
+    formId: string,
+    input: { mode: "workspace" } | { mode: "own"; stages: Array<{ id?: string; name: string; colour: string; category: StageCategory }> }
+  ): Promise<IStage[]> {
+    const existing = await StageModel.find({ formId });
+
+    if (input.mode === "workspace") {
+      const workspaceStages = await this.ensureDefaultStages(workspaceId);
+      if (existing.length === 0) return workspaceStages;
+      await this.moveFormResponses(formId, workspaceStages, []);
+      await StageModel.deleteMany({ formId });
+      return workspaceStages;
+    }
+
+    if (input.stages.length === 0) badRequest("A form needs at least one stage");
+    const byId = new Map(existing.map((s) => [s._id.toString(), s]));
+    for (const s of input.stages) {
+      if (s.id && !byId.has(s.id)) badRequest("A stage in the list does not belong to this form");
+    }
+
+    const result: IStage[] = [];
+    for (const [order, s] of input.stages.entries()) {
+      const doc = s.id ? byId.get(s.id) : undefined;
+      if (doc) {
+        const categoryChanged = doc.category !== s.category;
+        doc.name = s.name;
+        doc.colour = s.colour;
+        doc.category = s.category;
+        doc.order = order;
+        await doc.save();
+        // Keep Response.status (derived from the stage's category) in step for responses already on it.
+        if (categoryChanged) await ResponseModel.updateMany({ stageId: doc._id }, { $set: { status: s.category } });
+        result.push(doc);
+      } else {
+        result.push(
+          await StageModel.create({
+            workspaceId: new mongoose.Types.ObjectId(workspaceId),
+            formId: new mongoose.Types.ObjectId(formId),
+            name: s.name,
+            colour: s.colour,
+            category: s.category,
+            order,
+            isDefault: false,
+          })
+        );
+      }
+    }
+
+    await this.moveFormResponses(formId, result, result.map((s) => s._id as mongoose.Types.ObjectId));
+    const keptIds = new Set(result.map((s) => s._id.toString()));
+    const removed = existing.filter((s) => !keptIds.has(s._id.toString()));
+    if (removed.length > 0) await StageModel.deleteMany({ _id: { $in: removed.map((s) => s._id) } });
+    return result;
+  }
+
+  // Moves every response of the form that is NOT on one of `keepIds` onto a stage of `target`: the first that counts the same way
+  // (by the response's `status`), else the first. One update for the whole form, deciding from the status each response had before.
+  private async moveFormResponses(formId: string, target: IStage[], keepIds: mongoose.Types.ObjectId[]): Promise<void> {
+    const categories: StageCategory[] = ["new", "in_progress", "completed"];
+    const pick = (c: StageCategory) => target.find((s) => s.category === c) ?? target[0];
+    await ResponseModel.updateMany(
+      { formId: new mongoose.Types.ObjectId(formId), stageId: { $nin: keepIds } },
+      [
+        {
+          $set: {
+            stageId: { $switch: { branches: categories.map((c) => ({ case: { $eq: ["$status", c] }, then: pick(c)._id })), default: pick("new")._id } },
+            status: { $switch: { branches: categories.map((c) => ({ case: { $eq: ["$status", c] }, then: pick(c).category })), default: pick("new").category } },
+          },
+        },
+        { $unset: "boardRank" },
+      ],
+      { updatePipeline: true }
+    );
   }
 }

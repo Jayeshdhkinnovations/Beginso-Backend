@@ -27,6 +27,7 @@ import SavedView from "../models/SavedView";
 import Template from "../models/Template";
 import Dashboard from "../models/Dashboard";
 import { getUploadDir } from "../controllers/upload.controller";
+import { deleteResponseSetup } from "./responseSetup.service";
 
 // Single place that knows how to delete tenant data without leaving orphans. Files live at
 // <uploadDir>/<ownerUserId>/<formId>/(brand|responses/<responseId>)/<name>, and every Upload row
@@ -153,6 +154,8 @@ export const deleteFormData = async (formId: string): Promise<void> => {
   await FormAccessGrant.deleteMany({ formId: id });
   await SavedChart.deleteMany({ formId: id });
   await FormPin.deleteMany({ formId: id });
+  // The Customize panel's setup and the form's own stages.
+  await deleteResponseSetup([new mongoose.Types.ObjectId(id)]);
 };
 
 export const deleteWorkspaceData = async (workspaceId: mongoose.Types.ObjectId | string): Promise<void> => {

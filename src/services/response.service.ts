@@ -319,16 +319,14 @@ export class ResponseService {
     };
   }
 
-  // Joins raw {stageId,count} pairs against the workspace's stages for name/colour/category.
+  // Joins raw {stageId,count} pairs against the stages they name (a workspace's, or a form's own) for name/colour/category.
   // Responses with no stageId yet (pre-migration) are omitted, same as an unset $group key.
   private async buildStageBreakdown(
-    workspaceId: string,
     matchQuery: any
   ): Promise<Array<{ stageId: string; name: string; colour: string; category: string; count: number }>> {
-    const [counts, stages] = await Promise.all([
-      this.responseRepository.getStageCounts(matchQuery),
-      this.stageService.listStages(workspaceId),
-    ]);
+    const counts = await this.responseRepository.getStageCounts(matchQuery);
+    const named = counts.filter((c) => c._id).map((c) => c._id as mongoose.Types.ObjectId);
+    const stages = named.length ? await StageModel.find({ _id: { $in: named } }) : [];
     const stagesById = new Map(stages.map((s) => [s._id.toString(), s]));
     return counts
       .filter((c) => c._id)
@@ -416,7 +414,7 @@ export class ResponseService {
     const [statsArr, byStage, unread] = await Promise.all([
       ResponseModel.aggregate([{ $match: statusMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
       // Personal-shell forms have no workspace-owned stages (OQ-9: stages fixed to defaults there).
-      scopeWorkspaceId ? this.buildStageBreakdown(scopeWorkspaceId, statusMatch) : Promise.resolve([]),
+      scopeWorkspaceId ? this.buildStageBreakdown(statusMatch) : Promise.resolve([]),
       callerUserId ? this.readStateService.countUnread(callerUserId, statusMatch) : Promise.resolve(0),
     ]);
 
@@ -591,9 +589,11 @@ export class ResponseService {
     }
 
     // stageId is the primary key; status is resolved to a matching stage when stageId is absent.
+    // A form with its own stages only accepts those, and a form without only accepts the workspace's.
+    const formIdOfResponse = existingResponse.formId.toString();
     const targetStage = input.stageId
-      ? await this.stageService.getStageInWorkspace(workspaceId, input.stageId)
-      : await this.stageService.resolveStageForCategory(workspaceId, input.status!);
+      ? await this.stageService.getStageForForm(workspaceId, formIdOfResponse, input.stageId)
+      : await this.stageService.resolveStageForForm(workspaceId, formIdOfResponse, input.status!);
 
     const fromStageId = existingResponse.stageId ? existingResponse.stageId.toString() : null;
 

@@ -25,15 +25,18 @@ import { queueActivityEmails } from "./notificationEmail.service";
 import { assertStorageQuota, ownerOfForm, publicFormStorageState } from "./storage.service";
 import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
 import { StageService } from "./stage.service";
+import ResponseSetup from "../models/ResponseSetup";
+import { copyResponseSetup } from "./responseSetup.service";
 
 const stageService = new StageService();
 
 // The stage a brand-new response is filed under: the workspace's default stage, else its first "new" stage, else its first
 // stage. A failure here never blocks a submission (the response is stored without a stage and still shows by status).
-const defaultStageFor = async (workspaceId: unknown) => {
+// A form with stages of its own starts a response in the stage chosen in its Customize panel (else its first "new" stage).
+const startStageFor = async (form: { _id: unknown; workspaceId?: unknown }) => {
   try {
-    const stages = await stageService.ensureDefaultStages(String(workspaceId));
-    return stages.find((s) => s.isDefault) ?? stages.find((s) => s.category === "new") ?? stages[0] ?? null;
+    const setup = await ResponseSetup.findOne({ formId: form._id as any }).select("startStageId").lean();
+    return await stageService.startStageForForm(String(form.workspaceId), String(form._id), setup?.startStageId);
   } catch {
     return null;
   }
@@ -931,7 +934,7 @@ export class FormService {
     // A workspace form's response starts in the workspace's default stage. Without it every new response had no stage: the
     // drawer said "Unknown stage" and the Board (which lists a stage's responses by stage id) never showed it (QA D5-007).
     // A personal form has no stages; its status is the whole story.
-    const stageStart = form.workspaceId ? await defaultStageFor(form.workspaceId) : null;
+    const stageStart = form.workspaceId ? await startStageFor(form) : null;
 
     const newResponse = await ResponseModel.create({
       _id: responseId || new mongoose.Types.ObjectId(),
@@ -1048,7 +1051,14 @@ export class FormService {
       publishedSlug: undefined,
     };
 
-    return await this.formRepository.create(workspaceId, duplicateData as any);
+    const copy = await this.formRepository.create(workspaceId, duplicateData as any);
+    // The copy starts with the same Customize setup (columns, card, defaults) and its own copy of the form's stages.
+    try {
+      await copyResponseSetup(String(originalForm._id), String(copy._id), originalForm.workspaceId ? String(originalForm.workspaceId) : null, String(createdBy ?? originalForm.createdBy));
+    } catch {
+      /* the copy still works with the default setup */
+    }
+    return copy;
   }
 
   private async checkFormAvailability(form: IForm, isPublicRoute: boolean = false, allowWrite: boolean = true): Promise<void> {

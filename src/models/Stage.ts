@@ -8,6 +8,9 @@ export type StageCategory = "new" | "in_progress" | "completed";
 
 export interface IStage extends Document {
   workspaceId: mongoose.Types.ObjectId;
+  // Set for a stage that belongs to one form (that form has its own stages). Unset/null = a workspace stage, shared by every form that
+  // has not chosen its own. Every workspace-level read filters on `formId: null`, which also matches stages created before this existed.
+  formId?: mongoose.Types.ObjectId | null;
   name: string;
   colour: string; // a design-token name (e.g. "slate"), never a raw hex value
   order: number;
@@ -23,6 +26,12 @@ const StageSchema = new Schema<IStage>(
       type: Schema.Types.ObjectId,
       ref: "Workspace",
       required: true,
+      index: true,
+    },
+    formId: {
+      type: Schema.Types.ObjectId,
+      ref: "Form",
+      default: null,
       index: true,
     },
     name: {

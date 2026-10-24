@@ -196,7 +196,7 @@ export class BulkService {
           await ResponseModel.updateOne({ _id: response._id }, { $set: { status: action.stageId }, $unset: { boardRank: "" } });
           return { id, stageId: response.status ?? null };
         }
-        const stage = await this.stageService.getStageInWorkspace(scopeWorkspaceId, action.stageId);
+        const stage = await this.stageService.getStageForForm(scopeWorkspaceId, String(response.formId), action.stageId);
         const prevStageId = response.stageId ? response.stageId.toString() : null;
         await ResponseModel.updateOne(
           { _id: response._id },

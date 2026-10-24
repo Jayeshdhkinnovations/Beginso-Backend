@@ -93,4 +93,49 @@ describe("report files", () => {
     const pages = (res.body as Buffer).toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? [];
     expect(pages).toHaveLength(1);
   });
+  describe("PDF of chosen responses", () => {
+    const pageCount = (res: any) => ((res.body as Buffer).toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+    let form: any;
+    let rows: any[];
+    beforeAll(async () => {
+      form = await Form.create({
+        title: "Film submissions", workspaceId: null, createdBy: alice._id, status: "published",
+        fields: [
+          { fieldId: "a1", pageId: "p1", label: "Name", type: "short_text", required: true },
+          { fieldId: "a2", pageId: "p1", label: "Genres", type: "checkbox", required: false, options: ["Drama", "Comedy"] },
+          { fieldId: "a3", pageId: "p2", label: "Synopsis", type: "long_text", required: false },
+          { fieldId: "a4", pageId: "p2", label: "Skipped question", type: "short_text", required: false },
+        ],
+        pages: [{ id: "p1", order: 0, title: "About you" }, { id: "p2", order: 1, title: "The film" }],
+      } as any);
+      rows = await ResponseModel.create([
+        { formId: form._id, answers: { Name: "Asha", Genres: ["Drama", "Comedy"], Synopsis: "A short one." }, respondentEmail: "asha@x.test" },
+        { formId: form._id, answers: { Name: "Ben" }, respondentEmail: "ben@x.test" },
+        { formId: form._id, answers: { Name: "Chitra", Synopsis: "Long. ".repeat(4000) }, respondentEmail: "chitra@x.test" },
+      ]);
+    });
+
+    it("only the selected response is in the file: one response, one page, the response document and not the analytics report", async () => {
+      const res = await fetchReport({ format: "pdf", ids: [String(rows[0]._id)] });
+      expect(res.status).toBe(200);
+      expect((res.body as Buffer).subarray(0, 4).toString()).toBe("%PDF");
+      expect(pageCount(res)).toBe(1);
+    });
+
+    it("each selected response starts on its own page", async () => {
+      const res = await fetchReport({ format: "pdf", ids: [String(rows[0]._id), String(rows[1]._id)] });
+      expect(pageCount(res)).toBe(2);
+    });
+
+    it("a very long answer runs on to more pages instead of being cut off", async () => {
+      const res = await fetchReport({ format: "pdf", ids: [String(rows[2]._id)] });
+      expect(pageCount(res)).toBeGreaterThan(2);
+    });
+
+    it("an id that is not found gives a readable one-page file, not a failed report", async () => {
+      const res = await fetchReport({ format: "pdf", ids: [String(new mongoose.Types.ObjectId())] });
+      expect(res.status).toBe(200);
+      expect(pageCount(res)).toBe(1);
+    });
+  });
 });

@@ -10,9 +10,13 @@ import { reportFormsFilter } from "../utils/formAccess";
 import { ScoreService } from "./score.service";
 import Stage from "../models/Stage";
 import { buildAnswerKeyMap } from "../utils/answerKeys";
+import { drawResponsesPdf, drawPdfFooter, type PdfForm, type PdfResponse } from "../utils/responsePdf";
 import { csvCell, buildQuestionColumns, rowCells, statusLabel, niceAxis, createQuestionTally, OTHER_COLUMN, type ExportField } from "../utils/reportExport";
 
 const scoreService = new ScoreService();
+
+// The most responses one PDF of chosen responses holds (a PDF of thousands of pages is not what anyone reads; the CSV has no limit).
+const MAX_RESPONSE_PDF = 200;
 
 const UPLOADS_REPORTS_DIR = path.join(process.cwd(), "uploads", "reports");
 
@@ -239,6 +243,51 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
         writeStream.end();
         writeStream.on("finish", () => resolve());
         writeStream.on("error", (err) => reject(err));
+      });
+    } else if (report.format === "pdf" && filters.ids && filters.ids.length > 0) {
+      // Chosen responses: the PDF is the responses themselves (every question with its answer), not the analytics report.
+      const rows = await ResponseModel.find(query).sort({ submittedAt: -1 }).limit(MAX_RESPONSE_PDF).lean();
+      const scoreMap = await scoreService.aggregateForMany(rows.map((r: any) => r._id.toString()));
+      const stageIds = [...new Set(rows.map((r: any) => r.stageId?.toString()).filter(Boolean))];
+      const stages = stageIds.length > 0 ? await Stage.find({ _id: { $in: stageIds } }).select("name").lean() : [];
+      const stageNames = new Map(stages.map((st: any) => [st._id.toString(), st.name as string]));
+      const pdfForms = new Map<string, PdfForm>();
+      for (const f of forms) {
+        pdfForms.set(f._id.toString(), {
+          title: f.title,
+          fields: ((f.fields as any[]) ?? []).map((x) => ({ fieldId: x.fieldId, _id: x._id, label: x.label, type: x.type, pageId: x.pageId, deleted: x.deleted, order: x.order })),
+          pages: ((f.pages as any[]) ?? []).map((pg) => ({ id: pg.id, order: pg.order, title: pg.title })),
+        });
+      }
+      const pdfRows: PdfResponse[] = rows.map((r: any) => {
+        const agg = scoreMap.get(r._id.toString());
+        return {
+          id: r._id.toString(),
+          formId: r.formId.toString(),
+          reference: r.reference,
+          status: r.status,
+          stageName: r.stageId ? stageNames.get(r.stageId.toString()) : null,
+          email: r.respondentEmail,
+          submittedAt: r.submittedAt ?? r.createdAt,
+          answers: r.answers instanceof Map ? Object.fromEntries(r.answers) : (r.answers ?? {}),
+          scoreAverage: agg?.scoreAverage ?? null,
+          scoreCount: agg?.scoreCount ?? 0,
+        };
+      });
+      await new Promise<void>((resolve, reject) => {
+        const doc = new PDFDocument({ margin: 40, size: "A4", bufferPages: true, info: { Title: "Beginso responses" } });
+        const writeStream = fs.createWriteStream(targetFilePath);
+        writeStream.on("finish", () => resolve());
+        writeStream.on("error", (err) => reject(err));
+        doc.on("error", (err) => reject(err));
+        doc.pipe(writeStream);
+        if (pdfRows.length === 0) {
+          doc.fillColor("#64748B").fontSize(11).font("Helvetica").text("None of the selected responses could be found.", 40, 40);
+        } else {
+          drawResponsesPdf(doc, pdfRows, pdfForms);
+        }
+        drawPdfFooter(doc, pdfRows.length === 1 ? `Beginso · ${pdfForms.get(pdfRows[0].formId)?.title ?? "Response"}` : `Beginso · ${pdfRows.length} responses`);
+        doc.end();
       });
     } else if (report.format === "pdf") {
       // PDF generation matching the live Analytics Dashboard layout (KPI cards, Trend line

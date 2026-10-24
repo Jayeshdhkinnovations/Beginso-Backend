@@ -3,6 +3,9 @@ process.env.JWT_SECRET = "test-jwt-secret-key-for-report-export-files";
 process.env.RATE_LIMIT_MAX = "0";
 process.env.AUTH_RATE_LIMIT_MAX = "0";
 
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import mongoose from "mongoose";
 import request from "supertest";
@@ -136,6 +139,69 @@ describe("report files", () => {
       const res = await fetchReport({ format: "pdf", ids: [String(new mongoose.Types.ObjectId())] });
       expect(res.status).toBe(200);
       expect(pageCount(res)).toBe(1);
+    });
+  });
+  describe("an export of chosen responses is that form's export", () => {
+    let formA: any;
+    let formB: any;
+    let rowA: any;
+    let rowB: any;
+    let uploadDir: string;
+    const prevUploadDir = process.env.UPLOAD_DIR;
+    beforeAll(async () => {
+      // 1x1 PNG, served from a temp upload folder
+      uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), "beginso-uploads-"));
+      process.env.UPLOAD_DIR = uploadDir;
+      fs.mkdirSync(path.join(uploadDir, "u1", "f1"), { recursive: true });
+      fs.writeFileSync(path.join(uploadDir, "u1", "f1", "pic.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+      formA = await Form.create({
+        title: "Customer service", workspaceId: null, createdBy: alice._id, status: "published",
+        fields: [
+          { fieldId: "c1", pageId: "p1", label: "Name", type: "short_text" },
+          { fieldId: "c2", pageId: "p1", label: "Photo", type: "image_upload", allowMultiple: true },
+        ],
+        pages: [{ id: "p1", order: 0, title: "P" }],
+      } as any);
+      formB = await Form.create({
+        title: "Other form", workspaceId: null, createdBy: alice._id, status: "published",
+        fields: [{ fieldId: "o1", pageId: "p1", label: "Unrelated question", type: "short_text" }],
+        pages: [{ id: "p1", order: 0, title: "P" }],
+      } as any);
+      rowA = await ResponseModel.create({ formId: formA._id, answers: { Name: "Piyush", Photo: ["http://localhost/api/upload/file/u1/f1/pic.png", "http://localhost/api/upload/file/u1/f1/gone.png"] } });
+      rowB = await ResponseModel.create({ formId: formB._id, answers: { "Unrelated question": "x" } });
+    });
+    afterAll(() => {
+      if (prevUploadDir === undefined) delete process.env.UPLOAD_DIR;
+      else process.env.UPLOAD_DIR = prevUploadDir;
+      fs.rmSync(uploadDir, { recursive: true, force: true });
+    });
+
+    it("the CSV has only that form's questions as columns, not one set per form in the workspace", async () => {
+      const res = await fetchReport({ format: "csv", ids: [String(rowA._id)] });
+      const header = (res.body as Buffer).toString("utf8").slice(1).split("\n")[0];
+      expect(header).toContain('"Name","Photo"');
+      expect(header).not.toContain("Unrelated question");
+      expect(header).not.toContain("Short Text");
+    });
+
+    it("chosen from two forms, the columns are those two forms' questions", async () => {
+      const res = await fetchReport({ format: "csv", ids: [String(rowA._id), String(rowB._id)] });
+      const header = (res.body as Buffer).toString("utf8").slice(1).split("\n")[0];
+      expect(header).toContain('"Photo"');
+      expect(header).toContain('"Unrelated question"');
+    });
+
+    it("the export is named after the form, not 'All Workspace Forms'", async () => {
+      const created = await request(app).post("/api/reports").set(personal(alice)).send({ format: "pdf", ids: [String(rowA._id)] });
+      expect(created.status).toBe(202);
+      expect(created.body.report.formTitle).toBe("Customer service");
+      expect(String(created.body.report.formId)).toBe(String(formA._id));
+    });
+
+    it("the PDF shows an uploaded image as a picture; a file that is gone is listed by name", async () => {
+      const res = await fetchReport({ format: "pdf", ids: [String(rowA._id)] });
+      const text = (res.body as Buffer).toString("latin1");
+      expect(text).toMatch(/\/Subtype\s*\/Image/);
     });
   });
 });

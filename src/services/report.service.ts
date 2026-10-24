@@ -10,6 +10,7 @@ import { reportFormsFilter } from "../utils/formAccess";
 import { ScoreService } from "./score.service";
 import Stage from "../models/Stage";
 import { buildAnswerKeyMap } from "../utils/answerKeys";
+import { getUploadDir } from "../controllers/upload.controller";
 import { drawResponsesPdf, drawPdfFooter, type PdfForm, type PdfResponse } from "../utils/responsePdf";
 import { csvCell, buildQuestionColumns, rowCells, statusLabel, niceAxis, createQuestionTally, OTHER_COLUMN, type ExportField } from "../utils/reportExport";
 
@@ -19,6 +20,26 @@ const scoreService = new ScoreService();
 const MAX_RESPONSE_PDF = 200;
 
 const UPLOADS_REPORTS_DIR = path.join(process.cwd(), "uploads", "reports");
+
+// An uploaded file's bytes, read from this server's upload folder from the link it was answered with. Anything that is not
+// one of our files, is missing, or is too big to put in a PDF gives null (the PDF then lists its name and link instead).
+const MAX_EMBED_BYTES = 5 * 1024 * 1024;
+const readUploadedFile = (url: string): Buffer | null => {
+  try {
+    const prefix = "/api/upload/file/";
+    const pathname = new URL(url).pathname;
+    if (!pathname.startsWith(prefix)) return null;
+    const parts = pathname.slice(prefix.length).split("/").map(decodeURIComponent);
+    if (parts.some((p) => !p || p === "." || p === ".." || /[\\/]/.test(p))) return null;
+    const root = path.resolve(getUploadDir());
+    const file = path.resolve(root, ...parts);
+    if (!file.startsWith(root + path.sep)) return null;
+    const stat = fs.statSync(file);
+    return stat.isFile() && stat.size <= MAX_EMBED_BYTES ? fs.readFileSync(file) : null;
+  } catch {
+    return null;
+  }
+};
 
 const ensureReportsDir = (): void => {
   if (!fs.existsSync(UPLOADS_REPORTS_DIR)) {
@@ -176,7 +197,10 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
       // One column per question (header = the question's label) after the fixed metadata columns.
       // "Reference" is the per-form sequential id (e.g. "#142"); notes never belong in this export.
       // "Score Average"/"Score Count" mirror the response read path (pooled mean, distinct reviewers).
-      const exportForms = (filters.formId ? forms.filter((f) => f._id.toString() === filters.formId) : forms).map((f) => {
+      // Chosen from several forms: only those forms' questions become columns.
+      const chosenFormIds =
+        !filters.formId && filters.ids && filters.ids.length > 0 ? new Set((await ResponseModel.distinct("formId", query)).map(String)) : null;
+      const exportForms = (filters.formId ? forms.filter((f) => f._id.toString() === filters.formId) : chosenFormIds ? forms.filter((f) => chosenFormIds.has(f._id.toString())) : forms).map((f) => {
         const raw = (f.fields as any[]) ?? [];
         const keys = buildAnswerKeyMap(raw);
         return {
@@ -284,7 +308,7 @@ export const generateReportAsync = async (reportId: string): Promise<void> => {
         if (pdfRows.length === 0) {
           doc.fillColor("#64748B").fontSize(11).font("Helvetica").text("None of the selected responses could be found.", 40, 40);
         } else {
-          drawResponsesPdf(doc, pdfRows, pdfForms);
+          drawResponsesPdf(doc, pdfRows, pdfForms, readUploadedFile);
         }
         drawPdfFooter(doc, pdfRows.length === 1 ? `Beginso · ${pdfForms.get(pdfRows[0].formId)?.title ?? "Response"}` : `Beginso · ${pdfRows.length} responses`);
         doc.end();

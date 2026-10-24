@@ -41,7 +41,7 @@ describe("responsePdf helpers", () => {
 
 describe("uploaded files in the PDF", () => {
   it("shows the link, and the file name above it when there is one", () => {
-    expect(answerLines("https://drive.google.com/file/d/abc/view", "file_upload")).toEqual(["https://drive.google.com/file/d/abc/view"]);
+    expect(answerLines("https://x.test/api/upload/file/u/f/r/Plan.pdf", "file_upload")).toEqual(["Plan.pdf", "https://x.test/api/upload/file/u/f/r/Plan.pdf"]);
     expect(answerLines({ name: "poster.png", url: "https://x.test/u/poster.png" }, "image_upload")).toEqual(["poster.png", "https://x.test/u/poster.png"]);
     expect(answerLines("", "file_upload")).toEqual([]);
   });

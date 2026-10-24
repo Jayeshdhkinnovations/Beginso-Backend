@@ -6,6 +6,7 @@ import fs from "fs";
 import { z } from "zod";
 import ReportModel from "../models/Report";
 import Form from "../models/Form";
+import ResponseModel from "../models/Response";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { kickReportQueue } from "../services/reportQueue";
 import { countReportRows } from "../services/report.service";
@@ -90,13 +91,22 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { format, formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity } = parseResult.data;
+    const { format, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity } = parseResult.data;
+    let formId = parseResult.data.formId;
 
     // A form outside the caller's scope (another user's personal form, another workspace's form) would only yield an empty
     // file; refuse it up front instead of queueing a job that can never contain anything.
     if (formId && (!mongoose.Types.ObjectId.isValid(formId) || !(await Form.exists({ _id: formId, ...formsFilter })))) {
       res.status(404).json({ success: false, message: "Form not found" });
       return;
+    }
+
+    // Responses chosen by hand that all belong to one form are that form's export: it is named after the form, and its file has that
+    // form's columns instead of one set per form in the workspace. (Chosen from several forms, it stays a workspace export.)
+    if (!formId && ids && ids.length > 0) {
+      const chosen = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+      const owners = chosen.length > 0 ? await ResponseModel.distinct("formId", { _id: { $in: chosen }, deletedAt: null }) : [];
+      if (owners.length === 1 && (await Form.exists({ _id: owners[0], ...formsFilter }))) formId = String(owners[0]);
     }
 
     if (field !== undefined || value !== undefined) {

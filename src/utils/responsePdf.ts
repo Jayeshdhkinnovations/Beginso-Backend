@@ -27,6 +27,8 @@ const LEFT = 40;
 const WIDTH = 515;
 const BOTTOM = 770; // content stops here; the footer sits below it
 const TOP = 40;
+const THUMB = 110; // the picture of an uploaded image
+const MAX_IMAGES = 12; // pictures drawn per question; the rest are listed by name
 
 // Helvetica (built into PDFKit) draws Latin-1 and a few typographic marks; anything else would come out as another character.
 const MAPPED: Record<string, string> = { "‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", "…": "...", "•": "-", "€": "EUR", "™": "(TM)", " ": " " };
@@ -35,22 +37,12 @@ export const pdfSafe = (text: string): string =>
     .map((ch) => MAPPED[ch] ?? (/[\n -~¡-ÿ]/.test(ch) ? ch : "?"))
     .join("");
 
+const isUploadType = (type: string) => type === "file_upload" || type === "image_upload";
+
 /** The lines of one answer: a list answer (checkboxes) gets one line per choice, everything else is its readable text. */
 export const answerLines = (value: unknown, type: string): string[] => {
   // An uploaded file is shown as its name and the link to it: the spreadsheet wants only the name, a reader of the PDF wants the link.
-  if (type === "file_upload" || type === "image_upload") {
-    const one = (v: unknown): string[] => {
-      if (typeof v === "string") return v.trim() ? [v.trim()] : [];
-      if (v && typeof v === "object") {
-        const o = v as Record<string, unknown>;
-        const name = typeof o.fileName === "string" ? o.fileName : typeof o.name === "string" ? o.name : "";
-        const url = typeof o.url === "string" ? o.url : /^https?:/.test(name) ? name : "";
-        return [...(name && name !== url ? [formatAnswer(v, type)] : []), ...(url ? [url] : [])];
-      }
-      return [];
-    };
-    return (Array.isArray(value) ? value : [value]).flatMap(one);
-  }
+  if (isUploadType(type)) return uploadItems(value).flatMap((u) => (u.url && u.url !== u.name ? [u.name, u.url] : [u.name]));
   if (Array.isArray(value)) {
     const items = value.map((v) => formatAnswer(v, type)).filter((s) => s !== "");
     return items.length > 0 ? items.map((s) => `- ${s}`) : [];
@@ -58,6 +50,8 @@ export const answerLines = (value: unknown, type: string): string[] => {
   const text = formatAnswer(value, type).trim();
   return text === "" ? [] : text.split("\n");
 };
+
+const hasAnswer = (value: unknown, type: string): boolean => (isUploadType(type) ? uploadItems(value).length > 0 : answerLines(value, type).length > 0);
 
 const dateText = (d: Date): string => `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`;
 
@@ -75,7 +69,45 @@ export const groupFieldsByPage = (form: PdfForm): { title: string; fields: PdfFo
   return groups.filter((g) => g.fields.length > 0);
 };
 
-export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse[], forms: Map<string, PdfForm>): void {
+const EMBEDDABLE = /\.(jpe?g|png)(\?|$)/i;
+
+export interface UploadItem {
+  name: string;
+  url: string;
+}
+
+/** The files in an upload answer: a link string, a list of them, or an object holding the name and the link. */
+export const uploadItems = (value: unknown): UploadItem[] => {
+  const one = (v: unknown): UploadItem[] => {
+    if (typeof v === "string") {
+      const url = v.trim();
+      if (!url) return [];
+      const last = url.split("?")[0].split(/[\\/]/).pop() || url;
+      let name = last;
+      try {
+        name = decodeURIComponent(last);
+      } catch {
+        /* keep the raw name */
+      }
+      return [{ name, url: /^https?:/i.test(url) ? url : "" }];
+    }
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      const raw = typeof o.url === "string" ? o.url : typeof o.fileName === "string" && /^https?:/i.test(o.fileName) ? o.fileName : "";
+      const given = typeof o.name === "string" ? o.name : typeof o.fileName === "string" && !/^https?:/i.test(o.fileName) ? o.fileName : "";
+      const fromUrl = raw ? one(raw)[0]?.name ?? "" : "";
+      const name = given || fromUrl;
+      return name || raw ? [{ name: name || raw, url: raw }] : [];
+    }
+    return [];
+  };
+  return (Array.isArray(value) ? value : [value]).flatMap(one);
+};
+
+/** Reads an uploaded file's bytes from its link (null when it is not one of ours, is gone, or is too big to embed). */
+export type FileReader = (url: string) => Buffer | null;
+
+export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse[], forms: Map<string, PdfForm>, readUpload: FileReader = () => null): void {
   const text = (s: string, x: number, y: number, o: PDFKit.Mixins.TextOptions = {}) => doc.text(pdfSafe(s), x, y, o);
   const height = (s: string, w: number) => doc.heightOfString(pdfSafe(s), { width: w });
 
@@ -85,7 +117,7 @@ export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse
     const keys = buildAnswerKeyMap(form.fields);
     const fields = form.fields.map((f) => ({ ...f, answerKey: keys.get(f) }));
     const groups = groupFieldsByPage({ ...form, fields });
-    const answered = fields.filter((f) => !f.deleted && answerLines(readAnswer(r.answers, f).value, f.type).length > 0).length;
+    const answered = fields.filter((f) => !f.deleted && hasAnswer(readAnswer(r.answers, f).value, f.type)).length;
     const total = fields.filter((f) => !f.deleted).length;
 
     // The head repeated on a page the response runs on to.
@@ -141,7 +173,42 @@ export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse
     y += cardH + 18;
 
     // --- every question, with its answer under it ---
-    const drawQuestion = (label: string, lines: string[], index: number) => {
+    // An answer as the page will show it: text lines, plus the pictures of any uploaded JPEG / PNG that can be read from disk.
+    const partsOf = (value: unknown, type: string): { lines: string[]; images: { buf: Buffer; name: string }[] } => {
+      if (!isUploadType(type)) return { lines: answerLines(value, type), images: [] };
+      const lines: string[] = [];
+      const images: { buf: Buffer; name: string }[] = [];
+      for (const u of uploadItems(value)) {
+        const buf = EMBEDDABLE.test(u.url || u.name) && u.url && images.length < MAX_IMAGES ? readUpload(u.url) : null;
+        if (buf) images.push({ buf, name: u.name });
+        else lines.push(...(u.url && u.url !== u.name ? [u.name, u.url] : [u.name]));
+      }
+      return { lines, images };
+    };
+
+    const drawImages = (images: { buf: Buffer; name: string }[]) => {
+      const cell = THUMB + 12;
+      const perRow = Math.max(1, Math.floor((WIDTH - 8) / cell));
+      for (let i = 0; i < images.length; i += perRow) {
+        ensure(THUMB + 26);
+        images.slice(i, i + perRow).forEach((img, j) => {
+          const x = LEFT + 4 + j * cell;
+          doc.roundedRect(x, y, THUMB, THUMB, 4).fillAndStroke(COLOR.card, COLOR.line);
+          try {
+            doc.image(img.buf, x + 3, y + 3, { fit: [THUMB - 6, THUMB - 6], align: "center", valign: "center" });
+          } catch {
+            doc.fillColor(COLOR.faint).fontSize(8).font("Helvetica");
+            text("Image could not be drawn", x + 6, y + THUMB / 2 - 4, { width: THUMB - 12, align: "center" });
+          }
+          doc.fillColor(COLOR.muted).fontSize(7.5).font("Helvetica");
+          text(img.name, x, y + THUMB + 3, { width: THUMB, lineBreak: false, ellipsis: true });
+        });
+        y += THUMB + 20;
+      }
+    };
+
+    const drawQuestion = (label: string, value: unknown, type: string, index: number) => {
+      const { lines, images } = partsOf(value, type);
       const answer = lines.join("\n");
       const labelText = `${index}. ${label || "Untitled question"}`;
       doc.fontSize(9).font("Helvetica-Bold");
@@ -154,7 +221,7 @@ export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse
       doc.fillColor(COLOR.body).fontSize(9).font("Helvetica-Bold");
       text(labelText, LEFT + 4, y, { width: WIDTH - 8 });
       y += labelH + 4;
-      if (lines.length === 0) {
+      if (lines.length === 0 && images.length === 0) {
         doc.fillColor(COLOR.faint).fontSize(10).font("Helvetica-Oblique");
         text("No answer", LEFT + 4, y, { width: WIDTH - 8, lineBreak: false });
         y += 14;
@@ -168,6 +235,7 @@ export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse
           y += lh + 1;
         }
       }
+      if (images.length > 0) drawImages(images);
       y += 6;
       doc.moveTo(LEFT, y).lineTo(LEFT + WIDTH, y).strokeColor(COLOR.line).lineWidth(0.5).stroke();
       y += 8;
@@ -183,7 +251,7 @@ export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse
       }
       for (const f of group.fields) {
         n += 1;
-        drawQuestion(f.label, answerLines(readAnswer(r.answers, f).value, f.type), n);
+        drawQuestion(f.label, readAnswer(r.answers, f).value, f.type, n);
       }
       y += 6;
     }
@@ -199,7 +267,7 @@ export function drawResponsesPdf(doc: PDFKit.PDFDocument, responses: PdfResponse
       y += 18;
       for (const [k, v] of extra) {
         n += 1;
-        drawQuestion(k, answerLines(v, ""), n);
+        drawQuestion(k, v, "", n);
       }
     }
   });

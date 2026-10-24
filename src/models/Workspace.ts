@@ -9,6 +9,8 @@ import crypto from "crypto";
 
 export interface IWorkspace extends Document {
   name: string;
+  /** Two letters taken from the name when the first response arrives; the first part of every response reference. Unique across workspaces. */
+  refCode?: string;
   slug: string;
   timezone: string;
   description?: string;
@@ -29,6 +31,8 @@ const WorkspaceSchema = new Schema<IWorkspace>(
       required: true,
       trim: true,
     },
+
+    refCode: { type: String, trim: true, unique: true, sparse: true },
 
     slug: {
       type: String,

@@ -174,6 +174,8 @@ export interface IFormSettings {
 
 export interface IForm extends Document {
   title: string;
+  /** Three letters taken from the title when the first response arrives; the middle part of every response reference. Unique in its workspace. */
+  refCode?: string;
   description?: string;
   workspaceId?: mongoose.Types.ObjectId | null;
   createdBy?: mongoose.Types.ObjectId | null;
@@ -337,6 +339,7 @@ export const FormSettingsSchema = new Schema<IFormSettings>(
 const FormSchema = new Schema<IForm>(
   {
     title: { type: String, required: true, trim: true },
+    refCode: { type: String, trim: true },
     description: { type: String, default: "" },
     workspaceId: {
       type: Schema.Types.ObjectId,
@@ -404,6 +407,8 @@ const FormSchema = new Schema<IForm>(
 // Form lists sort by newest first within one workspace, or within one creator's personal space.
 FormSchema.index({ workspaceId: 1, createdAt: -1 });
 FormSchema.index({ createdBy: 1, workspaceId: 1, createdAt: -1 });
+// A response reference names its form by this code, so two forms of one workspace never share one (trashed forms keep theirs).
+FormSchema.index({ workspaceId: 1, refCode: 1 }, { unique: true, partialFilterExpression: { refCode: { $type: "string" } } });
 
 // Trash (CF5.5). A form in Trash must be invisible to every normal read path - lists, lookups by id,
 // the public slug, counts, permission resolution - so the exclusion lives in ONE place instead of

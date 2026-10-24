@@ -149,7 +149,7 @@ export const search = async (req: Request, res: Response, next: NextFunction): P
         (async () => {
           // Respondent name: only a signed-in respondent has one (their account name). Anonymous answers are never read.
           const matchedUsers = await User.find({ $or: [{ fullName: rx }, { email: rx }] }).select("_id").limit(100).lean();
-          const byRespondent = [{ reference: rx }, { respondentEmail: rx }, ...(matchedUsers.length ? [{ respondentUserId: { $in: matchedUsers.map((u) => u._id) } }] : [])];
+          const byRespondent = [{ reference: rx }, { legacyReference: rx }, { respondentEmail: rx }, ...(matchedUsers.length ? [{ respondentUserId: { $in: matchedUsers.map((u) => u._id) } }] : [])];
 
           const clauses: any[] = [];
           if (scope.responseFormIds.length) clauses.push({ formId: { $in: scope.responseFormIds }, $or: byRespondent });
@@ -158,7 +158,7 @@ export const search = async (req: Request, res: Response, next: NextFunction): P
           if (ctx.kind === "personal") {
             const submittedTo = await ResponseModel.distinct("formId", { respondentUserId: userId, deletedAt: null });
             const live = submittedTo.length ? await Form.find({ _id: { $in: submittedTo } }).select("_id").lean() : [];
-            if (live.length) clauses.push({ formId: { $in: live.map((f) => f._id) }, respondentUserId: userId, reference: rx });
+            if (live.length) clauses.push({ formId: { $in: live.map((f) => f._id) }, respondentUserId: userId, $or: [{ reference: rx }, { legacyReference: rx }] });
           }
           if (!clauses.length) return;
 

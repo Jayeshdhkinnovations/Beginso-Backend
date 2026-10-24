@@ -22,6 +22,8 @@ export interface IResponse extends Document {
   // responses by scripts/backfillResponseReference.ts. Optional at the schema level only so old
   // fixtures/tests that predate this field keep loading — every response created going forward has one.
   reference?: string;
+  // The "#12" reference this response had before references were made workspace + form + number (BSO scheme); still searchable.
+  legacyReference?: string;
   // Sprint 12, BE 0.2 (B3.1): many-to-many with Tag, workspace-scoped.
   tagIds: mongoose.Types.ObjectId[];
   // Sprint 12, BE 0.2 (B3.2/R4): nullable current-member assignee.
@@ -103,6 +105,10 @@ const ResponseSchema = new Schema<IResponse>(
       select: false,
     },
     reference: {
+      type: String,
+      index: true,
+    },
+    legacyReference: {
       type: String,
       index: true,
     },

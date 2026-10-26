@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export const TABLE_BUILTIN_COLUMNS = ["respondent", "email", "tags", "assignee", "stage", "submitted", "score", "notes"] as const;
+export const TABLE_BUILTIN_COLUMNS = ["respondent", "email", "tags", "assignee", "stage", "submitted", "score", "notes", "reference"] as const;
 export const DEFAULT_TABLE_COLUMNS: string[] = ["respondent", "email", "tags", "assignee", "stage", "submitted"];
 export const OPENS_AS = ["table", "board", "calendar"] as const;
 export const RESPONSE_SORTS = ["newest", "oldest"] as const; // by submission time; the server sorts nothing else

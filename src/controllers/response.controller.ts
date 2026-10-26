@@ -69,6 +69,7 @@ export const getResponses = async (
       field: typeof field === "string" ? field : undefined,
       value: typeof value === "string" ? value : undefined,
       granularity: typeof granularity === "string" ? granularity : undefined,
+      chart: typeof req.query.chart === "string" ? req.query.chart : undefined,
       tagIds,
       assigneeId: typeof assigneeId === "string" ? assigneeId : undefined,
       unread: flag(unread),

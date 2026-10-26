@@ -25,6 +25,8 @@ import mongoose from "mongoose";
 import { escapeRegex } from "../utils/safeInput";
 import { buildResponseSchemaView } from "../utils/responseSchemaView";
 import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
+import { chartListFilter } from "../utils/chartQuery";
+import { chartTimezone } from "./chartQuery.service";
 import { buildResponseFilterQuery } from "../utils/responseFilters";
 
 const toStageSummary = (stage: IStage | null | undefined): IResponseStageSummary | null => {
@@ -136,6 +138,8 @@ export class ResponseService {
     field?: string;
     value?: string;
     granularity?: string;
+    // Charts v3: the chart that was clicked (its filters and the group), as JSON. See utils/chartQuery.ts chartListFilter.
+    chart?: string;
     tagIds?: string[];
     assigneeId?: string;
     unread?: boolean;
@@ -191,6 +195,11 @@ export class ResponseService {
       if (params.field !== undefined || params.value !== undefined) {
         mongoQuery.$and = [fieldSegmentFilter(form, params.field, params.value, params.granularity)];
       }
+      if (params.chart !== undefined) {
+        mongoQuery.$and = [...(mongoQuery.$and ?? []), chartListFilter(form, params.chart, await chartTimezone(form))];
+      }
+    } else if (params.chart !== undefined) {
+      throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "a chart filter needs formId (questions are per form)");
     } else if (params.field !== undefined || params.value !== undefined) {
       throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "field/value filtering needs formId (question ids are per form)");
     } else if (personalUserId) {

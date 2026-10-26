@@ -5,6 +5,8 @@ import SavedChart, { CHART_TYPES, CHART_GROUP_BYS, CHART_SIZES, CHART_VISIBILITI
 import User from "../models/User";
 import { resolveFormAccess } from "./form.controller";
 import { recordEvent } from "../services/event.service";
+import { definitionSchema, validateDefinition, fieldWarning, emptyResult, type ChartDef } from "../utils/chartQuery";
+import { queryChart } from "../services/chartQuery.service";
 import { aggregateField, fieldKind, CHART_TYPES_BY_KIND, parseGranularity, SegmentError, FieldAggregate, Granularity } from "../utils/fieldSegments";
 
 // Sprint 14 (B1.3, OQ-1) + charts v2. Charts are per form AND per user: `private` (default) = only the owner,
@@ -13,7 +15,7 @@ import { aggregateField, fieldKind, CHART_TYPES_BY_KIND, parseGranularity, Segme
 // check the middleware skips, plus the per-chart rule: edit = the owner, or an admin/owner of the workspace
 // for a workspace-visible chart. Someone else's private chart does not exist as far as the caller can tell (404).
 
-const MAX_CHARTS_PER_OWNER = 20;
+const MAX_CHARTS_PER_OWNER = 24;
 const DEFAULT_OPTIONS: IChartOptions = { valueMode: "count", legend: true, sort: "order" };
 
 const optionsSchema = z.object({
@@ -33,7 +35,17 @@ const baseShape = {
 const createSchema = z.object({ fieldId: z.string().min(1).max(100), ...baseShape });
 const patchSchema = z
   .object({ fieldId: z.string().min(1).max(100), ...baseShape, position: z.number().int().min(0).max(100000), order: z.number().int().min(0).max(100000) })
-  .partial();
+  .partial()
+  .extend({ definition: definitionSchema.optional(), expectedVersion: z.number().int().min(0).optional() });
+// Charts v3: a chart that is a whole query (see utils/chartQuery.ts). chartType "auto" = the page picks the type from the field.
+const createV2Schema = z.object({
+  definition: definitionSchema,
+  chartType: z.enum(CHART_TYPES).default("auto"),
+  size: z.enum(CHART_SIZES).optional(),
+  title: z.string().trim().max(80).optional(),
+  visibility: z.enum(CHART_VISIBILITIES).optional(),
+});
+const querySchema = z.object({ definition: definitionSchema, path: z.array(z.object({ level: z.number().int().min(0).max(3), key: z.string().max(200) })).max(4).optional() });
 const previewSchema = z.object({ fieldId: z.string().min(1).max(100), chartType: baseShape.chartType, groupBy: baseShape.groupBy, granularity: baseShape.granularity });
 
 const httpError = (res: Response, status: number, message: string, code?: string): void => {
@@ -68,6 +80,24 @@ const loadForm = async (req: Request, res: Response): Promise<any | null> => {
 const findField = (form: any, fieldId: string): any =>
   (form.fields || []).find((f: any) => f.fieldId === fieldId && !f.deleted);
 
+// The legacy `fieldId` column of a v3 chart: the question's id, or "sys:<key>" for stage, assignee, tags and submitted date.
+const fieldIdOf = (def: ChartDef): string => (def.groupBy.field.kind === "question" ? def.groupBy.field.fieldId : `sys:${def.groupBy.field.key}`);
+const optionsFromDisplay = (def: ChartDef): IChartOptions => ({
+  valueMode: def.display?.values === "percent" ? "percent" : "count",
+  legend: def.display?.legend ?? true,
+  sort: def.sort === "natural" ? "order" : "value",
+});
+// A bad definition is the caller's mistake (400), whatever part of it is wrong.
+const checkDefinition = (res: Response, form: any, def: ChartDef): boolean => {
+  try {
+    validateDefinition(form, def);
+    return true;
+  } catch (e) {
+    if (!segmentError(res, e)) throw e;
+    return false;
+  }
+};
+
 type Def = { chartType: string; granularity: Granularity | null; groupBy: "value" | "day" | "week" };
 
 // Validates a chart definition against its field and works out the stored granularity. Returns an error message or the def.
@@ -90,7 +120,8 @@ const ownerOf = (c: any): string => String(c.ownerId ?? c.createdBy ?? "");
 
 // A stored chart (v2 or Sprint 14) as the v2 shape. Sprint 14 rows: owner = createdBy, visibility = workspace.
 const normalise = (c: any, form: any, me: string, isAdmin: boolean, ownerNames: Map<string, string>) => {
-  const field = findField(form, c.fieldId);
+  const v3 = !!c.definition;
+  const field = v3 ? (c.definition.groupBy?.field?.kind === "question" ? findField(form, c.definition.groupBy.field.fieldId) : { type: c.definition.groupBy?.field?.key, label: "" }) : findField(form, c.fieldId);
   const visibility = c.visibility ?? "workspace";
   const owner = ownerOf(c);
   const granularity = c.granularity ?? (c.groupBy === "week" ? "week" : c.groupBy === "day" ? "day" : null);
@@ -100,11 +131,14 @@ const normalise = (c: any, form: any, me: string, isAdmin: boolean, ownerNames: 
     formId: String(c.formId),
     fieldId: c.fieldId,
     fieldType: field?.type ?? null,
+    kind: v3 ? c.definition.kind : "legacy",
+    definition: v3 ? c.definition : null,
+    version: c.version ?? 1,
     chartType: c.chartType,
     granularity,
     groupBy: granularity === null ? "value" : granularity === "week" ? "week" : "day", // legacy
     size: c.size ?? "medium",
-    title: c.title || field?.label || "Untitled chart",
+    title: c.title || field?.label || (v3 ? "Chart" : "Untitled chart"),
     options: { ...DEFAULT_OPTIONS, ...(c.options ?? {}) },
     visibility,
     ownerId: owner || null,
@@ -114,7 +148,7 @@ const normalise = (c: any, form: any, me: string, isAdmin: boolean, ownerNames: 
     position,
     order: position, // legacy
     // The question was deleted from the form after the chart was made: say so instead of failing.
-    fieldMissing: !field,
+    fieldMissing: v3 ? !!fieldWarning(form, c.definition, null) : !field,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };
@@ -184,6 +218,7 @@ export const createChart = async (req: Request, res: Response, next: NextFunctio
   try {
     const form = await loadForm(req, res);
     if (!form) return;
+    if (req.body && typeof req.body === "object" && "definition" in req.body) return await createV3(req, res, form);
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return httpError(res, 400, "Invalid chart definition", "VALIDATION_ERROR");
     const d = parsed.data;
@@ -230,16 +265,28 @@ export const updateChart = async (req: Request, res: Response, next: NextFunctio
     if (!parsed.success) return httpError(res, 400, "Invalid chart definition", "VALIDATION_ERROR");
     const d = parsed.data;
 
+    if (d.expectedVersion !== undefined && d.expectedVersion !== (chart.version ?? 1)) {
+      return httpError(res, 409, "Someone else changed this chart. Reload it.", "CHART_VERSION_CONFLICT");
+    }
+    if (d.definition) {
+      if (!checkDefinition(res, form, d.definition)) return;
+      chart.definition = d.definition;
+      chart.fieldId = fieldIdOf(d.definition);
+      chart.options = { ...DEFAULT_OPTIONS, ...optionsFromDisplay(d.definition) };
+    }
+    if (chart.definition) chart.version = (chart.version ?? 1) + 1;
+
     const fieldId = d.fieldId ?? chart.fieldId;
     const field = findField(form, fieldId);
     // Only a change to the definition is re-validated: a title/size/visibility edit must still work on a chart
     // whose question was later deleted.
-    const defChanged = d.fieldId !== undefined || d.chartType !== undefined || d.granularity !== undefined || d.groupBy !== undefined;
+    const defChanged = !chart.definition && (d.fieldId !== undefined || d.chartType !== undefined || d.granularity !== undefined || d.groupBy !== undefined);
     if (defChanged) {
       const def = resolveDef(field, d.chartType ?? chart.chartType, d.granularity ?? (d.fieldId ? undefined : chart.granularity ?? (chart.groupBy === "week" ? "week" : undefined)), d.groupBy);
       if (typeof def === "string") return httpError(res, 400, def, "INVALID_CHART");
       chart.set({ fieldId, chartType: def.chartType, granularity: def.granularity, groupBy: def.groupBy });
     }
+    if (chart.definition && d.chartType !== undefined) chart.chartType = d.chartType;
     if (d.size !== undefined) chart.size = d.size;
     if (d.title !== undefined) chart.title = d.title || field?.label || chart.title;
     if (d.options !== undefined) chart.options = { ...DEFAULT_OPTIONS, ...((chart.options as any)?.toObject?.() ?? chart.options ?? {}), ...d.options };
@@ -306,6 +353,8 @@ export const duplicateChart = async (req: Request, res: Response, next: NextFunc
       size: view.size,
       title: `${view.title} (copy)`.slice(0, 120),
       options: view.options,
+      definition: (src as any).definition ?? undefined,
+      version: 1,
       position,
       order: position,
     } as any);
@@ -344,6 +393,12 @@ export const getChartData = async (req: Request, res: Response, next: NextFuncti
     if (!form) return;
     const chart = await loadChart(req, res, form, false);
     if (!chart) return;
+    if ((chart as any).definition) {
+      const def = (chart as any).definition as ChartDef;
+      const warning = fieldWarning(form, def, null);
+      if (warning) return void res.status(200).json({ success: true, fieldMissing: true, query: emptyResult(def, warning) });
+      return void res.status(200).json({ success: true, fieldMissing: false, query: await queryChart(form, def) });
+    }
     const [view] = await present([chart.toObject()], form, req);
     const field = findField(form, chart.fieldId);
     if (!field || !fieldKind(field)) return void res.status(200).json({ success: true, fieldMissing: true, series: [], total: 0, aggregate: null });
@@ -382,6 +437,52 @@ export const getFieldAnalytics = async (req: Request, res: Response, next: NextF
     const agg = await aggregateField(form, field, { from: req.query.from, to: req.query.to, granularity, includeTest: req.query.includeTest === "true" });
     res.status(200).json({ success: true, ...agg });
   } catch (error) {
+    if (!segmentError(res, error)) next(error);
+  }
+};
+
+// POST /charts: a v3 chart (a whole query). The page's "Save to dashboard".
+const createV3 = async (req: Request, res: Response, form: any): Promise<void> => {
+  const parsed = createV2Schema.safeParse(req.body);
+  if (!parsed.success) return httpError(res, 400, "Invalid chart definition", "VALIDATION_ERROR");
+  const d = parsed.data;
+  if (!checkDefinition(res, form, d.definition)) return;
+  const { me } = ctx(req);
+  const { count, next: position } = await nextPosition(form, me);
+  if (count >= MAX_CHARTS_PER_OWNER) return httpError(res, 400, `You can have at most ${MAX_CHARTS_PER_OWNER} charts on a form`, "CHART_LIMIT");
+  const chart: any = await SavedChart.create({
+    formId: form._id,
+    workspaceId: form.workspaceId ?? null,
+    fieldId: fieldIdOf(d.definition),
+    chartType: d.chartType,
+    createdBy: me,
+    ownerId: me,
+    visibility: d.visibility ?? "private",
+    size: d.size ?? "medium",
+    title: d.title || "Chart",
+    options: { ...DEFAULT_OPTIONS, ...optionsFromDisplay(d.definition) },
+    definition: d.definition,
+    version: 1,
+    position,
+    order: position,
+  } as any);
+  await recordEvent(req, form.workspaceId, "chart.create", { id: chart._id, type: "chart", label: form.title }, { formId: String(form._id), kind: d.definition.kind });
+  const [out] = await present([chart.toObject()], form, req);
+  res.status(201).json({ success: true, chart: out });
+};
+
+// POST /forms/:formId/charts/query { definition, path? }: the answer for a chart that may not be saved yet (the wizard's live preview).
+// Never returns raw answers: only group labels, counts and figures.
+export const runChartQuery = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const form = await loadForm(req, res);
+    if (!form) return;
+    const parsed = querySchema.safeParse(req.body);
+    if (!parsed.success) return httpError(res, 400, "Invalid chart definition", "VALIDATION_ERROR");
+    if (!checkDefinition(res, form, parsed.data.definition)) return;
+    res.status(200).json({ success: true, ...(await queryChart(form, parsed.data.definition)) });
+  } catch (error) {
+    if (error instanceof SegmentError && error.statusCode === 429) res.setHeader("Retry-After", "3");
     if (!segmentError(res, error)) next(error);
   }
 };

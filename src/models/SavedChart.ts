@@ -6,7 +6,7 @@ import mongoose, { Schema, Document } from "mongoose";
 // visibility=workspace, position=order, size=medium (see chart.controller `normalise`; migrate:charts-v2
 // writes those values down). Deliberately no schema defaults for the v2 fields so a legacy row is never
 // silently given 'private' on load.
-export const CHART_TYPES = ["pie", "donut", "bar", "hbar", "line", "area", "stat"] as const;
+export const CHART_TYPES = ["pie", "donut", "bar", "hbar", "line", "area", "stat", "auto"] as const; // auto: the page picks the type from the field (v3 charts)
 export const CHART_GROUP_BYS = ["value", "day", "week"] as const; // legacy Sprint 14 shape
 export const CHART_SIZES = ["small", "medium", "large"] as const;
 export const CHART_VISIBILITIES = ["private", "workspace"] as const;
@@ -31,6 +31,9 @@ export interface ISavedChart extends Document {
   size?: (typeof CHART_SIZES)[number];
   title?: string;
   options?: IChartOptions;
+  // Charts v3: the whole query (kind, measure, groupBy, filters, sort, display). Absent on a one-question chart (legacy).
+  definition?: Record<string, any> | null;
+  version?: number; // bumped on every change; a client that sends an older one gets 409
   granularity?: "day" | "week" | "month" | null;
   position?: number;
   order: number; // legacy name of position, mirrored on write
@@ -54,6 +57,8 @@ const SavedChartSchema = new Schema<ISavedChart>(
       type: new Schema({ valueMode: String, legend: Boolean, sort: String }, { _id: false }),
     },
     granularity: { type: String, enum: ["day", "week", "month", null] },
+    definition: { type: Schema.Types.Mixed, default: undefined },
+    version: { type: Number, default: 1 },
     position: { type: Number },
     order: { type: Number, default: 0 },
   },

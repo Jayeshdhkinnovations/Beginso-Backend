@@ -29,7 +29,7 @@ import {
   unarchiveForm,
   createTestSubmission,
 } from "../controllers/formLifecycle.controller";
-import { listCharts, createChart, updateChart, deleteChart, getChartData, previewChart, reorderCharts, duplicateChart, getFieldAnalytics } from "../controllers/chart.controller";
+import { listCharts, createChart, updateChart, deleteChart, getChartData, previewChart, reorderCharts, duplicateChart, getFieldAnalytics, runChartQuery } from "../controllers/chart.controller";
 import { pinFormHandler, unpinFormHandler } from "../controllers/pin.controller";
 import { getScoreComparison } from "../controllers/score.controller";
 import { getResponseView, putFormResponseViewDefault } from "../controllers/responseView.controller";
@@ -87,6 +87,7 @@ router.get("/:formId/score-comparison", protect as any, blockSuspended as any, r
 // `preview` is a POST only because it carries a definition; it reads, so it needs analytics:read.
 const formResource = { resourceType: "form" as const };
 router.get("/:formId/charts", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, listCharts);
+router.post("/:formId/charts/query", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, userActionRateLimiter("chart-query", 30, 60_000), runChartQuery);
 router.post("/:formId/charts/preview", protect as any, blockSuspended as any, requirePermission("analytics:read", formResource) as any, previewChart);
 router.post("/:formId/charts", protect as any, blockSuspended as any, requirePermission("forms:write", formResource) as any, createChart);
 // Charts v2: reorder (declared before /:chartId), duplicate, and the single-field aggregate behind every chart.

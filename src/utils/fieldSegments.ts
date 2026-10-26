@@ -35,7 +35,7 @@ export class SegmentError extends Error {
   }
 }
 
-const FORMATS: Record<Granularity, string> = { day: "%Y-%m-%d", week: "%G-W%V", month: "%Y-%m" };
+const FORMATS: Record<string, string> = { day: "%Y-%m-%d", week: "%G-W%V", month: "%Y-%m", year: "%Y" }; // year: charts v3 only
 const KEY_RE: Record<Granularity, RegExp> = { day: /^\d{4}-\d{2}-\d{2}$/, week: /^\d{4}-W\d{2}$/, month: /^\d{4}-\d{2}$/ };
 
 export const parseGranularity = (raw: unknown): Granularity => {
@@ -71,7 +71,7 @@ const rawExpr = (field: any): any => {
 const asArray = { $cond: [{ $isArray: "$$v" }, "$$v", ["$$v"]] };
 
 // Array of the normalised, de-duplicated, non-empty values this response gave for the field.
-export const valuesExpr = (field: any, granularity: Granularity = "day"): any => {
+export const valuesExpr = (field: any, granularity: Granularity | "year" = "day"): any => {
   const kind = fieldKind(field)!;
   if (kind === "choice") {
     const norm = { $toLower: { $trim: { input: { $convert: { input: "$$x", to: "string", onError: "", onNull: "" } } } } };

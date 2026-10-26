@@ -313,8 +313,8 @@ describe("saved charts v2", () => {
     expect(again.status).toBe(201);
   });
 
-  it("limits each person to 20 charts per form", async () => {
-    for (let i = 0; i < 20; i++) expect((await create("editor", { fieldId: "f-plan", chartType: "bar" })).status).toBe(201);
+  it("limits each person to 24 charts per form", async () => {
+    for (let i = 0; i < 24; i++) expect((await create("editor", { fieldId: "f-plan", chartType: "bar" })).status).toBe(201);
     expect((await create("editor", { fieldId: "f-plan", chartType: "bar" })).body.error.code).toBe("CHART_LIMIT");
     expect((await create("owner", { fieldId: "f-plan", chartType: "bar" })).status).toBe(201); // per person
   });

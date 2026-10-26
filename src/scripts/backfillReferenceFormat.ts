@@ -4,8 +4,8 @@ import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import { ensureFormCode, ensureWorkspaceCode, formatReference } from "../services/reference.service";
 
-// Moves every response's reference from the old per-form "#12" to the workspace + form + number form ("KA-CUS-0012"). The number
-// stays the same, so "#12" and "KA-CUS-0012" are the same response; the old text is kept in `legacyReference` and stays searchable.
+// Moves every response's reference from the old per-form "#12" to the workspace + form + number form ("KALCUS0012"). The number
+// stays the same, so "#12" and "KALCUS0012" are the same response; the old text is kept in `legacyReference` and stays searchable.
 // Idempotent: only a reference that still reads "#<number>" is touched, so a re-run (or a form that already has some new-style
 // references) only converts what is left. The per-form counter is not touched: new responses carry on from where it is.
 export interface BackfillReferenceFormatResult {

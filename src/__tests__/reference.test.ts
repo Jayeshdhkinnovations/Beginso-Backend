@@ -11,7 +11,7 @@ import { generateToken } from "../utils/generateToken";
 import { allocateReference } from "../services/reference.service";
 import { backfillResponseReference } from "../scripts/backfillResponseReference";
 import { backfillReferenceFormat } from "../scripts/backfillReferenceFormat";
-import { codeFrom, formatReference } from "../services/reference.service";
+import { codeFrom, formatReference, nextCode } from "../services/reference.service";
 import { generateReportAsync } from "../services/report.service";
 import ReportModel from "../models/Report";
 import fs from "fs";
@@ -65,9 +65,9 @@ describe("Response reference allocation (B8.1)", () => {
     const r1 = await allocateReference(formId);
     const r2 = await allocateReference(formId);
     const r3 = await allocateReference(formId);
-    expect(r1).toBe("RE-REF-0001");
-    expect(r2).toBe("RE-REF-0002");
-    expect(r3).toBe("RE-REF-0003");
+    expect(r1).toBe("REFREF0001");
+    expect(r2).toBe("REFREF0002");
+    expect(r3).toBe("REFREF0003");
   });
 
   it("is race-safe: N concurrent allocations for the same form never collide", async () => {
@@ -95,7 +95,7 @@ describe("Response reference allocation (B8.1)", () => {
     });
     const formDId = (formC._id as mongoose.Types.ObjectId).toString();
     const r = await allocateReference(formDId);
-    expect(r).toBe("RE-FOR-0001");
+    expect(r).toBe("REFFOR0001");
   });
 
   it("real concurrent submissions to the same form never receive the same reference", async () => {
@@ -118,7 +118,7 @@ describe("Response reference allocation (B8.1)", () => {
     const refs = responses.map((r) => r.reference);
     expect(refs.length).toBe(10);
     expect(new Set(refs).size).toBe(10);
-    expect(refs.every((r) => typeof r === "string" && /^RE-SUB-\d{4}$/.test(r as string))).toBe(true);
+    expect(refs.every((r) => typeof r === "string" && /^REFSUB\d{4}$/.test(r as string))).toBe(true);
   });
 
   it("is included in the list, detail and CSV export payloads", async () => {
@@ -176,7 +176,7 @@ describe("Reference back-fill migration", () => {
 
     // Live allocation after backfill continues past the backfilled sequence rather than colliding.
     const next = await allocateReference(bfFormId);
-    expect(next).toBe("RE-BAC-0004"); // the counter carries on past the back-filled numbers, now in the new form
+    expect(next).toBe("REFBAC0004"); // the counter carries on past the back-filled numbers, now in the new form
   });
 
   it("skips responses that already have a reference", async () => {
@@ -226,14 +226,17 @@ describe("CSV export includes reference", () => {
 });
 
 describe("Reference format: workspace letters, form letters, number", () => {
-  it("builds the letters from the names: upper-case, accents and symbols dropped, short names padded", () => {
-    expect(codeFrom("Kala Chasma", 2)).toBe("KA");
-    expect(codeFrom("Ünïcode form", 3)).toBe("UNI");
-    expect(codeFrom("  #1 Poll", 3)).toBe("1PO");
-    expect(codeFrom("A", 3)).toBe("AXX");
-    expect(codeFrom("", 2)).toBe("XX");
-    expect(formatReference("KA", "CUS", 42)).toBe("KA-CUS-0042");
-    expect(formatReference("KA", "CUS", 12345)).toBe("KA-CUS-12345");
+  it("builds the letters from the names: upper-case, accents, digits and symbols dropped, short names padded", () => {
+    expect(codeFrom("Kala Chasma")).toBe("KAL");
+    expect(codeFrom("Ünïcode form")).toBe("UNI");
+    expect(codeFrom("  2024 Poll")).toBe("POL");
+    expect(codeFrom("A")).toBe("AXX");
+    expect(codeFrom("")).toBe("XXX");
+    expect(formatReference("KAL", "CUS", 42)).toBe("KALCUS0042");
+    expect(formatReference("KAL", "CUS", 12345)).toBe("KALCUS12345");
+    expect(nextCode("CUS")).toBe("CUT");
+    expect(nextCode("CUZ")).toBe("CVA");
+    expect(nextCode("ZZZ")).toBe("AAA");
   });
 
   it("two forms of one workspace that start with the same letters still get different references", async () => {
@@ -241,21 +244,21 @@ describe("Reference format: workspace letters, form letters, number", () => {
     const b = await Form.create({ title: "Customer survey", workspaceId, status: "published", fields: [] });
     const c = await Form.create({ title: "Customer care", workspaceId, status: "published", fields: [] });
     const refs = [await allocateReference(a._id as any), await allocateReference(b._id as any), await allocateReference(c._id as any)];
-    expect(refs).toEqual(["RE-CUS-0001", "RE-CUS2-0001", "RE-CUS3-0001"]);
+    expect(refs).toEqual(["REFCUS0001", "REFCUT0001", "REFCUU0001"]);
   });
 
   it("two workspaces that start with the same letters get different workspace letters", async () => {
     const owner = await User.create({ firebaseUid: "ref-owner-2", fullName: "O2", email: "ref-owner-2@test.com", role: "admin" });
     const ws2 = await Workspace.create({ name: "Reference Studio", owner: owner._id });
     const f = await Form.create({ title: "Poll", workspaceId: ws2._id, status: "published", fields: [] });
-    expect(await allocateReference(f._id as any)).toBe("RE2-POL-0001");
+    expect(await allocateReference(f._id as any)).toBe("REGPOL0001");
   });
 
   it("the letters are fixed by the first response: renaming the form later changes nothing", async () => {
     const f = await Form.create({ title: "Alpha", workspaceId, status: "published", fields: [] });
-    expect(await allocateReference(f._id as any)).toBe("RE-ALP-0001");
+    expect(await allocateReference(f._id as any)).toBe("REFALP0001");
     await Form.updateOne({ _id: f._id }, { $set: { title: "Zebra" } });
-    expect(await allocateReference(f._id as any)).toBe("RE-ALP-0002");
+    expect(await allocateReference(f._id as any)).toBe("REFALP0002");
   });
 
   it("a deleted response leaves its number unused: the next response does not take it", async () => {
@@ -264,20 +267,20 @@ describe("Reference format: workspace letters, form letters, number", () => {
     const second = await allocateReference(f._id as any);
     const r = await ResponseModel.create({ formId: f._id, answers: {}, reference: second });
     await ResponseModel.deleteOne({ _id: r._id });
-    expect([first, second]).toEqual(["RE-GAP-0001", "RE-GAP-0002"]);
-    expect(await allocateReference(f._id as any)).toBe("RE-GAP-0003");
+    expect([first, second]).toEqual(["REFGAP0001", "REFGAP0002"]);
+    expect(await allocateReference(f._id as any)).toBe("REFGAP0003");
   });
 
   it("a personal form (no workspace) uses MY", async () => {
     const f = await Form.create({ title: "Mine", workspaceId: null, status: "published", fields: [] });
-    expect(await allocateReference(f._id as any)).toBe("MY-MIN-0001");
+    expect(await allocateReference(f._id as any)).toBe("MYMIN0001");
   });
 
   it("concurrent first responses to a new form agree on one set of letters", async () => {
     const f = await Form.create({ title: "Race", workspaceId, status: "published", fields: [] });
     const refs = await Promise.all(Array.from({ length: 12 }, () => allocateReference(f._id as any)));
     expect(new Set(refs).size).toBe(12);
-    expect(refs.every((r) => r.startsWith("RE-RAC-"))).toBe(true);
+    expect(refs.every((r) => r.startsWith("REFRAC"))).toBe(true);
   });
 });
 
@@ -286,13 +289,13 @@ describe("Converting the old #n references", () => {
     const f = await Form.create({ title: "Legacy", workspaceId, status: "published", fields: [] });
     const old1 = await ResponseModel.create({ formId: f._id, answers: {}, reference: "#7" });
     const old2 = await ResponseModel.create({ formId: f._id, answers: {}, reference: "#12" });
-    const fresh = await ResponseModel.create({ formId: f._id, answers: {}, reference: "RE-OTH-0003" });
+    const fresh = await ResponseModel.create({ formId: f._id, answers: {}, reference: "REFOTH0003" });
     const first = await backfillReferenceFormat();
     expect(first.responsesConverted).toBeGreaterThanOrEqual(2);
-    expect((await ResponseModel.findById(old1._id).lean())!.reference).toBe("RE-LEG-0007");
+    expect((await ResponseModel.findById(old1._id).lean())!.reference).toBe("REFLEG0007");
     expect((await ResponseModel.findById(old1._id).lean())!.legacyReference).toBe("#7");
-    expect((await ResponseModel.findById(old2._id).lean())!.reference).toBe("RE-LEG-0012");
-    expect((await ResponseModel.findById(fresh._id).lean())!.reference).toBe("RE-OTH-0003");
+    expect((await ResponseModel.findById(old2._id).lean())!.reference).toBe("REFLEG0012");
+    expect((await ResponseModel.findById(fresh._id).lean())!.reference).toBe("REFOTH0003");
     const second = await backfillReferenceFormat();
     expect(second.responsesConverted).toBe(0);
   });

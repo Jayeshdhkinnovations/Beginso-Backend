@@ -15,32 +15,47 @@ const ensureIndexes = (): Promise<unknown> => {
   return indexesReady;
 };
 
-// A response reference reads WS-FRM-0042: two letters from the workspace's name, three from the form's title, and the form's
-// running number. The letters are fixed by the first response (renaming later changes nothing already handed out) and are made
-// unique by a number on the end when another workspace / form already took them (KA, KA2 ... and CUS, CUS2 ...), so no two
-// responses anywhere share a reference. A personal form has no workspace and uses MY.
+// A response reference is one word: KALCUS0042 = three letters from the workspace's name (KAL), three from the form's title (CUS) and
+// the form's running number (0042). Both letter groups are letters only and always three long, so a reference can only be read one
+// way: nothing a number does can slide into the letters (a suffix like "CUS2" + "0001" would look the same as "CUS" + "20001").
+// The letters are fixed by a form's first response (renaming later changes nothing already handed out). When another workspace /
+// form already took them the next free code is used (CUS, CUT, CUU ...), so no two responses share a reference. A personal form
+// has no workspace and uses MY (the only two-letter workspace part; no workspace code starts with MY).
 export const PERSONAL_CODE = "MY";
-const MAX_SUFFIX = 500;
+const CODE_LEN = 3;
+const CODE_SPACE = 26 ** CODE_LEN;
 
-/** The letters and digits of a name, upper-cased and without accents, cut to `len` and padded with X ("Ünï" -> "UNI"). */
-export const codeFrom = (name: string | undefined | null, len: number): string => {
-  const letters = String(name ?? "").normalize("NFKD").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+/** The letters of a name, upper-cased and without accents, cut to `len` and padded with X ("Ünï" -> "UNI", "2024 Poll" -> "POL"). */
+export const codeFrom = (name: string | undefined | null, len: number = CODE_LEN): string => {
+  const letters = String(name ?? "").normalize("NFKD").replace(/[^A-Za-z]/g, "").toUpperCase();
   return (letters + "X".repeat(len)).slice(0, len);
 };
 
-export const formatReference = (workspaceCode: string, formCode: string, seq: number): string =>
-  `${workspaceCode}-${formCode}-${String(seq).padStart(4, "0")}`;
+/** The code after this one, counting like a number in base 26 (CUS -> CUT, CUZ -> CVA, ZZZ -> AAA). */
+export const nextCode = (code: string): string => {
+  const chars = code.split("");
+  for (let i = chars.length - 1; i >= 0; i--) {
+    if (chars[i] === "Z") chars[i] = "A";
+    else {
+      chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
+      return chars.join("");
+    }
+  }
+  return chars.join("");
+};
 
-/** The workspace's two-letter code, given on first use (atomic: the first writer wins, the rest read it back). */
+export const formatReference = (workspaceCode: string, formCode: string, seq: number): string =>
+  `${workspaceCode}${formCode}${String(seq).padStart(4, "0")}`;
+
+/** The workspace's three-letter code, given on first use (atomic: the first writer wins, the rest read it back). */
 export const ensureWorkspaceCode = async (workspaceId: mongoose.Types.ObjectId | string | null | undefined): Promise<string> => {
   if (!workspaceId) return PERSONAL_CODE;
   const ws = await Workspace.findById(workspaceId).select("name refCode").lean();
   if (!ws) return PERSONAL_CODE;
   if (ws.refCode) return ws.refCode;
-  const base = codeFrom(ws.name, 2);
-  for (let n = 1; n <= MAX_SUFFIX; n++) {
-    const candidate = n === 1 ? base : `${base}${n}`;
-    if (candidate === PERSONAL_CODE || (await Workspace.exists({ refCode: candidate }))) continue;
+  let candidate = codeFrom(ws.name);
+  for (let n = 0; n < CODE_SPACE; n++, candidate = nextCode(candidate)) {
+    if (candidate.startsWith(PERSONAL_CODE) || (await Workspace.exists({ refCode: candidate }))) continue;
     try {
       const done = await Workspace.updateOne({ _id: ws._id, refCode: { $exists: false } }, { $set: { refCode: candidate } });
       if (done.modifiedCount === 0) return (await Workspace.findById(ws._id).select("refCode").lean())?.refCode ?? candidate;
@@ -57,10 +72,9 @@ export const ensureFormCode = async (formId: mongoose.Types.ObjectId | string): 
   const form = await Form.findById(formId).setOptions({ includeDeleted: true }).select("title workspaceId refCode").lean();
   if (!form) return "XXX";
   if (form.refCode) return form.refCode;
-  const base = codeFrom(form.title, 3);
   const sameWorkspace = { workspaceId: form.workspaceId ?? null };
-  for (let n = 1; n <= MAX_SUFFIX; n++) {
-    const candidate = n === 1 ? base : `${base}${n}`;
+  let candidate = codeFrom(form.title);
+  for (let n = 0; n < CODE_SPACE; n++, candidate = nextCode(candidate)) {
     if (await Form.exists({ ...sameWorkspace, refCode: candidate }).setOptions({ includeDeleted: true })) continue;
     try {
       const done = await Form.updateOne({ _id: form._id, refCode: { $exists: false } }, { $set: { refCode: candidate } });

@@ -462,7 +462,7 @@ describe("B2 - test submissions move no counter (F15)", () => {
     expect(real.status).toBe(200);
     const stored = await ResponseModel.findOne({ formId: form._id });
     expect(stored!.duplicateOfId).toBeNull(); // tests are not "earlier responses"
-    expect(stored!.reference).toMatch(/-0001$/); // the public sequence was not consumed
+    expect(stored!.reference).toMatch(/0001$/); // the public sequence was not consumed
   });
 });
 

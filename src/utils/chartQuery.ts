@@ -54,18 +54,52 @@ export const displaySchema = z.object({
   interactive: z.boolean().default(true),
 });
 
-export const definitionSchema = z.object({
+const measureSchema = z.object({ type: z.enum(MEASURES), field: fieldRef.optional() }).default({ type: "count" });
+const simpleSchema = z.object({
   kind: z.literal("simple"),
-  measure: z.object({ type: z.enum(MEASURES), field: fieldRef.optional() }).default({ type: "count" }),
+  measure: measureSchema,
   groupBy: z.object({ field: fieldRef, bucket: z.enum(BUCKETS).optional() }),
   filters: filterGroup.optional(),
   sort: z.enum(SORTS).nullable().optional(),
   display: displaySchema.optional(),
 });
-export type ChartDef = z.infer<typeof definitionSchema>;
+export type ChartDef = z.infer<typeof simpleSchema>;
+
+// A drill-down chart: the same measure and filters, grouped by level 1; a click on a part groups that part's responses by level 2, and so on.
+export const MIN_LEVELS = 2;
+export const MAX_LEVELS = 4;
+export const LEVEL_CHART_TYPES = ["bar", "hbar", "donut", "line"] as const;
+const levelSchema = z.object({
+  field: fieldRef,
+  bucket: z.enum(BUCKETS).optional(),
+  sort: z.enum(SORTS).nullable().optional(),
+  chartType: z.enum(LEVEL_CHART_TYPES).nullable().optional(), // null = the page picks it from the field
+});
+const drillSchema = z.object({
+  kind: z.literal("drilldown"),
+  measure: measureSchema,
+  levels: z.array(levelSchema).min(MIN_LEVELS).max(MAX_LEVELS),
+  filters: filterGroup.optional(),
+  display: displaySchema.optional(),
+});
+export type DrillDef = z.infer<typeof drillSchema>;
+export const definitionSchema = z.discriminatedUnion("kind", [simpleSchema, drillSchema]);
+export type AnyDef = z.infer<typeof definitionSchema>;
 
 export const focusSchema = z.object({ key: z.string().max(200), lo: z.number().finite().optional(), hi: z.number().finite().optional() });
 export type Focus = z.infer<typeof focusSchema>;
+/** The parts already clicked, outermost first: `level` is the level that was grouped when the click happened. */
+export const pathSchema = z.array(focusSchema.extend({ level: z.number().int().min(0).max(MAX_LEVELS - 1) })).max(MAX_LEVELS - 1);
+export type Path = z.infer<typeof pathSchema>;
+
+/** The simple chart that one level of a definition is: what actually gets counted at that depth (before the path narrows it). */
+export const levelDef = (def: AnyDef, depth: number): ChartDef => {
+  if (def.kind === "simple") return def;
+  const l = def.levels[depth];
+  return { kind: "simple", measure: def.measure, groupBy: { field: l.field, ...(l.bucket ? { bucket: l.bucket } : {}) }, filters: def.filters, sort: l.sort ?? null, display: def.display };
+};
+/** The question or system field a chart is first grouped by. */
+export const firstField = (def: AnyDef): FieldRef => (def.kind === "simple" ? def.groupBy.field : def.levels[0].field);
 
 // ── fields ───────────────────────────────────────────────────────────────────
 
@@ -103,10 +137,21 @@ type NumCls = { kind: "number" | "rating"; field: any; label: string };
 const isNumeric = (c: Cls | null): c is NumCls => !!c && (c.kind === "number" || c.kind === "rating");
 
 /** The checks a definition must pass before it runs. Throws SegmentError(400, "INVALID_CHART"). */
-export const validateDefinition = (form: any, def: ChartDef): void => {
+export const validateDefinition = (form: any, whole: AnyDef): void => {
   const bad = (msg: string): never => {
     throw new SegmentError(400, "INVALID_CHART", msg);
   };
+  if (whole.kind === "drilldown") {
+    const seen = new Set<string>();
+    whole.levels.forEach((l, i) => {
+      const key = refKey(l.field);
+      if (seen.has(key)) bad("Each level needs a different field.");
+      seen.add(key);
+      validateDefinition(form, levelDef(whole, i));
+    });
+    return;
+  }
+  const def = whole;
   const group = classify(form, def.groupBy.field);
   if (!group) return void bad("That field is not on this form or cannot be charted.");
   if (group.kind === "date" || group.kind === "time") {
@@ -251,13 +296,24 @@ export const chartListFilter = (form: any, raw: unknown, tz: string): any => {
   } catch {
     throw new SegmentError(400, "INVALID_CHART_FILTER", "chart must be JSON");
   }
-  const spec = z.object({ definition: definitionSchema, focus: focusSchema.optional() }).safeParse(parsed);
+  const spec = z.object({ definition: definitionSchema, path: pathSchema.optional(), focus: focusSchema.optional() }).safeParse(parsed);
   if (!spec.success) throw new SegmentError(400, "INVALID_CHART_FILTER", "chart is not a valid chart filter");
-  validateDefinition(form, spec.data.definition);
-  const parts = [filterExpr(form, spec.data.definition.filters, tz)];
-  if (spec.data.focus) parts.push(focusExpr(form, spec.data.definition, spec.data.focus, tz));
+  const { definition, path = [], focus } = spec.data;
+  validateDefinition(form, definition);
+  const depth = checkPath(definition, path);
+  const parts = [filterExpr(form, definition.filters, tz), ...pathExprs(form, definition, path, tz)];
+  if (focus) parts.push(focusExpr(form, levelDef(definition, depth), focus, tz));
   return { $expr: { $and: parts } };
 };
+
+/** The path must walk the levels in order and stop before the last one (the last level is where the click lands). Returns the depth being shown. */
+export const checkPath = (def: AnyDef, path: Path): number => {
+  const levels = def.kind === "drilldown" ? def.levels.length : 1;
+  if (path.length > levels - 1 || path.some((p, i) => p.level !== i)) throw new SegmentError(400, "INVALID_CHART_PATH", "That drill-down path does not fit this chart.");
+  return path.length;
+};
+/** One condition per part already clicked, each read against the level it was clicked on. */
+export const pathExprs = (form: any, def: AnyDef, path: Path, tz: string): any[] => path.map((p, i) => focusExpr(form, levelDef(def, i), p, tz));
 
 // ── running a chart ──────────────────────────────────────────────────────────
 
@@ -282,7 +338,10 @@ export interface ChartResult {
   entries: Entry[];
   shown: number;
   totalGroups: number;
-  nextLevel: null;
+  /** Drill-down: which level this is (0 = the first) and how many there are. A simple chart is 0 of 1. */
+  depth: number;
+  levelCount: number;
+  nextLevel: { field: FieldRef; label: string; bucket?: Bucket } | null;
   warnings: { code: string; message: string }[];
   computedAt: string;
 }
@@ -321,17 +380,26 @@ const round = (n: number) => Math.round(n * 10000) / 10000;
 interface RunOptions {
   tz: string;
   maxTimeMS?: number;
+  /** Drill-down: the parts already clicked. */
+  path?: Path;
 }
 
-export const runChart = async (form: any, def: ChartDef, opts: RunOptions): Promise<ChartResult> => {
-  validateDefinition(form, def);
+export const runChart = async (form: any, whole: AnyDef, opts: RunOptions): Promise<ChartResult> => {
+  validateDefinition(form, whole);
+  const path = opts.path ?? [];
+  const depth = checkPath(whole, path);
+  const def = levelDef(whole, depth);
   const cls = classify(form, def.groupBy.field)!;
+  const next = whole.kind === "drilldown" && depth + 1 < whole.levels.length ? whole.levels[depth + 1] : null;
+  const nextCls = next ? classify(form, next.field) : null;
   const warnings: ChartResult["warnings"] = [];
   const isTime = cls.kind === "date" || cls.kind === "time";
   let bucket: Bucket = def.groupBy.bucket ?? "month";
   const match: any = { formId: form._id, deletedAt: null };
   const tree = filterExpr(form, def.filters, opts.tz);
-  if (tree !== true) match.$expr = tree;
+  const narrowed = pathExprs(form, whole, path, opts.tz);
+  if (narrowed.length) match.$expr = { $and: [tree, ...narrowed] };
+  else if (tree !== true) match.$expr = tree;
 
   const measure = def.measure;
   const measureCls = measure.field ? (classify(form, measure.field) as NumCls) : null;
@@ -488,7 +556,9 @@ export const runChart = async (form: any, def: ChartDef, opts: RunOptions): Prom
     entries,
     shown: entries.length,
     totalGroups,
-    nextLevel: null,
+    depth,
+    levelCount: whole.kind === "drilldown" ? whole.levels.length : 1,
+    nextLevel: next && nextCls ? { field: next.field, label: nextCls.label, ...(next.bucket ? { bucket: next.bucket } : {}) } : null,
     warnings,
     computedAt: new Date().toISOString(),
   };
@@ -497,18 +567,19 @@ export const runChart = async (form: any, def: ChartDef, opts: RunOptions): Prom
 const defaultSort = (cls: Cls): Sort => (cls.kind === "choice" || cls.kind === "stage" || cls.kind === "assignee" || cls.kind === "tags" ? "value_desc" : "natural");
 
 /** A saved chart whose field was removed or changed type: a warning, never an error. */
-export const fieldWarning = (form: any, def: ChartDef, snapshotType?: string | null): { code: string; message: string } | null => {
-  const ref = def.groupBy.field;
-  if (ref.kind === "question") {
+export const fieldWarning = (form: any, def: AnyDef, snapshotType?: string | null): { code: string; message: string } | null => {
+  const refs = def.kind === "simple" ? [def.groupBy.field] : def.levels.map((l) => l.field);
+  for (const ref of refs) {
+    if (ref.kind !== "question") continue;
     const f = (form.fields || []).find((x: any) => x.fieldId === ref.fieldId);
     if (!f || f.deleted) return { code: "field_removed", message: "This chart uses a question that was removed. Edit or remove it." };
-    if (snapshotType && f.type !== snapshotType) return { code: "field_changed", message: "The question this chart uses changed type. Edit the chart." };
+    if (snapshotType && refs.length === 1 && f.type !== snapshotType) return { code: "field_changed", message: "The question this chart uses changed type. Edit the chart." };
   }
   return null;
 };
 
-export const emptyResult = (def: ChartDef, warning: { code: string; message: string }): ChartResult => ({
-  level: { field: def.groupBy.field, label: "", kind: "choice" },
+export const emptyResult = (def: AnyDef, warning: { code: string; message: string }): ChartResult => ({
+  level: { field: firstField(def), label: "", kind: "choice" },
   fieldType: null,
   optionCount: null,
   measure: { type: def.measure.type, label: "" },
@@ -520,6 +591,8 @@ export const emptyResult = (def: ChartDef, warning: { code: string; message: str
   entries: [],
   shown: 0,
   totalGroups: 0,
+  depth: 0,
+  levelCount: def.kind === "drilldown" ? def.levels.length : 1,
   nextLevel: null,
   warnings: [warning],
   computedAt: new Date().toISOString(),

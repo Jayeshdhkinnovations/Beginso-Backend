@@ -608,3 +608,108 @@ describe("speed on the seeded size", () => {
     expect(p95).toBeLessThan(1500);
   });
 });
+
+// ── drill-down charts ────────────────────────────────────────────────────────────────────────────────
+describe("drill-down charts", () => {
+  const drill = (levels: any[], extra: Record<string, any> = {}) => ({ kind: "drilldown", measure: { type: "count" }, levels, ...extra });
+  const level = (field: any, extra: Record<string, any> = {}) => ({ field, ...extra });
+  const drillQuery = (definition: any, path: any[] = [], who = "owner") => request(app).post(`/api/forms/${form._id}/charts/query`).set(as(who)).send({ definition, path });
+  const at = (level: number, e: any) => ({ level, ...e.focus });
+  const inPlan = (r: any, key: string) => (key === "__other__" ? choiceVals(r, "f-drop").some((v: string) => !options("f-drop").map(norm).includes(v)) : choiceVals(r, "f-drop").includes(norm(key)));
+  const planDef = drill([level(question("f-drop"), { sort: "natural" }), level(question("f-yn"), { sort: "natural" }), level(question("f-rate"), { sort: "natural" })]);
+
+  it("level 1 is the same answer as a simple chart, and says what comes next", async () => {
+    const res = await drillQuery(planDef);
+    expect(res.status).toBe(200);
+    const simpleBody = await q(simple(question("f-drop"), { sort: "natural" }));
+    expect(res.body.entries.map((e: any) => [e.key, e.n])).toEqual(simpleBody.entries.map((e: any) => [e.key, e.n]));
+    expect(res.body).toMatchObject({ depth: 0, levelCount: 3, nextLevel: { label: "Subscribed", field: question("f-yn") } });
+  });
+
+  it("each click narrows to that part: every count at every depth equals plain loops over the responses", async () => {
+    const top = (await drillQuery(planDef)).body;
+    for (const a of top.entries) {
+      const second = (await drillQuery(planDef, [at(0, a)])).body;
+      expect(second).toMatchObject({ depth: 1, total: a.n, nextLevel: { label: "Rating" } });
+      for (const b of second.entries) {
+        const expected = rows.filter((r) => inPlan(r, a.key) && choiceVals(r, "f-yn").includes(norm(b.key))).length;
+        expect({ plan: a.key, subscribed: b.key, n: b.n }).toEqual({ plan: a.key, subscribed: b.key, n: expected });
+        const third = (await drillQuery(planDef, [at(0, a), at(1, b)])).body;
+        expect(third).toMatchObject({ depth: 2, total: b.n, nextLevel: null });
+        for (const c of third.entries) {
+          const n = rows.filter((r) => inPlan(r, a.key) && choiceVals(r, "f-yn").includes(norm(b.key)) && (c.key === "__blank__" ? numVals(r, "f-rate").length === 0 : numVals(r, "f-rate").includes(Number(c.key)))).length;
+          expect({ rating: c.key, n: c.n }).toEqual({ rating: c.key, n });
+        }
+      }
+    }
+  });
+
+  it("the Responses list opens exactly the people behind a part at any depth", async () => {
+    const top = (await drillQuery(planDef)).body;
+    const a = top.entries[0];
+    const second = (await drillQuery(planDef, [at(0, a)])).body;
+    for (const b of second.entries) {
+      const res = await request(app).get(`/api/responses?formId=${form._id}&limit=1&chart=${encodeURIComponent(JSON.stringify({ definition: planDef, path: [at(0, a)], focus: b.focus }))}`).set(as("owner"));
+      expect({ label: b.label, rows: res.body.total }).toEqual({ label: b.label, rows: b.n });
+    }
+    const whole = await request(app).get(`/api/responses?formId=${form._id}&limit=1&chart=${encodeURIComponent(JSON.stringify({ definition: planDef, path: [at(0, a)] }))}`).set(as("owner"));
+    expect(whole.body.total).toBe(a.n);
+  });
+
+  it("filters, number ranges and dates drill the same way", async () => {
+    const def = drill([level(system("submittedAt"), { bucket: "year" }), level(question("f-num"))], { filters: { op: "and", items: [{ field: question("f-yn"), op: "is", value: "yes" }] } });
+    const top = (await drillQuery(def)).body;
+    for (const a of top.entries) {
+      const second = (await drillQuery(def, [at(0, a)])).body;
+      expect(second.total).toBe(a.n);
+      for (const b of second.entries) {
+        const res = await request(app).get(`/api/responses?formId=${form._id}&limit=1&chart=${encodeURIComponent(JSON.stringify({ definition: def, path: [at(0, a)], focus: b.focus }))}`).set(as("owner"));
+        expect(res.body.total).toBe(b.n);
+      }
+    }
+  });
+
+  it("rejects a bad drill-down with a 400: one level, five levels, a repeated field, a missing field, a path that does not fit", async () => {
+    const p = question("f-drop");
+    for (const bad of [drill([level(p)]), drill([level(p), level(question("f-yn")), level(question("f-rate")), level(question("f-num")), level(question("f-date"))]), drill([level(p), level(p)]), drill([level(p), level(question("nope"))]), drill([level(p), level(question("f-yn"), { bucket: "month" })])]) {
+      expect((await drillQuery(bad)).status).toBe(400);
+    }
+    const top = (await drillQuery(planDef)).body;
+    expect((await drillQuery(planDef, [at(1, top.entries[0])])).status).toBe(400); // wrong level
+    expect((await drillQuery(planDef, [at(0, top.entries[0]), at(1, top.entries[0]), at(2, top.entries[0])])).status).toBe(400); // past the last level
+    expect((await drillQuery(simple(question("f-drop")), [at(0, top.entries[0])])).status).toBe(400); // a simple chart does not drill
+  });
+
+  it("saves, lists, answers, duplicates and edits a drill-down chart; a removed question is a warning", async () => {
+    const created = await request(app).post(`/api/forms/${form._id}/charts`).set(as("owner")).send({ definition: planDef, title: "Plan to rating", chartType: "auto" });
+    expect(created.status).toBe(201);
+    expect(created.body.chart).toMatchObject({ kind: "drilldown", title: "Plan to rating", fieldId: "f-drop", fieldMissing: false });
+    const id = created.body.chart._id;
+    const data = await request(app).get(`/api/forms/${form._id}/charts/${id}/data`).set(as("owner"));
+    expect(data.body.query).toMatchObject({ depth: 0, levelCount: 3 });
+    const dup = await request(app).post(`/api/forms/${form._id}/charts/${id}/duplicate`).set(as("owner"));
+    expect(dup.body.chart.definition.levels).toHaveLength(3);
+    const edited = await request(app).patch(`/api/forms/${form._id}/charts/${id}`).set(as("owner")).send({ expectedVersion: 1, definition: drill([level(question("f-yn")), level(question("f-drop"))]) });
+    expect(edited.status).toBe(200);
+    expect(edited.body.chart.definition.levels).toHaveLength(2);
+
+    const f2 = await Form.create({ title: "Temp drill", workspaceId: ws._id, createdBy: U.owner._id, status: "published", fields: [{ fieldId: "t-1", pageId: "p1", label: "Mood", type: "dropdown", options: ["Good", "Bad"] }, { fieldId: "t-2", pageId: "p1", label: "Mode", type: "dropdown", options: ["A", "B"] }], pages: [{ id: "p1", order: 0, title: "P" }] } as any);
+    const mk = await request(app).post(`/api/forms/${f2._id}/charts`).set(as("owner")).send({ definition: drill([level(question("t-1")), level(question("t-2"))]), chartType: "auto" });
+    expect(mk.status).toBe(201);
+    await Form.updateOne({ _id: f2._id }, { $set: { "fields.0.deleted": true } });
+    const gone = await request(app).get(`/api/forms/${f2._id}/charts/${mk.body.chart._id}/data`).set(as("owner"));
+    expect(gone.status).toBe(200);
+    expect(gone.body).toMatchObject({ fieldMissing: true });
+    expect(gone.body.query.warnings[0].code).toBe("field_removed");
+  });
+
+  it("a stranger cannot query a drill-down on someone else's form, and the path is part of the cache key", async () => {
+    expect((await drillQuery(planDef, [], "outsider")).status).toBeGreaterThanOrEqual(403);
+    resetChartCache();
+    const top = (await drillQuery(planDef)).body;
+    const a = (await drillQuery(planDef, [at(0, top.entries[0])])).body;
+    const b = (await drillQuery(planDef, [at(0, top.entries[1])])).body;
+    expect(a.total).toBe(top.entries[0].n);
+    expect(b.total).toBe(top.entries[1].n);
+  });
+});

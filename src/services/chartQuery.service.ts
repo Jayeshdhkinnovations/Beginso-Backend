@@ -2,7 +2,7 @@ import crypto from "crypto";
 import ResponseModel from "../models/Response";
 import Workspace from "../models/Workspace";
 import { SegmentError } from "../utils/fieldSegments";
-import { runChart, resolveTimezone, type ChartDef, type ChartResult } from "../utils/chartQuery";
+import { runChart, resolveTimezone, type AnyDef, type ChartResult, type Path } from "../utils/chartQuery";
 
 // Charts run inside the API process, so they are fenced: a query is cut at 5 s (maxTimeMS), at most four run at once (a fifth gets a
 // 429 and a retry hint), identical simultaneous requests share one run, and an answer is reused for 45 s unless the form's questions
@@ -44,11 +44,11 @@ const stamp = async (form: any): Promise<string> => {
   return `${form.contentVersion ?? 0}:${count}:${newest?._id ?? ""}`;
 };
 
-export const queryChart = async (form: any, def: ChartDef): Promise<ChartResult> => {
+export const queryChart = async (form: any, def: AnyDef, path: Path = []): Promise<ChartResult> => {
   const tz = await workspaceZone(form);
   const { display: _display, ...queryPart } = def; // how a chart looks never changes what it counts
   void _display;
-  const key = crypto.createHash("sha1").update(JSON.stringify({ f: String(form._id), q: queryPart, tz, s: await stamp(form) })).digest("hex");
+  const key = crypto.createHash("sha1").update(JSON.stringify({ f: String(form._id), q: queryPart, p: path, tz, s: await stamp(form) })).digest("hex");
 
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
@@ -57,7 +57,7 @@ export const queryChart = async (form: any, def: ChartDef): Promise<ChartResult>
 
   if (running >= maxRunning) throw new SegmentError(429, "CHART_BUSY", "Charts are busy right now. Try again in a few seconds.");
   running += 1;
-  const run = runChart(form, def, { tz, maxTimeMS: 5000 })
+  const run = runChart(form, def, { tz, maxTimeMS: 5000, path })
     .then((value) => {
       if (cache.size >= MAX_CACHED) cache.delete(cache.keys().next().value as string);
       cache.set(key, { at: Date.now(), value });

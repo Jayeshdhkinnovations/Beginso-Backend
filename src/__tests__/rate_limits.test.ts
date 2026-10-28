@@ -29,7 +29,7 @@ beforeEach(async () => {
   await Form.deleteMany({});
   delete process.env.PROXY_SHARED_SECRET;
   process.env.RATE_LIMIT_MAX = "2";
-  process.env.RATE_LIMIT_WINDOW_MS = "60000";
+  process.env.RATE_LIMIT_WINDOW_MS = "600000";
   slug = `rl-form-${Date.now()}`;
   await Form.create({
     title: "RL",

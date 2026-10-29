@@ -63,7 +63,7 @@ export const optionLabels = (field: any): string[] => {
 
 // `field.answerKey` (set by withAnswerKey) is the question's own storage key. A second question that shares a label has a
 // different key and must NOT fall back to the plain label, which belongs to the first one.
-const rawExpr = (field: any): any => {
+export const rawExpr = (field: any): any => {
   const own = field.answerKey && field.answerKey !== field.label;
   const keys = [...new Set([field.fieldId, field.answerKey, !own && field.label, !own && field.label && String(field.label).trim(), field._id && String(field._id)].filter(Boolean))] as string[];
   return { $ifNull: [...keys.map((k) => ({ $getField: { field: { $literal: k }, input: "$answers" } })), null] };

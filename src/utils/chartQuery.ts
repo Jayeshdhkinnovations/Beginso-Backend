@@ -4,7 +4,7 @@ import ResponseModel from "../models/Response";
 import Stage from "../models/Stage";
 import Tag from "../models/Tag";
 import User from "../models/User";
-import { normKey, optionLabels, SegmentError, SEGMENT_BLANK, SEGMENT_OTHER, valuesExpr, withAnswerKey } from "./fieldSegments";
+import { normKey, optionLabels, rawExpr, SegmentError, SEGMENT_BLANK, SEGMENT_OTHER, valuesExpr, withAnswerKey } from "./fieldSegments";
 
 // Charts v3 query engine. A chart is "group the responses by one field, measure each group, after these filters".
 // Everything runs inside MongoDB (nothing is pulled into Node memory but the finished groups), and ONE filter builder
@@ -105,7 +105,7 @@ export const firstField = (def: AnyDef): FieldRef => (def.kind === "simple" ? de
 
 export type Cls =
   | { kind: "choice"; field: any; label: string; multi: boolean }
-  | { kind: "number" | "rating" | "date"; field: any; label: string }
+  | { kind: "number" | "rating" | "date" | "hour"; field: any; label: string }
   | { kind: "stage" | "assignee" | "tags" | "time"; label: string };
 
 const CHOICE_TYPES: Record<string, boolean> = { dropdown: false, multiple_choice: true, checkbox: true, yes_no: false };
@@ -129,9 +129,23 @@ export const classify = (form: any, ref: FieldRef): Cls | null => {
   }
   if (found.type === "number") return { kind: "number", field: { ...withKey, type: "number" }, label };
   if (found.type === "rating") return { kind: "rating", field: { ...withKey, type: "number" }, label };
-  if (found.type === "date") return { kind: "date", field: { ...withKey, type: "date" }, label };
+  // A date and a date with a time are both days to the chart (a "2026-10-20T14:30" answer is the 20th); only the date part is used.
+  if (found.type === "date" || found.type === "datetime") return { kind: "date", field: { ...withKey, type: "date" }, label };
+  // A time of day ("14:30") is grouped by the hour it falls in.
+  if (found.type === "time") return { kind: "hour", field: withKey, label };
   return null;
 };
+
+/** The hour (0 to 23) of a time-of-day answer ("14:30" gives 14), as an array of one number, or none when there is no usable answer. */
+export const hoursExpr = (field: any): any => ({
+  $let: {
+    vars: { m: { $regexFind: { input: { $convert: { input: rawExpr(field), to: "string", onError: "", onNull: "" } }, regex: "^[ ]*([01]?[0-9]|2[0-3]):[0-5][0-9]" } } },
+    in: { $cond: [{ $eq: ["$$m", null] }, [], [{ $convert: { input: { $arrayElemAt: ["$$m.captures", 0] }, to: "int", onError: null } }]] },
+  },
+});
+
+/** "9 AM", "12 PM", "11 PM": how an hour of the day reads on a chart. */
+export const hourLabel = (hour: number): string => `${hour % 12 === 0 ? 12 : hour % 12} ${hour < 12 ? "AM" : "PM"}`;
 
 type NumCls = { kind: "number" | "rating"; field: any; label: string };
 const isNumeric = (c: Cls | null): c is NumCls => !!c && (c.kind === "number" || c.kind === "rating");
@@ -193,6 +207,7 @@ const validateCondition = (cls: Cls, c: Condition, bad: (m: string) => never): v
     if (typeof c.value !== "number") bad("This filter needs a number.");
     return;
   }
+  if (cls.kind === "hour") bad("A time of day cannot be used in a filter.");
   bad("Dates can be filtered by year only (use the Submitted year).");
 };
 
@@ -221,6 +236,8 @@ const keysExpr = (cls: Cls, bucket: Bucket, tz: string): any => {
       return valuesExpr(cls.field);
     case "date":
       return valuesExpr(cls.field, bucket as any);
+    case "hour":
+      return hoursExpr(cls.field);
     case "time":
       return [{ $dateToString: { date: submittedDate, format: FORMATS[bucket], timezone: tz } }];
     case "stage":
@@ -283,6 +300,7 @@ export const focusExpr = (form: any, def: ChartDef, focus: Focus, tz: string): a
     return { $gt: [{ $size: { $filter: { input: valuesExpr(cls.field), as: "n", cond: { $and: [{ $gte: ["$$n", lo] }, ...(focus.hi !== undefined ? [{ $lt: ["$$n", focus.hi] }] : [])] } } } }, 0] };
   }
   if (cls.kind === "rating") return { $in: [Number(focus.key), valuesExpr(cls.field)] };
+  if (cls.kind === "hour") return { $in: [Number(focus.key), hoursExpr(cls.field)] };
   const target = cls.kind === "choice" ? normKey(focus.key) : focus.key;
   return { $in: [{ $literal: target }, keysExpr(cls, bucket, tz)] };
 };
@@ -487,6 +505,9 @@ export const runChart = async (form: any, whole: AnyDef, opts: RunOptions): Prom
       if (blank[0]) push(SEGMENT_BLANK, "Not scored", blank[0], 9999, { key: SEGMENT_BLANK });
       blankLabel = "not scored";
     }
+  } else if (cls.kind === "hour") {
+    // only the hours somebody gave, earliest first (a form is rarely answered at every hour of the day)
+    [...groups.keys()].map(Number).sort((a, b) => a - b).forEach((h) => push(String(h), hourLabel(h), groups.get(String(h)), h, { key: String(h) }));
   } else if (cls.kind === "number" && ranges) {
     for (let i = 0; i < ranges.count; i++) {
       const lo = ranges.start + i * ranges.step;

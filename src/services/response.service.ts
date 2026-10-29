@@ -85,6 +85,7 @@ const cleanAnswers = (answers: Record<string, any>): Record<string, any> => {
 const columnSortOf = (params: { sortBy?: string; order?: string }, answerKey?: string): ColumnSort | undefined => {
   const dir = params.order === "asc" ? 1 : -1;
   if (params.sortBy === "email") return { by: "email", dir };
+  if (params.sortBy === "score") return { by: "score", dir };
   if (params.sortBy?.startsWith("q:") && answerKey !== undefined) return { by: "answer", answerKey, dir };
   return undefined;
 };
@@ -124,7 +125,8 @@ export class ResponseService {
     order?: string;
     // "board" = the Board's own order (cards placed by hand, then the rest newest first) instead of by submission time.
     sort?: string;
-    // Sort by a column other than the submission time (`order` still gives the direction): "email", or "q:<fieldId>" for one question's
+    // Sort by a column other than the submission time (`order` still gives the direction): "email", "score" (the average score, unscored last),
+    // or "q:<fieldId>" for one question's
     // answer (needs formId: answers are filed per form). Anything else is the submission time.
     sortBy?: string;
     // Sprint 12, BE 0.6 (B4.10): "Show duplicates" filter — true = only flagged responses.

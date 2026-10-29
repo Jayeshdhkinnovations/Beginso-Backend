@@ -1,10 +1,11 @@
 import ResponseModel, { IResponse } from "../models/Response";
 import mongoose from "mongoose";
+import ScoreEntryModel from "../models/ScoreEntry";
 
 // Letters ignore case and runs of digits compare as numbers ("9" before "10"), the way a person reads a column.
 const SORT_COLLATION = { locale: "en", strength: 2, numericOrdering: true } as const;
 
-export type ColumnSort = { by: "email"; dir: 1 | -1 } | { by: "answer"; answerKey: string; dir: 1 | -1 };
+export type ColumnSort = { by: "email"; dir: 1 | -1 } | { by: "answer"; answerKey: string; dir: 1 | -1 } | { by: "score"; dir: 1 | -1 };
 
 // Mongo sorts a missing value before any number when ascending, which is what puts never-placed cards on top.
 export const BOARD_SORT = { boardRank: 1, submittedAt: -1, _id: -1 } as const;
@@ -32,7 +33,21 @@ export class ResponseRepository {
     // Sort by a column other than the submission time: the respondent's email, or the answer to one question (stored under `answerKey`).
     columnSort?: ColumnSort
   ): Promise<IResponse[]> {
-    if (columnSort && !board) {
+    if (columnSort?.by === "score" && !board) {
+      // The average score, worked out the way the list shows it (every reviewer's every criterion, one mean) so the order matches the
+      // numbers on screen. A response nobody has scored goes last whichever way it goes, newest first among themselves.
+      return await ResponseModel.aggregate([
+        { $match: query },
+        { $lookup: { from: ScoreEntryModel.collection.name, localField: "_id", foreignField: "responseId", as: "__scores" } },
+        { $addFields: { __avg: { $avg: "$__scores.value" } } },
+        { $addFields: { __blank: { $cond: [{ $eq: ["$__avg", null] }, 1, 0] } } },
+        { $sort: { __blank: 1, __avg: columnSort.dir, submittedAt: -1, _id: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: { __blank: 0, __avg: 0, __scores: 0 } },
+      ]);
+    }
+    if (columnSort && columnSort.by !== "score" && !board) {
       // The value to order by: the respondent's email, or the answer to one question. $getField takes the key literally, so a question
       // whose label contains a dot (or starts with $) sorts like any other. A blank value goes last whichever way it goes, and blanks
       // keep newest first among themselves.

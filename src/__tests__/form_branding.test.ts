@@ -44,16 +44,16 @@ describe("curated look choices", () => {
   it("accepts every documented value", async () => {
     const res = await patchBranding({
       primaryColor: "#1D4ED8", backgroundColor: "#fff", fontFamily: "lora", typeScale: "large", cardStyle: "elevated",
-      panelTreatment: "gradient", fieldGrouping: "single", backgroundStyle: "mesh", formWidth: "wide", coverFit: "original",
+      panelTreatment: "gradient", fieldGrouping: "single", backgroundStyle: "mesh", formWidth: "wide", coverFit: "original", logoSize: "lg",
       buttonStyle: "outline", buttonRadius: "16px", coverPosition: "top", spacing: "spacious", showProgress: false,
     });
     expect(res.status).toBe(200);
-    expect(res.body.branding ?? res.body.form?.branding).toMatchObject({ fontFamily: "lora", formWidth: "wide", coverFit: "original", backgroundStyle: "mesh" });
+    expect(res.body.branding ?? res.body.form?.branding).toMatchObject({ fontFamily: "lora", formWidth: "wide", coverFit: "original", logoSize: "lg", backgroundStyle: "mesh" });
   });
 
   it.each([
     ["fontFamily", "comic_sans"], ["typeScale", "huge"], ["cardStyle", "glass"], ["panelTreatment", "video"], ["fieldGrouping", "triple"],
-    ["backgroundStyle", "rainbow"], ["formWidth", "full"], ["coverFit", "stretch"], ["backgroundColor", "red"], ["primaryColor", "#12"],
+    ["backgroundStyle", "rainbow"], ["formWidth", "full"], ["coverFit", "stretch"], ["logoSize", "huge"], ["backgroundColor", "red"], ["primaryColor", "#12"],
   ])("rejects %s = %s", async (key, value) => {
     expect((await patchBranding({ [key]: value })).status).toBe(400);
   });

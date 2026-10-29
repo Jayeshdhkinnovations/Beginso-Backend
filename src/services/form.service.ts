@@ -103,6 +103,7 @@ const BRANDING_DEFAULT_KEYS = [
   "backgroundImageUrl",
   "formWidth",
   "coverFit",
+  "logoSize",
 ] as const;
 
 const pickBrandingDefaults = (branding: unknown): Record<string, unknown> => {

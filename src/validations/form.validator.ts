@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
 import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
-import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -266,6 +266,7 @@ const brandingSchema = z.object({
   backgroundImageUrl: safeImageUrl,
   formWidth: z.enum(FORM_WIDTHS).optional(),
   coverFit: z.enum(COVER_FITS).optional(),
+  logoSize: z.enum(LOGO_SIZES).optional(),
   // Text shown as plain text; the link must be a plain http(s) address (no javascript:, data:, credentials or characters that break out of an attribute).
   bannerText: z.string().trim().max(500, "bannerText is too long").optional(),
   // Up to five links; each must be a plain http(s) address.

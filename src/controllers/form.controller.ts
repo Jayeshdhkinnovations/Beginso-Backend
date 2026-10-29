@@ -1059,6 +1059,7 @@ export const getPublicFormBySlug = async (
       backgroundImageUrl: branding.backgroundImageUrl,
       formWidth: branding.formWidth,
       coverFit: branding.coverFit,
+      logoSize: branding.logoSize,
       iconName: branding.iconName,
       iconColor: branding.iconColor,
       bannerText: branding.bannerText,

@@ -106,6 +106,8 @@ export const FIELD_GROUPINGS = ["auto", "single"] as const;
 // The page behind the form card (not the card itself): how it is filled, and the colour it is built from.
 // How the cover image is shown: cropped to the banner strip, or whole at its own size and ratio.
 export const COVER_FITS = ["banner", "original"] as const;
+// How big the form's logo is drawn on the header: small, medium (the default) or large.
+export const LOGO_SIZES = ["sm", "md", "lg"] as const;
 export const FORM_WIDTHS = ["narrow", "standard", "wide"] as const;
 export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid", "image"] as const;
 
@@ -128,6 +130,7 @@ export interface IBranding {
   backgroundImageUrl?: string;
   formWidth?: (typeof FORM_WIDTHS)[number];
   coverFit?: (typeof COVER_FITS)[number];
+  logoSize?: (typeof LOGO_SIZES)[number];
   // The form's own icon when it has no uploaded logo: a name from the frontend's icon set (a slug, never rendered as markup) and a colour.
   iconName?: string;
   iconColor?: string;
@@ -313,6 +316,7 @@ const BrandingSchema = new Schema<IBranding>(
     backgroundImageUrl: { type: String },
     formWidth: { type: String, enum: FORM_WIDTHS },
     coverFit: { type: String, enum: COVER_FITS },
+    logoSize: { type: String, enum: LOGO_SIZES },
     iconName: { type: String },
     iconColor: { type: String },
     bannerText: { type: String },

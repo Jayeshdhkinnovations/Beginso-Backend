@@ -67,17 +67,19 @@ jobs:
     name: docker
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    services:
-      mongo:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval db.version()"
-          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - name: Check out the code
         uses: actions/checkout@v7
+
+      - name: Start MongoDB and wait until it answers
+        run: |
+          # A plain container and an explicit wait, not a service container: its health-check options failed to settle on the runner.
+          docker run -d --name mongo --network host mongo:7
+          for i in $(seq 1 30); do
+            if docker exec mongo mongosh --quiet --eval "db.adminCommand('ping').ok" 2>/dev/null | grep -q 1; then echo "MongoDB is up"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::MongoDB did not answer in 60 s"; docker logs mongo | tail -30; exit 1
 
       - name: Build the image (no cache)
         run: |

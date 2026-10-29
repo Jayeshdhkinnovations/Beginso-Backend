@@ -36,7 +36,7 @@ export const formatAnswer = (val: unknown, fieldType?: string): string => {
     const o = val as Record<string, unknown>;
     const named = o.name ?? o.filename ?? o.fileName ?? o.originalName;
     // A stored upload answer carries the full download URL in fileName: the spreadsheet wants just the file name (D5-003).
-    if (typeof named === "string") return /[\/]/.test(named) ? basename(named.split("?")[0]) : named;
+    if (typeof named === "string") return /\//.test(named) ? basename(named.split("?")[0]) : named;
     if (typeof o.url === "string") return basename(o.url);
     return Object.values(o)
       .map((v) => formatAnswer(v))
@@ -60,11 +60,6 @@ export interface ExportField {
   type: string;
   /** The key this question's answer is stored under (the label, or "Label (2)" for a repeated label). */
   answerKey?: string;
-}
-
-export interface FormColumns {
-  /** column name for each field, same order as the form's fields */
-  names: string[];
 }
 
 /**

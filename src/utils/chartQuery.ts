@@ -82,7 +82,6 @@ const drillSchema = z.object({
   filters: filterGroup.optional(),
   display: displaySchema.optional(),
 });
-export type DrillDef = z.infer<typeof drillSchema>;
 export const definitionSchema = z.discriminatedUnion("kind", [simpleSchema, drillSchema]);
 export type AnyDef = z.infer<typeof definitionSchema>;
 

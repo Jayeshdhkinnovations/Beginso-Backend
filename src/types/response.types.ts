@@ -96,7 +96,3 @@ export interface PaginatedResponsesResult {
   limit: number;
   totalPages: number;
 }
-
-export interface UpdateResponseStatusInput {
-  status: "new" | "in_progress" | "completed";
-}

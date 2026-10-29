@@ -131,6 +131,9 @@ export interface IBranding {
   // The form's own icon when it has no uploaded logo: a name from the frontend's icon set (a slug, never rendered as markup) and a colour.
   iconName?: string;
   iconColor?: string;
+  // A line of text and one link shown on the form's header, under the title.
+  bannerText?: string;
+  bannerLinks?: { label?: string; url: string }[];
 }
 
 // Sprint 13 (CF2.7): six layout presets. The three V1 values stay valid on read and write and are
@@ -312,6 +315,8 @@ const BrandingSchema = new Schema<IBranding>(
     coverFit: { type: String, enum: COVER_FITS },
     iconName: { type: String },
     iconColor: { type: String },
+    bannerText: { type: String },
+    bannerLinks: { type: [new Schema({ label: { type: String }, url: { type: String, required: true } }, { _id: false })], default: undefined },
   },
   { _id: false }
 );

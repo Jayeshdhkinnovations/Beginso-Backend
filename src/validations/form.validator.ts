@@ -266,6 +266,31 @@ const brandingSchema = z.object({
   backgroundImageUrl: safeImageUrl,
   formWidth: z.enum(FORM_WIDTHS).optional(),
   coverFit: z.enum(COVER_FITS).optional(),
+  // Text shown as plain text; the link must be a plain http(s) address (no javascript:, data:, credentials or characters that break out of an attribute).
+  bannerText: z.string().trim().max(500, "bannerText is too long").optional(),
+  // Up to five links; each must be a plain http(s) address.
+  bannerLinks: z
+    .array(
+      z.object({
+        label: z.string().trim().max(60, "link text is too long").optional(),
+        url: z
+          .string()
+          .trim()
+          .min(1, "link address is required")
+          .max(2048, "link is too long")
+          .refine((v) => {
+            if (/["'()<>\\\s]/.test(v)) return false;
+            try {
+              const u = new URL(v);
+              return (u.protocol === "http:" || u.protocol === "https:") && !u.username && !u.password;
+            } catch {
+              return false;
+            }
+          }, "link must be a plain http(s) address"),
+      })
+    )
+    .max(5, "at most 5 links")
+    .optional(),
   // A slug such as "shopping-cart": letters, digits and hyphens only, so it can never carry markup.
   iconName: z.string().trim().regex(/^[a-z0-9-]{2,40}$/, "iconName must be a lowercase icon name").optional(),
   iconColor: z

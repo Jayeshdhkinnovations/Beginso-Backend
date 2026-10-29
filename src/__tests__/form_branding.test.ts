@@ -85,6 +85,29 @@ describe("image addresses", () => {
   });
 });
 
+describe("header text and links", () => {
+  it("accepts a line of text and http(s) links, and the public form returns them", async () => {
+    const bannerLinks = [{ label: "Privacy", url: "https://example.com/privacy" }, { url: "http://example.org" }];
+    const res = await patchBranding({ bannerText: "Takes two minutes", bannerLinks });
+    expect(res.status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding).toMatchObject({ bannerText: "Takes two minutes", bannerLinks });
+  });
+
+  it.each(["javascript:alert(1)", "data:text/html,x", "ftp://example.com", "https://user:pw@example.com", "https://a.com/\"x", "not a url", ""])("rejects the link %j", async (url) => {
+    expect((await patchBranding({ bannerLinks: [{ url }] })).status).toBe(400);
+  });
+
+  it("rejects more than five links", async () => {
+    expect((await patchBranding({ bannerLinks: Array.from({ length: 6 }, () => ({ url: "https://example.com" })) })).status).toBe(400);
+  });
+
+  it("rejects text that is too long", async () => {
+    expect((await patchBranding({ bannerText: "x".repeat(501) })).status).toBe(400);
+  });
+});
+
 describe("public form read", () => {
   it("returns the new keys the page needs to draw itself", async () => {
     await patchBranding({ backgroundStyle: "image", backgroundImageUrl: "https://cdn.example.com/bg.jpg", formWidth: "narrow", coverFit: "banner", fontFamily: "inter" });

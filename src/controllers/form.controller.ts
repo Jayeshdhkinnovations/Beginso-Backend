@@ -1061,6 +1061,8 @@ export const getPublicFormBySlug = async (
       coverFit: branding.coverFit,
       iconName: branding.iconName,
       iconColor: branding.iconColor,
+      bannerText: branding.bannerText,
+      bannerLinks: branding.bannerLinks,
     };
 
     const settings = form.settings || {};

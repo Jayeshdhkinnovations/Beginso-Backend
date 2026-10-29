@@ -1,7 +1,7 @@
-name: Deploy backend with Docker (DRAFT, manual only)
+name: Deploy Backend (Docker)
 
-# A draft of the Docker deploy. It is NOT connected to a push and it does NOT replace deploy.yml, which keeps deploying with pm2.
-# Run it by hand (Actions -> Deploy backend with Docker -> Run workflow) once the owner has followed docs/DOCKER.md on the server
+# The Docker deploy (a draft, manual only). It is NOT connected to a push and it does NOT replace deploy.yml, which keeps deploying with pm2.
+# Run it by hand (Actions -> Deploy Backend (Docker) -> Run workflow) once the owner has followed docs/DOCKER.md on the server
 # (Docker installed, .env and the Firebase key in place, the runner user in the docker group).
 #
 # What it does on the self-hosted runner: ./scripts/deploy-docker.sh pulls the tag, starts it, waits for the health check, checks that

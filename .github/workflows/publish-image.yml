@@ -1,7 +1,7 @@
-name: Publish backend image (manual, off by default)
+name: Publish Docker Image
 
-# Builds the Docker image and pushes it to GitHub Container Registry with two tags: sha-<short sha> and main.
-# Runs ONLY when someone starts it by hand (Actions -> Publish backend image -> Run workflow). Nothing is published automatically until the
+# Manual only, off by default. Builds the Docker image and pushes it to GitHub Container Registry with two tags: sha-<short sha> and main.
+# Runs ONLY when someone starts it by hand (Actions -> Publish Docker Image -> Run workflow). Nothing is published automatically until the
 # owner decides to change `on:` to run after the main branch is green.
 #
 # What it needs (the BACKEND REPO OWNER does this once, a collaborator cannot):

@@ -11,6 +11,7 @@ import Membership from "../models/Membership";
 import { RateLimitBucket } from "../models/RateLimitBucket";
 import { clearRateLimitStore } from "../middleware/rateLimiter";
 import { generateToken } from "../utils/generateToken";
+import { startInFreshWindow } from "./helpers/freshWindow";
 
 process.env.JWT_SECRET = "test-jwt-secret-key-for-rate-limit-suite";
 
@@ -26,13 +27,6 @@ beforeAll(async () => {
 
 // The limiter counts in fixed windows (a minute, an hour). A burst that crosses a boundary starts a new count, so the request that
 // should be refused is let through (it failed on a slow CI runner that way). Each test therefore starts early in a window.
-const SAFE_MS = 10_000;
-const startInFreshWindow = async () => {
-  for (const windowMs of [60_000, 3_600_000]) {
-    const left = windowMs - (Date.now() % windowMs);
-    if (left < SAFE_MS) await new Promise((resolve) => setTimeout(resolve, left + 50));
-  }
-};
 
 beforeEach(async () => {
   await startInFreshWindow();

@@ -147,8 +147,11 @@ jobs:
           test "$(docker inspect api --format '{{.State.ExitCode}}')" = "0"
           test $((SECONDS - start)) -lt 20
 
+      # Report only: high and critical findings are listed, they never fail the build (continue-on-error, and it is the last step, so
+      # nothing depends on it). Pinned to the commit of the release tag v0.36.0 (a tag name alone can be moved; the tag needs the "v").
       - name: Vulnerability scan (report only)
-        uses: aquasecurity/trivy-action@0.28.0
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: beginso-backend:ci
           severity: HIGH,CRITICAL

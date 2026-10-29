@@ -1,67 +1,138 @@
 name: Deploy Backend (Docker)
 
-# The Docker deploy (a draft, manual only). It is NOT connected to a push and it does NOT replace deploy.yml, which keeps deploying with pm2.
-# Run it by hand (Actions -> Deploy Backend (Docker) -> Run workflow) once the owner has followed docs/DOCKER.md on the server
-# (Docker installed, .env and the Firebase key in place, the runner user in the docker group).
+# The Docker deploy. OFF BY DEFAULT: it runs only when the repository variable DOCKER_DEPLOY_ENABLED is exactly 'true'
+# (Settings -> Secrets and variables -> Actions -> Variables). The old pm2 deploy (deploy.yml) runs only when it is NOT 'true', so the two never
+# run together. Set it to 'true' only after the manual cutover in docs/DOCKER.md works; clear it to go back to pm2.
 #
-# What it does on the self-hosted runner: ./scripts/deploy-docker.sh pulls the tag, starts it, waits for the health check, checks that
-# GET / reports the commit the tag was built from, and puts the previous tag back by itself when either check fails.
-# Rollback: run it again with the action "rollback".
+# Automatic path, after a push to main:  ci (green) -> Publish Docker Image -> this workflow, on the self-hosted runner, which is the VM
+# (deploy.yml shows it: the same job copies into /root/Onboarding-backend, runs pm2 and curls 127.0.0.1:5000).
+# What it does there (scripts/deploy-docker.sh): pulls ghcr.io/<owner>/beginso-backend:sha-<commit>, remembers the running tag as "previous",
+# starts the new one with docker-compose.prod.yml, waits for the health check, checks that GET / reports this commit, and on ANY failure starts the
+# previous tag again and fails the job (red, with an error annotation).
+#
+# By hand (Actions -> Deploy Backend (Docker) -> Run workflow): deploy any tag (also an earlier one: that is the rollback to a tag), or
+# `rollback` to the tag that ran before the current one.
+#
+# Everything secret stays on the VM: the env file, the Firebase key and the uploads volume are read from /opt/beginso-backend by the compose file.
+# GitHub holds nothing but the job's own short-lived GITHUB_TOKEN, used (packages: read) to pull the image.
 on:
+  workflow_run:
+    workflows: ["Publish Docker Image"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       action:
-        description: "deploy a tag, or roll back to the previous one"
+        description: "deploy a tag, or roll back to the tag that ran before the current one"
         type: choice
         options: [deploy, rollback]
         default: deploy
-      image:
-        description: "Image tag to deploy, for example ghcr.io/owner/beginso-backend:sha-abc1234 (not needed for rollback)"
+      tag:
+        description: "For deploy: the tag, for example sha-abc1234 (or a full ghcr.io/<owner>/beginso-backend:sha-abc1234)"
         required: false
 
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-docker
-  cancel-in-progress: false
-
 jobs:
   deploy:
+    # Never when the variable is not 'true' (by hand or after Publish). After Publish: only if it succeeded, and only the automatic publish
+    # (event 'workflow_run'): a publish started by hand builds an image and deploys nothing.
+    if: >-
+      ${{ vars.DOCKER_DEPLOY_ENABLED == 'true' &&
+          (github.event_name == 'workflow_dispatch' ||
+           (github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.event == 'workflow_run' &&
+            github.event.workflow_run.head_branch == 'main')) }}
     runs-on: self-hosted
     timeout-minutes: 15
+    # The GitHub Environment `production`: the owner can add "Required reviewers" to it (Settings -> Environments -> production), so that a deploy
+    # waits for a click. The job-level `if` above is evaluated first, so while the variable is off nothing is ever requested.
+    environment: production
+    # Shared with the pm2 deploy (deploy.yml): two backend deploys never overlap, whichever workflow they are.
+    concurrency:
+      group: backend-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
     env:
-      # The folder on the server that holds docker-compose.prod.yml's companions: .env (chmod 600), .deploy/, the uploads folder.
+      # The folder on the VM that holds .env (chmod 600), .deploy/, the uploads folder and the Firebase key folder.
       DEPLOY_DIR: /opt/beginso-backend
+      INPUT_ACTION: ${{ inputs.action }}
+      INPUT_TAG: ${{ inputs.tag }}
+      RUN_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
-      - name: Check out the scripts and the compose file
-        uses: actions/checkout@v7
-
-      - name: Copy the deploy files into the deploy folder (never .env, never the uploads)
+      - name: Work out what to deploy
+        id: plan
         run: |
           set -e
-          test -f "$DEPLOY_DIR/.env"
+          owner="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]' | cut -d/ -f1)"
+          repo="ghcr.io/${owner}/beginso-backend"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            action="${INPUT_ACTION:-deploy}"
+            tag="${INPUT_TAG}"
+          else
+            action="deploy"
+            tag="sha-${RUN_SHA:0:7}"
+          fi
+          if [ "$action" = "deploy" ]; then
+            [ -n "$tag" ] || { echo "::error::give the tag to deploy, for example sha-abc1234"; exit 1; }
+            case "$tag" in latest|*:latest) echo "::error::deploy a tag per commit, never latest"; exit 1;; esac
+            case "$tag" in */*) image="$tag" ;; *) image="${repo}:${tag#:}" ;; esac
+          else
+            image=""
+          fi
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Plan: $action ${image}"
+
+      - name: Check out the scripts and the compose file (at the commit being deployed)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Copy the deploy files into the deploy folder (never .env, never the uploads, never the key)
+        run: |
+          set -e
+          test -f "$DEPLOY_DIR/.env" || { echo "::error::$DEPLOY_DIR/.env is missing: the VM is not prepared (docs/DOCKER.md, section 3)"; exit 1; }
           install -m 644 docker-compose.prod.yml "$DEPLOY_DIR/"
           install -d "$DEPLOY_DIR/scripts"
           install -m 755 scripts/deploy-docker.sh scripts/docker-wait.sh "$DEPLOY_DIR/scripts/"
 
       - name: Log in to GitHub Container Registry (only to pull)
-        if: ${{ inputs.action == 'deploy' }}
+        if: ${{ steps.plan.outputs.action == 'deploy' }}
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_USER: ${{ github.actor }}
         run: echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
-      - name: Deploy or roll back
+      - name: Deploy (and roll back by itself if it does not come up healthy)
+        id: run
         working-directory: ${{ env.DEPLOY_DIR }}
-        # Inputs reach the script through the environment, never pasted into the shell text.
         env:
-          INPUT_ACTION: ${{ inputs.action }}
-          INPUT_IMAGE: ${{ inputs.image }}
+          PLAN_ACTION: ${{ steps.plan.outputs.action }}
+          PLAN_IMAGE: ${{ steps.plan.outputs.image }}
         run: |
-          if [ "$INPUT_ACTION" = "rollback" ]; then
+          if [ "$PLAN_ACTION" = "rollback" ]; then
             ./scripts/deploy-docker.sh rollback
           else
-            test -n "$INPUT_IMAGE" || { echo "::error::give the image tag to deploy"; exit 1; }
-            ./scripts/deploy-docker.sh deploy "$INPUT_IMAGE"
+            ./scripts/deploy-docker.sh deploy "$PLAN_IMAGE"
           fi
+
+      - name: Say it loudly when it failed
+        if: ${{ failure() && steps.run.outcome == 'failure' }}
+        env:
+          PLAN_ACTION: ${{ steps.plan.outputs.action }}
+          PLAN_IMAGE: ${{ steps.plan.outputs.image }}
+        run: |
+          echo "::error title=Docker deploy FAILED::${PLAN_ACTION} ${PLAN_IMAGE}: the new version did not pass its health or commit check. The previous version was put back (see the log above). Read: docker logs beginso-backend"
+          {
+            echo "## Docker deploy FAILED"
+            echo "- Wanted: \`${PLAN_ACTION} ${PLAN_IMAGE}\`"
+            echo "- The previous version was started again by the deploy script. Check \`./scripts/deploy-docker.sh status\` on the VM and \`docker logs beginso-backend\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log out of the registry
+        if: ${{ always() && steps.plan.outputs.action == 'deploy' }}
+        run: docker logout ghcr.io || true

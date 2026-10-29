@@ -111,7 +111,7 @@ Tags: `sha-<7 characters of the commit>` (use this one for deploys) and `main`. 
 
 Without a registry you can build on the server instead: `docker build --build-arg GIT_SHA=$(git rev-parse HEAD) -t beginso-backend:sha-$(git rev-parse --short=7 HEAD) .` and deploy that tag.
 
-**During the cutover window, `deploy.yml` must not run.** A push to `main` runs it, and its last steps are `pm2 restart onboarding-backend`: that would **start the old server again** next to the container (two processes running the timers, the old one with the old uploads). The **repo owner** disables it before section 7 (Actions → Deploy Backend → "…" → Disable workflow) and enables it again only after the Docker deployment is settled, or after a rollback.
+**During the cutover window, `deploy.yml` must not run.** A push to `main` runs it, and its last steps are `pm2 restart onboarding-backend`: that would **start the old server again** next to the container (two processes running the timers, the old one with the old uploads). The **repo owner** disables it before section 7 (Actions → Deploy Backend → "…" → Disable workflow) and enables it again only after the Docker deployment is settled, or after a rollback. (Once the automatic Docker deploy is switched on, section 11, `deploy.yml` skips itself and no longer needs to be disabled.)
 
 ## 5. Start the test container (background jobs OFF)  **[server]**
 
@@ -291,7 +291,66 @@ A deploy is a **few seconds** of refused connections: one container behind one p
 3. Missing setting: add it to `.env`, redeploy. Database: check the Atlas IP allow-list includes this server. Permission error writing `/data`: `sudo chown -R 1000:1000 /opt/beginso-backend/data`.
 4. Still stuck: `./scripts/deploy-docker.sh rollback`, or the full rollback to pm2 (section 9).
 
-## 11. Decisions and limits
+## 11. Automatic Docker deploy (OFF by default)  **[repo owner]**
+
+After a push to `main` the whole Docker deploy can run by itself. It is **off** until the repository variable `DOCKER_DEPLOY_ENABLED` is exactly `true`. Nothing is enabled by merging the workflows.
+
+```
+push to main -> ci (green) -> Publish Docker Image (sha-<commit>) -> Deploy Backend (Docker) on the VM
+```
+
+| `DOCKER_DEPLOY_ENABLED` | `Deploy Backend` (pm2, `deploy.yml`) | `Publish Docker Image` (after ci) | `Deploy Backend (Docker)` |
+|---|---|---|---|
+| not set, empty, `false`, anything but `true` | **runs** (as it always did) | does not run by itself | does not run, not even by hand |
+| `true` | skips itself | runs | **runs** |
+
+The two deploys can never run together: the pm2 job has the opposite condition, and both jobs share the concurrency group `backend-deploy`, so even at the moment the variable is flipped they queue one behind the other. A **manual** run of `Publish Docker Image` is allowed whatever the variable says: it only builds and pushes an image and touches no server (the test container of section 5 needs one before the switch is on).
+
+**The runner is the VM.** `deploy.yml` shows it: its `self-hosted` job copies into `/root/Onboarding-backend`, runs `pm2 restart` and curls `127.0.0.1:5000`, which only works on the machine that runs the app. The Docker deploy job runs on the same runner.
+
+### What the Docker deploy does
+
+1. Pulls `ghcr.io/<owner>/beginso-backend:sha-<commit>` (the image the publish step built for exactly the commit ci passed; there is no `latest`).
+2. Writes down the tag now running as the **previous** one (`.deploy/previous` on the VM; the previous image stays on the disk).
+3. Starts the new tag with `docker-compose.prod.yml`.
+4. Waits for the health check (90 s), then checks that `GET /` reports **this commit**.
+5. If either check fails, or anything else goes wrong: **starts the previous tag again** and fails the job: red, with an error annotation and a summary that says what was wanted. A first deploy with no previous tag just stays red.
+
+### What stays on the VM and what GitHub holds
+
+- On the VM only: the env file (`/opt/beginso-backend/.env`, `chmod 600`), the Firebase key, the uploads volume, `.deploy/`. The workflow copies only `docker-compose.prod.yml` and the two scripts into `/opt/beginso-backend` and never reads or prints the env file.
+- GitHub holds **no secret for this**: the job's own `GITHUB_TOKEN` (permission `packages: read`, valid for the job) logs in to the registry to pull the image, and the job logs out at the end. No personal access token is stored. (The package must be linked to this repository, section 4.)
+
+### Which runner user needs Docker, and the risk
+
+The user the Actions runner service runs as. Find it on the VM: `ps -o user= -C Runner.Listener` (or `systemctl status 'actions.runner.*'`). From `deploy.yml` (it writes into `/root/Onboarding-backend` and runs `pm2`) it is almost certainly **root**: then it needs nothing added. If it is **not** root, it must be allowed to use Docker: `sudo usermod -aG docker <runner-user>`, then restart the runner service.
+
+**The risk:** membership of the `docker` group is **root-equivalent on that machine**: whoever can run a job on this runner (anyone who can push a workflow to this repository, or approve a pull request that runs there) can start a container that mounts the whole disk and become root. That is why (a) the Docker deploy job runs only from `main` after ci, (b) it uses the `production` Environment, where **required reviewers** can be added, and (c) `ci` and the pull-request checks run on GitHub's own runners, never on the VM.
+
+### Switching it on, and where it fits in the cutover
+
+Only after the **manual cutover (section 7) has worked and settled** (the container is the live backend, the uploads are in the volume, `BACKGROUND_JOBS` is on). Never before: switching it on while pm2 is the live server would deploy a container next to it.
+
+1. **[repo owner]** Create the Environment: Settings → Environments → New environment → `production`. Add **Required reviewers** (yourself) if you want every deploy to wait for a click.
+2. **[server]** Check the runner user and Docker (above), and that `/opt/beginso-backend/.deploy/env` has `UPLOADS_PATH=/opt/beginso-backend/data`, `BACKGROUND_JOBS=on` and the `HOST_PORT` the proxy uses.
+3. **[repo owner]** Set the variable: Settings → Secrets and variables → Actions → Variables → New repository variable → name `DOCKER_DEPLOY_ENABLED`, value `true`.
+4. Push a small change to `main` (or run `Deploy Backend (Docker)` by hand with the tag that is already running) and watch the run: ci, Publish Docker Image, Deploy Backend (Docker). Check the site, `docker ps`, and `curl http://127.0.0.1:<port>/`.
+
+**By hand** (Actions → Deploy Backend (Docker) → Run workflow, only while the variable is `true`): `deploy` with a **tag** (`sha-abc1234`, or a full image name) deploys any tag, **an earlier one included: that is the rollback to a tag**. `rollback` starts the tag that ran before the current one.
+
+### Going back to pm2 by clearing the variable
+
+Clearing the variable stops the **automatic** Docker deploys and makes `deploy.yml` run again on the next push. It does **not** stop the container or start pm2 by itself, so do it in this order:
+
+1. **[repo owner]** Delete the variable (Settings → Secrets and variables → Actions → Variables → `DOCKER_DEPLOY_ENABLED` → delete) and wait for any Docker deploy that is running to finish (they never overlap).
+2. **[server]** Roll back the server: section 9, steps 1 to 6 (stop the container, copy the newer uploads back, verify, `pm2 start onboarding-backend`, switch the proxy back, check).
+3. The next push to `main` deploys with pm2 again. Push a small change and confirm that `Deploy Backend` ran and `Deploy Backend (Docker)` did not.
+
+### Not verified
+
+The workflows cannot be run until the variable is `true`, so the first real run is the test. What was checked before: the workflow files are valid, every action they use exists, the CI `docker` job (image build, health, commit, graceful stop) passes, and `scripts/deploy-docker.sh` has been run only against a laptop's Docker (`docker-proof.sh`), not on the VM.
+
+## 12. Decisions and limits
 
 - **MongoDB stays on Atlas** (`MONGODB_URI`). It is not containerised for production; the dev compose file has its own MongoDB for local work only.
 - **Uploads stay on local disk** (a volume). Moving them to object storage is a separate, later plan.

@@ -118,6 +118,24 @@ describe("docker/preflight.js (runs before the server inside the container)", ()
     expect(result.stderr).not.toContain("must-never-be-printed");
   });
 
+  it("says what is wrong with the Firebase key: missing, a folder, or fine", () => {
+    const os = require("os"); const fs = require("fs");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preflight-"));
+    const file = path.join(dir, "key.json");
+    fs.writeFileSync(file, "{}");
+    const folderOnly = fs.mkdtempSync(path.join(os.tmpdir(), "preflight-folder-"));
+    try {
+      expect(run({ ...complete, PREFLIGHT_KEY_PATH: path.join(dir, "nope.json") }).stderr).toContain("key file is missing");
+      expect(run({ ...complete, PREFLIGHT_KEY_PATH: folderOnly }).stderr).toContain("is a FOLDER");
+      const ok = run({ ...complete, PREFLIGHT_KEY_PATH: file });
+      expect(ok.status).toBe(0);
+      expect(ok.stderr).not.toContain("must-never-be-printed");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(folderOnly, { recursive: true, force: true });
+    }
+  });
+
   it("outside production it only warns", () => {
     const result = run({ NODE_ENV: "development" });
     expect(result.status).toBe(0);

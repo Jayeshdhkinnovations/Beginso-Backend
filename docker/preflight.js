@@ -23,14 +23,28 @@ const REQUIRED = [
 // Said once, never fatal: the defaults are safe for one proxy in front of the container, and the runbook explains the rest.
 const ADVISED = ["TRUST_PROXY_HOPS", "CORS_ORIGINS", "SUPER_ADMIN_EMAILS", "UPLOAD_DIR"];
 
-const FIREBASE_KEY = path.join(__dirname, "dist", "config", "firebase", "serviceAccountKey.json");
+// PREFLIGHT_KEY_PATH exists only so the tests can point at a temporary file.
+const FIREBASE_KEY = process.env.PREFLIGHT_KEY_PATH || path.join(__dirname, "dist", "config", "firebase", "serviceAccountKey.json");
 
 const env = process.env;
 const missing = REQUIRED.filter(([name]) => !String(env[name] ?? "").trim());
 const problems = missing.map(([name, why]) => `${name} is missing (${why})`);
 
-if (!fs.existsSync(FIREBASE_KEY)) {
-  problems.push("the Firebase service-account key file is missing: mount it read-only at dist/config/firebase/serviceAccountKey.json");
+// Three different mistakes, three different messages: no file (Docker then creates an EMPTY FOLDER at the mount path), a folder where the
+// file should be, and a file the container user (uid 1000) is not allowed to read. The app itself only says "key is missing" for all three.
+try {
+  const stat = fs.statSync(FIREBASE_KEY);
+  if (!stat.isFile()) {
+    problems.push("the Firebase key path is a FOLDER, not a file: the host path in FIREBASE_KEY_PATH did not exist when the container started (Docker created a folder there). Remove that folder, put the key file there, start again");
+  } else {
+    try {
+      fs.accessSync(FIREBASE_KEY, fs.constants.R_OK);
+    } catch {
+      problems.push("the Firebase key file exists but this container user (uid 1000) cannot read it: on the host run chown 1000:<group> and chmod 440 on the file");
+    }
+  }
+} catch {
+  problems.push("the Firebase service-account key file is missing: mount it read-only at dist/config/firebase/serviceAccountKey.json (FIREBASE_KEY_PATH)");
 }
 
 const production = env.NODE_ENV === "production";

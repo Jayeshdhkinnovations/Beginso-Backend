@@ -9,7 +9,9 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    # feat/backend-docker: so the `docker` job runs on this branch before it is merged. Remove it with the merge.
+    branches: [main, feat/backend-docker]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

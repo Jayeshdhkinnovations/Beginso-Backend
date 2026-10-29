@@ -20,6 +20,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: "5000"
+      # `off` for the first test container (see docs/DOCKER.md): only ONE process may run the timers. `on` for the live one.
+      BACKGROUND_JOBS: ${BACKGROUND_JOBS:-on}
     # Published on the loopback only: the proxy (nginx, Caddy) on the same host is the one way in. The app trusts TRUST_PROXY_HOPS
     # proxies for the client IP, so it must never be reachable directly from the internet.
     ports:

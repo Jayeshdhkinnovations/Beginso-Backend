@@ -101,7 +101,7 @@ To run every proof (fresh build, non-root, no secret in the image, uploads survi
 
 ## 4. Get the image  **[repo owner] once, then [either]**
 
-The image comes from GitHub Container Registry, built by the workflow **Publish backend image** (manual: Actions → Publish backend image → Run workflow). Before its first run, the **repo owner** must:
+The image comes from GitHub Container Registry, built by the workflow **Publish Docker Image** (manual: Actions → Publish Docker Image → Run workflow). Before its first run, the **repo owner** must:
 
 1. allow the workflow to write packages: Settings → Actions → General → Workflow permissions → "Read and write permissions";
 2. after the first publish, open Packages → `beginso-backend` → Package settings, link it to this repository and keep it **private**;

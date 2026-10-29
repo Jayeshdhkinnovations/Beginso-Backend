@@ -1,0 +1,67 @@
+name: Deploy backend with Docker (DRAFT, manual only)
+
+# A draft of the Docker deploy. It is NOT connected to a push and it does NOT replace deploy.yml, which keeps deploying with pm2.
+# Run it by hand (Actions -> Deploy backend with Docker -> Run workflow) once the owner has followed docs/DOCKER.md on the server
+# (Docker installed, .env and the Firebase key in place, the runner user in the docker group).
+#
+# What it does on the self-hosted runner: ./scripts/deploy-docker.sh pulls the tag, starts it, waits for the health check, checks that
+# GET / reports the commit the tag was built from, and puts the previous tag back by itself when either check fails.
+# Rollback: run it again with the action "rollback".
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "deploy a tag, or roll back to the previous one"
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+      image:
+        description: "Image tag to deploy, for example ghcr.io/owner/beginso-backend:sha-abc1234 (not needed for rollback)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    env:
+      # The folder on the server that holds docker-compose.prod.yml's companions: .env (chmod 600), .deploy/, the uploads folder.
+      DEPLOY_DIR: /opt/beginso-backend
+    steps:
+      - name: Check out the scripts and the compose file
+        uses: actions/checkout@v7
+
+      - name: Copy the deploy files into the deploy folder (never .env, never the uploads)
+        run: |
+          set -e
+          test -f "$DEPLOY_DIR/.env"
+          install -m 644 docker-compose.prod.yml "$DEPLOY_DIR/"
+          install -d "$DEPLOY_DIR/scripts"
+          install -m 755 scripts/deploy-docker.sh scripts/docker-wait.sh "$DEPLOY_DIR/scripts/"
+
+      - name: Log in to GitHub Container Registry (only to pull)
+        if: ${{ inputs.action == 'deploy' }}
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+      - name: Deploy or roll back
+        working-directory: ${{ env.DEPLOY_DIR }}
+        # Inputs reach the script through the environment, never pasted into the shell text.
+        env:
+          INPUT_ACTION: ${{ inputs.action }}
+          INPUT_IMAGE: ${{ inputs.image }}
+        run: |
+          if [ "$INPUT_ACTION" = "rollback" ]; then
+            ./scripts/deploy-docker.sh rollback
+          else
+            test -n "$INPUT_IMAGE" || { echo "::error::give the image tag to deploy"; exit 1; }
+            ./scripts/deploy-docker.sh deploy "$INPUT_IMAGE"
+          fi

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import mongoose from "mongoose";
 import app from "./app";
 import connectDB from "./config/database";
 import EmailVerification from "./models/EmailVerification";
@@ -6,6 +7,7 @@ import { closeExpiredForms } from "./services/form.service";
 import { recoverReportQueue } from "./services/reportQueue";
 import { purgeExpiredTrash } from "./services/trash.service";
 import { reconcileAllStorage } from "./services/storage.service";
+import { createShutdown } from "./utils/gracefulShutdown";
 
 if (!process.env.JWT_SECRET) {
     console.error("❌ JWT_SECRET environment variable is missing. Refusing to start.");
@@ -68,14 +70,11 @@ const startServer = async () => {
             console.log(`🚀 Server running on port ${PORT}`);
         });
 
-        // PM2 sends SIGTERM on restart/deploy: stop taking requests, let in-flight ones finish.
-        const shutdown = (signal: string) => {
-            console.log(`${signal} received, shutting down`);
-            server.close(() => process.exit(0));
-            setTimeout(() => process.exit(0), 10000).unref();
-        };
-        process.on("SIGTERM", () => shutdown("SIGTERM"));
-        process.on("SIGINT", () => shutdown("SIGINT"));
+        // PM2 and Docker send SIGTERM on restart/deploy: stop taking requests, let in-flight ones finish (up to 25 s), close the
+        // database connection, then exit 0.
+        const shutdown = createShutdown(server, { closeDb: () => mongoose.connection.close() });
+        process.on("SIGTERM", () => void shutdown("SIGTERM"));
+        process.on("SIGINT", () => void shutdown("SIGINT"));
     } catch (error) {
         console.error("Server failed to start", error);
         process.exit(1);

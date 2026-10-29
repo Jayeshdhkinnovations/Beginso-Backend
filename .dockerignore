@@ -1,0 +1,32 @@
+# Nothing here may enter the image. A secret in a layer is a secret in every copy of the image.
+.git
+.github
+node_modules
+dist
+coverage
+*.log
+
+# Credentials and local configuration (values arrive at run time, never in the image)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+**/serviceAccountKey*.json
+**/*.pem
+**/*.key
+
+# Local data and QA leftovers
+uploads
+test_pbt_uploads
+qa-run-*
+scratch
+state
+
+# Not needed to build or run
+docs
+bruno
+*.md
+.vscode
+.gitleaks.toml
+Dockerfile
+docker-compose*.yml

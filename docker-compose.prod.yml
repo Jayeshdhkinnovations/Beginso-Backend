@@ -1,0 +1,56 @@
+# A server: the API only. MongoDB stays where it is (Atlas, set by MONGODB_URI in the env file).
+#
+#   BACKEND_IMAGE=ghcr.io/<owner>/beginso-backend:sha-abc1234 docker compose -f docker-compose.prod.yml up -d
+#
+# Normally started through scripts/deploy-docker.sh, which also waits for the health check, checks the live commit and keeps the
+# previous tag for a rollback. The image is always a TAG (BACKEND_IMAGE), never `latest`.
+#
+# Required on the host (see docs/DOCKER.md):
+#   .env                         the settings, readable only by the deploy user (chmod 600)
+#   UPLOADS_PATH                 a folder for /data (uploads, reports, exports); owned by uid 1000, the `node` user in the image
+#   FIREBASE_KEY_PATH            the Firebase service-account key file, mounted read-only
+name: beginso-backend
+
+services:
+  api:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE to an image tag, for example ghcr.io/owner/beginso-backend:sha-abc1234}
+    container_name: beginso-backend
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      # `off` for the first test container (see docs/DOCKER.md): only ONE process may run the timers. `on` for the live one.
+      BACKGROUND_JOBS: ${BACKGROUND_JOBS:-on}
+    # Published on the loopback only: the proxy (nginx, Caddy) on the same host is the one way in. The app trusts TRUST_PROXY_HOPS
+    # proxies for the client IP, so it must never be reachable directly from the internet.
+    ports:
+      - "127.0.0.1:${HOST_PORT:-5000}:5000"
+    volumes:
+      - ${UPLOADS_PATH:-./data}:/data
+      - ${FIREBASE_KEY_PATH:?set FIREBASE_KEY_PATH to the Firebase service-account key file}:/app/dist/config/firebase/serviceAccountKey.json:ro
+
+    # Hardening: the code is read-only, nothing can gain privileges, no Linux capability is needed to serve HTTP on 5000.
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Sizing, from the code and not from measurements (to be tuned on the real server): reports and PDFs are generated inside this
+    # process (REPORT_CONCURRENCY at a time, the chart engine runs up to four queries at once), so the memory limit is generous.
+    # Node itself stays near 300 MB when idle.
+    mem_limit: 1536m
+    cpus: 1.5
+
+    # A stop gives requests in flight up to 25 s (see src/utils/gracefulShutdown.ts); Docker waits 30 s before it kills.
+    stop_grace_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # The health check is the one built into the image (GET /api/health).

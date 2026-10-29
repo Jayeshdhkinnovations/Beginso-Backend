@@ -1,0 +1,66 @@
+name: Publish backend image (manual, off by default)
+
+# Builds the Docker image and pushes it to GitHub Container Registry with two tags: sha-<short sha> and main.
+# Runs ONLY when someone starts it by hand (Actions -> Publish backend image -> Run workflow). Nothing is published automatically until the
+# owner decides to change `on:` to run after the main branch is green.
+#
+# What it needs (the BACKEND REPO OWNER does this once, a collaborator cannot):
+#   - Settings -> Actions -> General -> Workflow permissions: "Read and write permissions" (the job asks for `packages: write` below).
+#   - After the first publish: Packages -> beginso-backend -> Package settings -> link it to this repository, and keep it PRIVATE.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to build (default: main)"
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Work out the tags
+        id: tags
+        run: |
+          sha="$(git rev-parse HEAD)"
+          repo="ghcr.io/$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]' | cut -d/ -f1)/beginso-backend"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "message=$(git log -1 --format=%s | tr -d '\n')" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${repo}:sha-${sha:0:7}" >> "$GITHUB_OUTPUT"
+          echo "main_tag=${repo}:main" >> "$GITHUB_OUTPUT"
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.main_tag }}
+          build-args: |
+            GIT_SHA=${{ steps.tags.outputs.sha }}
+            GIT_MESSAGE=${{ steps.tags.outputs.message }}
+            BUILD_TIME=${{ steps.tags.outputs.time }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

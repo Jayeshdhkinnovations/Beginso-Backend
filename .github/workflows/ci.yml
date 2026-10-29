@@ -9,7 +9,9 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    # feat/backend-docker: so the `docker` job runs on this branch before it is merged. Remove it with the merge.
+    branches: [main, feat/backend-docker]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -58,3 +60,103 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Builds the Docker image, starts it next to a MongoDB, and proves it answers. Does not push anything and does not touch any server.
+  # Report-only vulnerability scan: high and critical findings are listed, they do not fail the build yet.
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v7
+
+      - name: Start MongoDB and wait until it answers
+        run: |
+          # A plain container and an explicit wait, not a service container: its health-check options failed to settle on the runner.
+          docker run -d --name mongo --network host mongo:7
+          for i in $(seq 1 30); do
+            if docker exec mongo mongosh --quiet --eval "db.adminCommand('ping').ok" 2>/dev/null | grep -q 1; then echo "MongoDB is up"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::MongoDB did not answer in 60 s"; docker logs mongo | tail -30; exit 1
+
+      - name: Build the image (no cache)
+        run: |
+          docker build --no-cache \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t beginso-backend:ci .
+          docker image ls beginso-backend:ci --format 'image size: {{.Size}}'
+
+      - name: Runs as a non-root user, with no secret in the layers
+        run: |
+          test "$(docker run --rm --entrypoint id beginso-backend:ci -u)" != "0"
+          docker history --no-trunc beginso-backend:ci > history.txt
+          docker inspect beginso-backend:ci > inspect.txt
+          # The only build-time values are the commit id and the build time. None of the names a secret travels under may appear with a value.
+          if grep -E '(JWT_SECRET|MONGODB_URI|SMTP_PASS|PROXY_SHARED_SECRET|AUTH_EMAIL_HASH_PEPPER|DKIM_PRIVATE_KEY|SUPER_ADMIN_PASSWORD)=[^ ]' history.txt inspect.txt; then
+            echo "::error::a secret name with a value is stored in the image"; exit 1
+          fi
+          if docker run --rm --entrypoint sh beginso-backend:ci -c 'find / -name "serviceAccountKey*.json" -not -path "/proc/*" 2>/dev/null | grep .'; then
+            echo "::error::a Firebase key file is inside the image"; exit 1
+          fi
+
+      - name: Refuses to start in production without a required setting (names it, never a value)
+        run: |
+          set +e
+          out="$(docker run --rm -e NODE_ENV=production beginso-backend:ci 2>&1)"; code=$?
+          echo "$out"
+          test "$code" -ne 0
+          echo "$out" | grep -q "JWT_SECRET is missing"
+
+      - name: Start it next to MongoDB and wait for the health check
+        run: |
+          docker run -d --name api --network host \
+            -e NODE_ENV=development -e PORT=5000 \
+            -e MONGODB_URI=mongodb://127.0.0.1:27017/ci \
+            -e JWT_SECRET=ci-only-not-a-secret -e PROXY_SHARED_SECRET=ci-only-not-a-secret \
+            -e APP_URL=http://localhost:3000 -e TRUST_PROXY_HOPS=0 \
+            beginso-backend:ci
+          chmod +x scripts/docker-wait.sh
+          ./scripts/docker-wait.sh http://127.0.0.1:5000/api/health 90 || { docker logs api; exit 1; }
+
+      - name: The health route and the root route report this commit, and one API route answers
+        run: |
+          short="${GITHUB_SHA:0:7}"
+          curl -fsS http://127.0.0.1:5000/api/health | grep -q "$short"
+          curl -fsS http://127.0.0.1:5000/ | grep -q "$short"
+          # no token: the API must answer 401, not crash
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/auth/me)" = "401"
+
+      - name: A wrong health path must fail (this check breaks something on purpose)
+        run: |
+          if ./scripts/docker-wait.sh http://127.0.0.1:5000/api/this-route-does-not-exist 6; then
+            echo "::error::the health check passed for a path that does not exist"; exit 1
+          fi
+          echo "good: the wrong path was reported as unhealthy"
+
+      - name: Uploads survive a new container
+        run: |
+          docker volume create ci-data
+          docker run --rm -v ci-data:/data --user 0 --entrypoint sh beginso-backend:ci -c 'chown -R node:node /data && echo proof > /data/uploads/proof.txt'
+          docker run --rm -v ci-data:/data --entrypoint cat beginso-backend:ci /data/uploads/proof.txt | grep -q proof
+
+      - name: A stop is graceful (exit code 0, well inside the grace time)
+        run: |
+          start=$SECONDS
+          docker stop -t 30 api
+          test "$(docker inspect api --format '{{.State.ExitCode}}')" = "0"
+          test $((SECONDS - start)) -lt 20
+
+      # Report only: high and critical findings are listed, they never fail the build (continue-on-error, and it is the last step, so
+      # nothing depends on it). Pinned to the commit of the release tag v0.36.0 (a tag name alone can be moved; the tag needs the "v").
+      - name: Vulnerability scan (report only)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: beginso-backend:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "0"

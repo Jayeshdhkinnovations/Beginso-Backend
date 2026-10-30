@@ -89,7 +89,7 @@ To run every proof (fresh build, non-root, no secret in the image, uploads survi
    | `FIREBASE_KEY_PATH` points at nothing | `the Firebase service-account key file is missing: mount it read-only at dist/config/firebase/serviceAccountKey.json (FIREBASE_KEY_PATH)` |
    | the file is there but is not valid JSON or is the wrong key | the app prints `Firebase serviceAccountKey.json is missing. Refusing to start in production.` (the app uses the same message for every failure to load the file) |
 
-   With `restart: unless-stopped` a container that refuses to start is restarted over and over: stop it with `docker compose -f docker-compose.prod.yml down` while you fix the file.
+   With `restart: unless-stopped` a container that refuses to start is restarted over and over: stop it with `docker rm -f beginso-api` while you fix the file.
 5. **Tell the deploy script where things are**, in `/opt/beginso-backend/.deploy/env` (create the folder):
    ```
    UPLOADS_PATH=/opt/beginso-backend/data-test
@@ -151,7 +151,7 @@ The VM already runs other Docker containers that must not be affected. This setu
 - Cleanup is `./scripts/deploy-docker.sh cleanup` (also run after every successful deploy). It removes only **stopped containers and images that carry our label**, keeps the **newest 5 image tags** and never the current or the previous one. Run it with `--dry-run` first to see the list.
 - Every published port is bound to `127.0.0.1` by default; the address comes only from the variable `BIND_ADDRESS` and the port from `HOST_PORT` (below). The deploy checks the port **before it starts anything**: when something else holds it, it stops with a message and changes nothing.
 - **Docker must not be reinstalled, upgraded or restarted for this.** Restarting the daemon interrupts every container on the machine, and a reinstall can replace the daemon's settings. If Docker itself needs a change, that is a separate decision with whoever owns the other containers, not a step of this runbook.
-- To stop ours: `docker compose -f docker-compose.prod.yml down` (the fixed project name means exactly our container and network). Never `docker stop $(docker ps -q)`.
+- To stop ours: `docker rm -f beginso-api` (it names exactly our container and nothing else; `docker compose down` is not used because the compose file asks for `BACKEND_IMAGE` even to stop). Never `docker stop $(docker ps -q)`.
 
 **Check before the first start and before the cutover (changes nothing)**
 
@@ -239,7 +239,7 @@ Do it at a quiet time. The site is down from step 2 until step 7 (a few minutes,
    ```
    sudo pm2 stop onboarding-backend
    ```
-3. **Stop the test container:** `cd /opt/beginso-backend && docker compose -f docker-compose.prod.yml down`
+3. **Stop the test container:** `cd /opt/beginso-backend && docker rm -f beginso-api`
 4. **Final copy of the uploads into the volume** (copy, never move; only new and changed files travel the second time):
    ```
    sudo rsync -a --info=progress2 /root/Onboarding-backend/uploads/ /opt/beginso-backend/data/uploads/
@@ -319,7 +319,7 @@ Use it when step 5 of the cutover does not match, when the live checks fail, or 
 
 1. **Stop the container (stops its timers and its writes):**
    ```
-   cd /opt/beginso-backend && docker compose -f docker-compose.prod.yml down
+   cd /opt/beginso-backend && docker rm -f beginso-api
    ```
 2. **Copy the volume's contents back into the old uploads folder, only newer files, keeping the old folder's owner:**
    ```

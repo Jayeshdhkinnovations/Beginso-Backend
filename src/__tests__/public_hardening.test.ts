@@ -199,7 +199,14 @@ describe("field patterns cannot hang the server (ReDoS)", () => {
     });
     const started = Date.now();
     const res = await submit(form.publishedSlug).field("data", JSON.stringify({ answers: [{ fieldId: "phone", value: "a".repeat(40) + "!" }] }));
-    expect(Date.now() - started).toBeLessThan(3000);
-    expect(res.status).toBeLessThan(500);
+    // THE proof that the pattern was not run: the value ends in "!", so (a+)+$ can never match it. Had the pattern been run, the answer would
+    // have been refused (422) after minutes of backtracking; skipped, the answer is simply accepted.
+    expect(res.status).toBe(200);
+    const stored: any = await ResponseModel.findOne({ formId: form._id }).lean();
+    expect(Object.values(stored.answers)).toContain("a".repeat(40) + "!");
+    // A hang guard, not a speed test: this used to be `< 3000` ms, and a loaded runner spends nearly that on the request alone (the first
+    // submission also loads lazy data), so it failed by 12 ms. Running the pattern would take hours, so any bound far above a slow request
+    // tells the two apart; testTimeout (120 s) is the final backstop.
+    expect(Date.now() - started).toBeLessThan(30_000);
   });
 });

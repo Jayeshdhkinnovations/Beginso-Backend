@@ -232,6 +232,15 @@ Change the two lines in `docker-compose.prod.yml` (the default there, `768m` and
 
 ## 7. The real cutover  **[server]**, with the repo owner's `deploy.yml` disabled (section 4)
 
+**The short way: one command.** `./scripts/cutover.sh <image>` does steps 2 to 7 below by itself, checks every step, and **puts the pm2 backend back automatically** if any check from step 2 on fails (it stops our container, restores `.deploy/env`, copies newer uploads back, starts pm2 and waits until the old commit answers). Run it as root in `/opt/beginso-backend`:
+
+```
+./scripts/cutover.sh ghcr.io/jayeshdhkinnovations/beginso-backend:sha-<commit> --dry-run    # checks everything, changes NOTHING; run it first, any time
+./scripts/cutover.sh ghcr.io/jayeshdhkinnovations/beginso-backend:sha-<commit>              # the real cutover: a few minutes of downtime
+```
+
+It never deletes pm2 or the old uploads, only ever removes our own container by name, and writes a log to `.deploy/cutover-<date>.log`. Its rollback paths are tested in CI (`scripts/test-cutover.sh`). The numbered steps below are the same thing by hand, for when you want to see each one.
+
 Do it at a quiet time. The site is down from step 2 until step 7 (a few minutes, mostly the copy). There is **no proxy to switch** on this VM (section 3b): the container takes over port 5000 itself, so whatever forwards to the VM keeps working unchanged. Run the commands as `deploy` (`sudo` where shown). Replace the image tag.
 
 1. **Say it is starting** and check the old server is the live one: `curl -s http://127.0.0.1:5000/` shows the commit; `docker logs beginso-api 2>&1 | grep "Background jobs"` still says OFF.

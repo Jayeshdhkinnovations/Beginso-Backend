@@ -89,15 +89,33 @@ To run every proof (fresh build, non-root, no secret in the image, uploads survi
    | `FIREBASE_KEY_PATH` points at nothing | `the Firebase service-account key file is missing: mount it read-only at dist/config/firebase/serviceAccountKey.json (FIREBASE_KEY_PATH)` |
    | the file is there but is not valid JSON or is the wrong key | the app prints `Firebase serviceAccountKey.json is missing. Refusing to start in production.` (the app uses the same message for every failure to load the file) |
 
-   With `restart: unless-stopped` a container that refuses to start is restarted over and over: stop it with `docker compose -f docker-compose.prod.yml down` while you fix the file.
+   With `restart: unless-stopped` a container that refuses to start is restarted over and over: stop it with `docker rm -f beginso-api` while you fix the file.
 5. **Tell the deploy script where things are**, in `/opt/beginso-backend/.deploy/env` (create the folder):
    ```
    UPLOADS_PATH=/opt/beginso-backend/data-test
    FIREBASE_KEY_PATH=/opt/beginso-backend/secrets/serviceAccountKey.json
    HOST_PORT=5001
+   BIND_ADDRESS=127.0.0.1
    BACKGROUND_JOBS=off
    ```
-   `HOST_PORT=5001` is a **spare port**, so the container runs next to the current backend (port 5000). `BACKGROUND_JOBS=off` and `UPLOADS_PATH=.../data-test` are the **test settings**; the cutover (section 7) changes both.
+   `HOST_PORT=5001` is a **spare port**, so the container runs next to the current backend (port 5000), and `BIND_ADDRESS=127.0.0.1` keeps it reachable only from the VM itself. `BACKGROUND_JOBS=off` and `UPLOADS_PATH=.../data-test` are the **test settings**; the cutover (section 7) changes all four.
+
+## 3b. This VM, as it was found on 30 Oct 2026 (read only)  **[server]**
+
+These facts decide how the cutover works. They were read with `ss`, `docker ps`, `pm2 jlist` and `ps` only; nothing was changed. Check them again before the cutover (`./scripts/deploy-docker.sh check`).
+
+| Fact | Value | What it means for the cutover |
+|---|---|---|
+| The live backend | pm2 process `onboarding-backend`, from `/root/Onboarding-backend`, listening on **port 5000 on every address** (`*:5000`) | the container must take over exactly that port |
+| A proxy on the VM | **none**: nginx and Caddy are inactive, and no tunnel process runs; the firewall (`ufw`) is inactive | HTTPS for `api.beginso.com` is handled outside the VM (a router, port forward or another machine) and forwards to `192.168.33.47:5000`. There is **no proxy to switch**: the container just has to answer on the same address and port |
+| Other containers | node_exporter (9100), promtail, cadvisor (8989), portainer (8000, 9443) | they are not ours and are never touched (section 4b) |
+| Free ports for the test | 5001 and 5002 | the test containers use these, on the loopback only |
+| Memory | about 1.9 GB in total, about 1.1 GB available; the live backend uses about 120 MB | the container limit is **768 MB**, not more |
+| The GitHub runner | on this VM (service `actions.runner.…onboarding-palateform`), running as root | the Docker deploy runs here; no Docker group change is needed |
+| Docker | 29.9.2 with Compose v5.6.1, cgroup v2; the VM reaches `ghcr.io` | nothing to install or restart |
+| The old uploads | about 29 MB, 343 files | the copy takes seconds |
+
+**How the container is reached.** `docker-compose.prod.yml` publishes one port, `"${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-5000}:5000"`. By default it is the loopback, so a test container can only be reached from the VM itself. At the cutover `.deploy/env` sets `BIND_ADDRESS=0.0.0.0` and `HOST_PORT=5000`, which is **the same exposure the pm2 backend has today** (all addresses, port 5000), and nothing wider. The firewall being inactive is how the VM was set up and is not changed here; if you want the backend reachable only from your forwarder, that is a separate firewall decision.
 
 ## 4. Get the image  **[repo owner] once, then [either]**
 
@@ -131,9 +149,9 @@ The VM already runs other Docker containers that must not be affected. This setu
 
 - Nothing runs `docker system prune`, `docker image prune -a`, `docker volume prune`, `docker network prune` or any other prune without the label filter `com.beginso.app=api`. Nothing stops, kills or removes "all containers". Nothing restarts the Docker daemon.
 - Cleanup is `./scripts/deploy-docker.sh cleanup` (also run after every successful deploy). It removes only **stopped containers and images that carry our label**, keeps the **newest 5 image tags** and never the current or the previous one. Run it with `--dry-run` first to see the list.
-- Every published port is bound to `127.0.0.1` and set by one variable (below). The deploy checks the port **before it starts anything**: when something else holds it, it stops with a message and changes nothing.
+- Every published port is bound to `127.0.0.1` by default; the address comes only from the variable `BIND_ADDRESS` and the port from `HOST_PORT` (below). The deploy checks the port **before it starts anything**: when something else holds it, it stops with a message and changes nothing.
 - **Docker must not be reinstalled, upgraded or restarted for this.** Restarting the daemon interrupts every container on the machine, and a reinstall can replace the daemon's settings. If Docker itself needs a change, that is a separate decision with whoever owns the other containers, not a step of this runbook.
-- To stop ours: `docker compose -f docker-compose.prod.yml down` (the fixed project name means exactly our container and network). Never `docker stop $(docker ps -q)`.
+- To stop ours: `docker rm -f beginso-api` (it names exactly our container and nothing else; `docker compose down` is not used because the compose file asks for `BACKEND_IMAGE` even to stop). Never `docker stop $(docker ps -q)`.
 
 **Check before the first start and before the cutover (changes nothing)**
 
@@ -142,7 +160,7 @@ cd /opt/beginso-backend
 ./scripts/deploy-docker.sh check
 ```
 
-It lists every container with its image, ports and status; every listening TCP port; whether `HOST_PORT` is free (or held by our own container); and the free memory, with a warning when less than the container limit (1536 MB) plus 512 MB is available. The same by hand:
+It lists every container with its image, ports and status; every listening TCP port; whether `HOST_PORT` is free (or held by our own container); and the free memory, with a warning when less than the container limit (768 MB) plus 512 MB is available. The same by hand:
 
 ```
 docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'      # names and ports in use, ours is beginso-api
@@ -154,11 +172,11 @@ free -h ; docker stats --no-stream                                              
 
 If the port is taken the deploy ends with `PORT <n> IS ALREADY IN USE by something that is not beginso-api` and exit code 3. Choose another port: put `HOST_PORT=<free port>` in `/opt/beginso-backend/.deploy/env`, point the proxy at it, run again. Never stop the other container to make room. If the memory warning appears, do not cut over until the other containers' usage is understood.
 
-**Our ports** (all on `127.0.0.1`, each set by one variable)
+**Our ports** (on `127.0.0.1` unless `BIND_ADDRESS` says otherwise; each set by one variable)
 
 | Port | Variable | Used by |
 |---|---|---|
-| 5000 | `HOST_PORT` | the server container (the first test container uses 5001) |
+| 5000 | `HOST_PORT` | the server container (the first test container uses 5001); the address is `BIND_ADDRESS` (default `127.0.0.1`, `0.0.0.0` on this VM after the cutover) |
 | 5002 | `WRITE_TEST_PORT` | the write-check container (section 8) |
 | 5000 | `HOST_PORT` | `docker compose up` on a laptop (`docker-compose.yml`) |
 | 55000 | `PROOF_PORT` | `scripts/docker-proof.sh` on a laptop |
@@ -182,7 +200,7 @@ curl http://127.0.0.1:5001/api/health                              # {"success":
 ./scripts/deploy-docker.sh status
 ```
 
-The container listens only on `127.0.0.1:5001`; the old backend on 5000 is untouched and **keeps running the timers**. Point a **test copy of the frontend** (or a temporary proxy rule) at port 5001 and look around. The script puts the previous tag back by itself if the health check or the commit check fails (on a first deploy there is none: the container just stays unhealthy; read section 10).
+The container listens only on `127.0.0.1:5001`; the old backend on 5000 is untouched and **keeps running the timers**. Look around **from the VM** (`curl http://127.0.0.1:5001/...`) or from your own machine through an SSH tunnel (`ssh -L 5001:127.0.0.1:5001 root@192.168.33.47`, then `http://localhost:5001`), or point a test copy of the frontend at the tunnel. The script puts the previous tag back by itself if the health check or the commit check fails (on a first deploy there is none: the container just stays unhealthy; read section 10).
 
 ## 6. Resources: measure the old server, then set the limits  **[server]**
 
@@ -210,18 +228,18 @@ sort -k3 -n /var/log/beginso-pm2-usage.log | tail -1      # the line with the pe
 | `mem_limit` | peak memory (MB) × 1.5, never below 768 | peak 410 MB → 615 → set `768m` |
 | `cpus` | peak CPU (% of one core) ÷ 100 × 1.5, never below 1.0 | peak 80 % → 1.2 → set `1.5` |
 
-Change the two lines in `docker-compose.prod.yml` (the default there, `1536m` and `1.5`, is a guess from the code, not a measurement), redeploy the same tag, and watch `docker stats --no-stream beginso-api` for the first week. Reports run inside this process (two at a time, `REPORT_CONCURRENCY`), so a limit set from a quiet week can be too low on a day with many exports: if the container is killed for memory (`docker inspect beginso-api --format '{{.State.OOMKilled}}'` says `true`), raise it by 50 percent.
+Change the two lines in `docker-compose.prod.yml` (the default there, `768m` and `1.5`, is sized for this VM: about 1.1 GB free beside the other containers, the live backend at about 120 MB), redeploy the same tag, and watch `docker stats --no-stream beginso-api` for the first week. Reports run inside this process (two at a time, `REPORT_CONCURRENCY`), so a limit set from a quiet week can be too low on a day with many exports: if the container is killed for memory (`docker inspect beginso-api --format '{{.State.OOMKilled}}'` says `true`), raise it by 50 percent.
 
 ## 7. The real cutover  **[server]**, with the repo owner's `deploy.yml` disabled (section 4)
 
-Do it at a quiet time. The site is down from step 2 until step 9 (a few minutes, mostly the copy). Run the commands as `deploy` (`sudo` where shown). Replace the image tag.
+Do it at a quiet time. The site is down from step 2 until step 7 (a few minutes, mostly the copy). There is **no proxy to switch** on this VM (section 3b): the container takes over port 5000 itself, so whatever forwards to the VM keeps working unchanged. Run the commands as `deploy` (`sudo` where shown). Replace the image tag.
 
 1. **Say it is starting** and check the old server is the live one: `curl -s http://127.0.0.1:5000/` shows the commit; `docker logs beginso-api 2>&1 | grep "Background jobs"` still says OFF.
 2. **Stop the old server (stops its timers and its writes):**
    ```
    sudo pm2 stop onboarding-backend
    ```
-3. **Stop the test container:** `cd /opt/beginso-backend && docker compose -f docker-compose.prod.yml down`
+3. **Stop the test container:** `cd /opt/beginso-backend && docker rm -f beginso-api`
 4. **Final copy of the uploads into the volume** (copy, never move; only new and changed files travel the second time):
    ```
    sudo rsync -a --info=progress2 /root/Onboarding-backend/uploads/ /opt/beginso-backend/data/uploads/
@@ -235,19 +253,22 @@ Do it at a quiet time. The site is down from step 2 until step 9 (a few minutes,
    ( cd /opt/beginso-backend/data/uploads && sudo find . -type f -print0 | sort -z | xargs -0 sudo sha256sum ) > /tmp/uploads-after.sha
    diff /tmp/uploads-before.sha /tmp/uploads-after.sha && echo "COPY VERIFIED"
    ```
-6. **Point the deploy script at the real volume and switch the jobs ON** (this is the step that makes the container the one process running the timers):
+6. **Point the deploy script at the real volume, the live port and address, and switch the jobs ON** (this is the step that makes the container the one process running the timers and the one answering on port 5000):
    ```
-   sed -i 's#^UPLOADS_PATH=.*#UPLOADS_PATH=/opt/beginso-backend/data#; s#^BACKGROUND_JOBS=.*#BACKGROUND_JOBS=on#' /opt/beginso-backend/.deploy/env
-   grep -E "UPLOADS_PATH|BACKGROUND_JOBS" /opt/beginso-backend/.deploy/env      # must show data (not data-test) and on
+   sed -i 's#^UPLOADS_PATH=.*#UPLOADS_PATH=/opt/beginso-backend/data#; s#^BACKGROUND_JOBS=.*#BACKGROUND_JOBS=on#; s#^HOST_PORT=.*#HOST_PORT=5000#; s#^BIND_ADDRESS=.*#BIND_ADDRESS=0.0.0.0#' /opt/beginso-backend/.deploy/env
+   grep -E "UPLOADS_PATH|BACKGROUND_JOBS|HOST_PORT|BIND_ADDRESS" /opt/beginso-backend/.deploy/env      # must show data (not data-test), on, 5000 and 0.0.0.0
    ```
 7. **Start the container:**
    ```
    cd /opt/beginso-backend && ./scripts/deploy-docker.sh deploy ghcr.io/<owner>/beginso-backend:sha-abc1234
    docker logs beginso-api 2>&1 | grep "Background jobs"          # must say: Background jobs are ON
-   curl -s http://127.0.0.1:5001/ | grep abc1234                      # the live commit
+   curl -s http://127.0.0.1:5000/ | grep abc1234                      # the live commit, from the VM
    ```
-8. **Look before the proxy changes:** through the test frontend (or `curl`), open a form, open an existing uploaded file (it must download and match its checksum).
-9. **Switch the proxy** from the old port to the container's: change the upstream from `127.0.0.1:5000` to `127.0.0.1:5001`, then `sudo nginx -t && sudo systemctl reload nginx` (Caddy: `sudo systemctl reload caddy`).
+   Port 5000 is free at this point because pm2 was stopped in step 2; if it is not, the script stops with "PORT 5000 IS ALREADY IN USE" and changes nothing.
+   ```
+   ```
+8. **Look from outside the VM:** from another machine `curl http://192.168.33.47:5000/` and `curl https://api.beginso.com/` must both report the new commit; open a form and an existing uploaded file (it must download and match its checksum).
+9. **Nothing to switch.** The address and port are the ones the pm2 backend had, so the forwarder and the frontend need no change. (If step 8 does not answer from outside but does from the VM, `BIND_ADDRESS` is still `127.0.0.1`: fix step 6, redeploy.)
 10. **Check the live site:** sign in, open a form, submit a test response with a file, open the file, export a PDF. Watch `docker logs -f beginso-api` for errors for ten minutes.
 11. **Leave pm2 stopped, not deleted** (`pm2 stop`, never `pm2 delete`), and keep `/root/Onboarding-backend/uploads` untouched for a few weeks: they are the way back. Do **not** run `pm2 start` while the container is live.
 
@@ -286,11 +307,11 @@ curl -m 5 http://<server-public-ip>:5001/api/health      # must not answer
 On the server, the listener must be on the loopback only:
 
 ```
-sudo ss -ltnp | grep -E ":500[12]"        # must show 127.0.0.1:5001 , never 0.0.0.0:5001 or *:5001
-docker port beginso-api               # 5000/tcp -> 127.0.0.1:5001
+sudo ss -ltnp | grep -E ":500[12]"        # during the test phase: must show 127.0.0.1:5001 , never 0.0.0.0:5001 or *:5001
+docker port beginso-api               # test phase: 5000/tcp -> 127.0.0.1:5001   (after the cutover: 0.0.0.0:5000, on purpose, like the pm2 backend)
 ```
 
-Do not rely on `ufw` for this: Docker writes its own firewall rules for published ports and they bypass `ufw`. Only the `127.0.0.1:` in the port mapping keeps the port private. Port 80/443 stay with the proxy.
+Do not rely on `ufw` for this: Docker writes its own firewall rules for published ports and they bypass `ufw`. Only the `127.0.0.1` address in the port mapping keeps the port private. After the cutover port 5000 is public to the network on purpose, exactly as the pm2 backend is today.
 
 ## 9. Rollback to the old server  **[server]**
 
@@ -298,7 +319,7 @@ Use it when step 5 of the cutover does not match, when the live checks fail, or 
 
 1. **Stop the container (stops its timers and its writes):**
    ```
-   cd /opt/beginso-backend && docker compose -f docker-compose.prod.yml down
+   cd /opt/beginso-backend && docker rm -f beginso-api
    ```
 2. **Copy the volume's contents back into the old uploads folder, only newer files, keeping the old folder's owner:**
    ```
@@ -315,7 +336,7 @@ Use it when step 5 of the cutover does not match, when the live checks fail, or 
    sudo pm2 start onboarding-backend
    sleep 10 && curl -s http://127.0.0.1:5000/             # the commit of the old build
    ```
-5. **Switch the proxy back:** upstream `127.0.0.1:5001` → `127.0.0.1:5000`, then `sudo nginx -t && sudo systemctl reload nginx`.
+5. **Nothing to switch back.** pm2 takes port 5000 again, the address the forwarder already uses; check `curl https://api.beginso.com/` reports the old build's commit.
 6. **Check:** sign in, open a form, open an uploaded file, and one that was uploaded while the container was live.
 7. Keep the volume (`/opt/beginso-backend/data`) as it is. Tell the repo owner to enable `deploy.yml` again only when the old way is meant to stay.
 
@@ -335,7 +356,7 @@ Rolling back **between Docker tags** (a bad image, same uploads): `./scripts/dep
 | Back up the uploads | `tar -czf uploads-$(date +%F).tar.gz -C /opt/beginso-backend/data uploads` (or rsync the folder to another machine); a database backup is separate (MongoDB Atlas) |
 | Change a setting | edit `/opt/beginso-backend/.env`, then redeploy the same tag (`deploy` with the current tag restarts it) |
 
-A deploy is a **few seconds** of refused connections: one container behind one proxy means the old container stops before the new one starts. Zero downtime (two containers behind the proxy) is **not recommended**: both would run the timers (section 0). Use stop-then-start.
+A deploy is a **few seconds** of refused connections: one container on one port means the old container stops before the new one starts. Zero downtime (two containers behind the proxy) is **not recommended**: both would run the timers (section 0). Use stop-then-start.
 
 **If the health check fails:**
 
@@ -385,7 +406,7 @@ The user the Actions runner service runs as. Find it on the VM: `ps -o user= -C 
 Only after the **manual cutover (section 7) has worked and settled** (the container is the live backend, the uploads are in the volume, `BACKGROUND_JOBS` is on). Never before: switching it on while pm2 is the live server would deploy a container next to it.
 
 1. **[repo owner]** Create the Environment: Settings → Environments → New environment → `production`. Add **Required reviewers** (yourself) if you want every deploy to wait for a click.
-2. **[server]** Check the runner user and Docker (above), and that `/opt/beginso-backend/.deploy/env` has `UPLOADS_PATH=/opt/beginso-backend/data`, `BACKGROUND_JOBS=on` and the `HOST_PORT` the proxy uses.
+2. **[server]** Check the runner user and Docker (above), and that `/opt/beginso-backend/.deploy/env` has `UPLOADS_PATH=/opt/beginso-backend/data`, `BACKGROUND_JOBS=on`, `HOST_PORT=5000` and `BIND_ADDRESS=0.0.0.0` (section 3b).
 3. **[repo owner]** Set the variable: Settings → Secrets and variables → Actions → Variables → New repository variable → name `DOCKER_DEPLOY_ENABLED`, value `true`.
 4. Push a small change to `main` (or run `Deploy Backend (Docker)` by hand with the tag that is already running) and watch the run: ci, Publish Docker Image, Deploy Backend (Docker). Check the site, `docker ps`, and `curl http://127.0.0.1:<port>/`.
 
@@ -396,7 +417,7 @@ Only after the **manual cutover (section 7) has worked and settled** (the contai
 Clearing the variable stops the **automatic** Docker deploys and makes `deploy.yml` run again on the next push. It does **not** stop the container or start pm2 by itself, so do it in this order:
 
 1. **[repo owner]** Delete the variable (Settings → Secrets and variables → Actions → Variables → `DOCKER_DEPLOY_ENABLED` → delete) and wait for any Docker deploy that is running to finish (they never overlap).
-2. **[server]** Roll back the server: section 9, steps 1 to 6 (stop the container, copy the newer uploads back, verify, `pm2 start onboarding-backend`, switch the proxy back, check).
+2. **[server]** Roll back the server: section 9, steps 1 to 6 (stop the container, copy the newer uploads back, verify, `pm2 start onboarding-backend`, check the site; there is no proxy to switch).
 3. The next push to `main` deploys with pm2 again. Push a small change and confirm that `Deploy Backend` ran and `Deploy Backend (Docker)` did not.
 
 ### Not verified
@@ -408,6 +429,6 @@ The workflows cannot be run until the variable is `true`, so the first real run 
 - **MongoDB stays on Atlas** (`MONGODB_URI`). It is not containerised for production; the dev compose file has its own MongoDB for local work only.
 - **Uploads stay on local disk** (a volume). Moving them to object storage is a separate, later plan.
 - **Memory and CPU limits:** see section 6. The defaults in the compose file are a guess from reading the code.
-- **Client IP:** the app trusts `TRUST_PROXY_HOPS` proxies (default 1) and, separately, an `x-client-ip` header only when `x-proxy-secret` equals `PROXY_SHARED_SECRET` (the frontend's own proxy). If the container's port were reachable from the internet with the default of 1, a caller could forge their address with `X-Forwarded-For` and sidestep the rate limits. That is why the compose file publishes the port on `127.0.0.1` only.
+- **Client IP:** the app trusts `TRUST_PROXY_HOPS` proxies (default 1) and, separately, an `x-client-ip` header only when `x-proxy-secret` equals `PROXY_SHARED_SECRET` (the frontend's own proxy). If the container's port were reachable from the internet with the default of 1, a caller could forge their address with `X-Forwarded-For` and sidestep the rate limits. That is why the compose file publishes the port on `127.0.0.1` by default; on this VM, where nothing runs in front and the forwarder reaches port 5000 directly, `BIND_ADDRESS=0.0.0.0` is set at the cutover, with `TRUST_PROXY_HOPS` set to the number of proxies between the visitor and the VM (read it from the live `.env` before the cutover and keep the same value).
 - **Shutdown:** SIGTERM stops new connections, lets requests in flight finish for up to 25 seconds, closes the database connection and exits 0 (Docker waits 30 seconds before it kills).
 - **Not verified here:** the image was written on a machine without Docker. The build, the container checks in `scripts/docker-proof.sh` and the CI job `docker` have to run before the first real deploy. The base image is pinned by tag; pin it by digest after the first build.

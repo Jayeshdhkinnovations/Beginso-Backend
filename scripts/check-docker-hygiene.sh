@@ -5,7 +5,8 @@
 #   1. no `docker ... prune` command without our label filter (--filter label=com.beginso.app=api), and none that can remove volumes or networks at all;
 #   2. no `docker system prune`, `image prune -a`, `volume prune`, `network prune` or `builder prune` anywhere;
 #   3. no command that stops, kills, removes or restarts "all containers" ($(docker ps -q) and the like), and none that restarts the Docker daemon;
-#   4. both compose files fix the project name with a beginso-api prefix, and every published port is bound to 127.0.0.1.
+#   4. both compose files fix the project name with a beginso-api prefix, and every published port is bound to 127.0.0.1 by default (the address may
+#      only come from the variable BIND_ADDRESS, whose default is 127.0.0.1; a literal 0.0.0.0 or an unset address is refused).
 # Documentation (docs/*.md) is not scanned: it says what NOT to run.
 set -u
 cd "$(dirname "$0")/.."
@@ -28,8 +29,12 @@ if echo "$files" | xargs grep -nE '\$\((docker|sudo docker) (ps|container ls)[^)
 for f in docker-compose.yml docker-compose.prod.yml; do
   grep -qE '^name: beginso-api(-dev)?$' "$f" || bad "$f must fix the project name: name: beginso-api (or beginso-api-dev)"
   # every ports entry must start with 127.0.0.1:
-  if grep -nE '^[[:space:]]+-[[:space:]]*"?[0-9$]' "$f" | grep -E 'ports|:[0-9]+"?$' | grep -vE '127\.0\.0\.1:' | grep -E '"[^"]*:[0-9]+"' >/dev/null; then
-    bad "$f publishes a port that is not bound to 127.0.0.1"
+  # every ports entry is  - "<address>:<host port>:<container port>"  and the address is 127.0.0.1 or ${BIND_ADDRESS:-127.0.0.1}
+  if grep -nE '^[[:space:]]+-[[:space:]]*"[^"]*:[^"]*:[0-9]+"[[:space:]]*$' "$f" | grep -vE '"(127\.0\.0\.1|\$\{BIND_ADDRESS:-127\.0\.0\.1\}):' | grep . >/dev/null; then
+    bad "$f publishes a port whose address is not 127.0.0.1 (or the variable BIND_ADDRESS with the default 127.0.0.1)"
+  fi
+  if grep -nE '^[[:space:]]+-[[:space:]]*"?[0-9]+:[0-9]+"?[[:space:]]*$' "$f" | grep . >/dev/null; then
+    bad "$f publishes a port with no address (that means every address)"
   fi
 done
 

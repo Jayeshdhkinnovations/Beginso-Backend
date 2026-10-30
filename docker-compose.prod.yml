@@ -29,11 +29,14 @@ services:
       PORT: "5000"
       # `off` for the first test container (see docs/DOCKER.md): only ONE process may run the timers. `on` for the live one.
       BACKGROUND_JOBS: ${BACKGROUND_JOBS:-on}
-    # The ONLY published port, on the loopback only, set by the ONE variable HOST_PORT (default 5000; the first test container uses 5001).
-    # The proxy (nginx, Caddy) on the same host is the one way in. The app trusts TRUST_PROXY_HOPS proxies for the client IP, so it must
-    # never be reachable directly from the internet. scripts/deploy-docker.sh checks that the port is free BEFORE it starts anything.
+    # The ONLY published port. The port is set by the ONE variable HOST_PORT (default 5000; the first test container uses 5001) and the address
+    # by the ONE variable BIND_ADDRESS, which defaults to the loopback: reachable only from this machine, with a proxy on the same host in front.
+    # On the Beginso VM nothing runs in front of the backend (no nginx, no Caddy): the live backend answers on port 5000 of every address, and
+    # whatever forwards to it reaches it at the VM's address. There .deploy/env sets BIND_ADDRESS=0.0.0.0, which is exactly the exposure the pm2
+    # backend has today, no more. The app trusts TRUST_PROXY_HOPS proxies for the client IP. scripts/deploy-docker.sh checks that the port is
+    # free BEFORE it starts anything and never takes it from another container.
     ports:
-      - "127.0.0.1:${HOST_PORT:-5000}:5000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-5000}:5000"
     volumes:
       - ${UPLOADS_PATH:-./data}:/data
       - ${FIREBASE_KEY_PATH:?set FIREBASE_KEY_PATH to the Firebase service-account key file}:/app/dist/config/firebase/serviceAccountKey.json:ro
@@ -47,10 +50,11 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    # Sizing, from the code and not from measurements (to be tuned on the real server): reports and PDFs are generated inside this
-    # process (REPORT_CONCURRENCY at a time, the chart engine runs up to four queries at once), so the memory limit is generous.
-    # Node itself stays near 300 MB when idle.
-    mem_limit: 1536m
+    # Sizing for THIS VM: it has about 2 GB in total and about 1.1 GB free beside the other containers (portainer, cadvisor, node_exporter,
+    # promtail), and the live pm2 backend peaks near 120 MB. Peak plus 50 percent is about 180 MB; 768 MB is the floor of the rule in
+    # docs/DOCKER.md section 6 and leaves room for a PDF report (they are generated inside this process). A limit above the free memory would
+    # let a runaway container squeeze the others. Raise it only after watching `docker stats` for a week.
+    mem_limit: 768m
     cpus: 1.5
 
     # A stop gives requests in flight up to 25 s (see src/utils/gracefulShutdown.ts); Docker waits 30 s before it kills.

@@ -22,7 +22,8 @@
 # reconcile) that have not been shown safe to run twice at once (docs/DOCKER.md).
 #
 # Needs in this folder: docker-compose.prod.yml and .env. Needs in the environment or in .deploy/env: UPLOADS_PATH, FIREBASE_KEY_PATH.
-# HOST_PORT (default 5000) is the ONE variable that sets the port, always bound to 127.0.0.1. It never prints the .env file.
+# HOST_PORT (default 5000) is the ONE variable that sets the port; BIND_ADDRESS (default 127.0.0.1) is the ONE variable that sets the address.
+# It never prints the .env file.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -32,7 +33,8 @@ HOST_PORT="${HOST_PORT:-5000}"
 CONTAINER="beginso-api"
 APP_LABEL="com.beginso.app=api"
 KEEP_TAGS=5
-MEM_LIMIT_MB=1536   # keep in step with mem_limit in docker-compose.prod.yml
+MEM_LIMIT_MB=768    # keep in step with mem_limit in docker-compose.prod.yml
+BIND_ADDRESS="${BIND_ADDRESS:-127.0.0.1}"   # the address the port is published on; the compose file reads the same variable
 mkdir -p "$STATE_DIR"
 [ -f "$STATE_DIR/env" ] && set -a && . "$STATE_DIR/env" && set +a
 
@@ -53,12 +55,13 @@ port_listeners() {
   fi
 }
 
-# True when the port is published by our own running container (it is replaced by the deploy, so it is allowed to hold the port).
-own_port() { docker ps --filter "name=^${CONTAINER}$" --format '{{.Ports}}' 2>/dev/null | grep -q "127.0.0.1:$1->"; }
+# True when the port is published by our own running container (it is replaced by the deploy, so it is allowed to hold the port), on any address.
+own_port() { docker ps --filter "name=^${CONTAINER}$" --format '{{.Ports}}' 2>/dev/null | grep -qE "(^|[ ,]|:)$1->"; }
 
 check_port() {
   local p="$1" listeners
   case "$p" in ''|*[!0-9]*) echo "HOST_PORT must be a number, it is '$p'" >&2; return 2;; esac
+  case "$BIND_ADDRESS" in 127.0.0.1|0.0.0.0) ;; [0-9]*.[0-9]*.[0-9]*.[0-9]*) ;; *) echo "BIND_ADDRESS must be an IPv4 address (127.0.0.1, 0.0.0.0 or this machine's address), it is '$BIND_ADDRESS'" >&2; return 2;; esac
   listeners="$(port_listeners "$p")"
   if [ -n "$listeners" ] && ! own_port "$p"; then
     {
@@ -124,6 +127,7 @@ case "${1:-}" in
     new="${2:?usage: deploy-docker.sh deploy <image-tag>}"
     case "$new" in *:latest|*:) echo "refusing: use a tag per commit, not latest" >&2; exit 2;; esac
     check_port "$HOST_PORT" || exit $?
+    [ "$BIND_ADDRESS" = "127.0.0.1" ] || echo "note: port $HOST_PORT is published on $BIND_ADDRESS, so it is reachable from the network (as the pm2 backend is today)."
     old="$(current)"
     echo "deploying $new (previous: ${old:-none})"
     [ -n "$old" ] && echo "$old" > "$STATE_DIR/previous"
@@ -162,7 +166,7 @@ case "${1:-}" in
     echo "== Ports in use by listeners (TCP)"
     if command -v ss >/dev/null 2>&1; then ss -ltnH | awk '{print "  " $4}' | sort -u; else netstat -ltn 2>/dev/null | awk 'NR>2 {print "  " $4}' | sort -u; fi
     echo
-    echo "== Our port: $HOST_PORT on 127.0.0.1 (set HOST_PORT in $STATE_DIR/env to change it)"
+    echo "== Our port: $HOST_PORT on $BIND_ADDRESS (set HOST_PORT and BIND_ADDRESS in $STATE_DIR/env to change them)"
     check_port "$HOST_PORT" && echo "  free, or held by $CONTAINER itself: ok"
     echo
     echo "== Memory (the container is limited to ${MEM_LIMIT_MB} MB)"

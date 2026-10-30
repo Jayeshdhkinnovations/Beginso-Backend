@@ -43,7 +43,7 @@ describe("Build info on GET /", () => {
   });
 
   it("the deploy check still works: the body contains the short commit id", async () => {
-    // .github/workflows/deploy.yml greps GET / for the commit it just shipped.
+    // scripts/deploy-docker.sh checks GET / for the commit it just shipped.
     const info = require("../utils/buildInfo");
     const withCommit = { commit: "abc1234", commitMessage: "secret message", deployedAt: "2026-10-16T00:00:00.000Z" };
     expect(JSON.stringify(info.publicBuildInfo(withCommit))).toContain("abc1234");

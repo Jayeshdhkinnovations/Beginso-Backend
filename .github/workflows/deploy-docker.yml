@@ -1,11 +1,11 @@
 name: Deploy Backend (Docker)
 
 # The Docker deploy. OFF BY DEFAULT: it runs only when the repository variable DOCKER_DEPLOY_ENABLED is exactly 'true'
-# (Settings -> Secrets and variables -> Actions -> Variables). The old pm2 deploy (deploy.yml) runs only when it is NOT 'true', so the two never
-# run together. Set it to 'true' only after the manual cutover in docs/DOCKER.md works; clear it to go back to pm2.
+# (Settings -> Secrets and variables -> Actions -> Variables). Set it to 'true' only after the cutover in docs/DOCKER.md has settled.
+# There is no pm2 deploy any more: the old workflow was removed after the cutover.
 #
 # Automatic path, after a push to main:  ci (green) -> Publish Docker Image -> this workflow, on the self-hosted runner, which is the VM
-# (deploy.yml shows it: the same job copies into /root/Onboarding-backend, runs pm2 and curls 127.0.0.1:5000).
+# (it deploys by running scripts on that machine and curling 127.0.0.1:5000, which only works there).
 # What it does there (scripts/deploy-docker.sh): pulls ghcr.io/<owner>/beginso-backend:sha-<commit>, remembers the running tag as "previous",
 # starts the new one with docker-compose.prod.yml, waits for the health check, checks that GET / reports this commit, and on ANY failure starts the
 # previous tag again and fails the job (red, with an error annotation).
@@ -48,7 +48,7 @@ jobs:
     # The GitHub Environment `production`: the owner can add "Required reviewers" to it (Settings -> Environments -> production), so that a deploy
     # waits for a click. The job-level `if` above is evaluated first, so while the variable is off nothing is ever requested.
     environment: production
-    # Shared with the pm2 deploy (deploy.yml): two backend deploys never overlap, whichever workflow they are.
+    # Two backend deploys never overlap.
     concurrency:
       group: backend-deploy
       cancel-in-progress: false

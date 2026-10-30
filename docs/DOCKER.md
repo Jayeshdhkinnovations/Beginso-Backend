@@ -1,6 +1,6 @@
 # Running the backend in Docker
 
-The backend can be built as one image and run the same way on any server. A deploy is "start this tag", and a rollback is "start the previous tag". **Nothing here changes the live server until the owner follows the steps below.** The existing `deploy.yml` (pm2) keeps working untouched.
+The backend can be built as one image and run the same way on any server. A deploy is "start this tag", and a rollback is "start the previous tag". The old pm2 deploy workflow (`deploy.yml`) has been removed: Docker is the only deploy path now.
 
 Who does what: steps marked **[repo owner]** need the owner of the backend repository (the main owner is only a collaborator there). Steps marked **[server]** need someone who can log in to the server. Steps marked **[either]** can be done by whoever has the access.
 
@@ -129,7 +129,7 @@ Tags: `sha-<7 characters of the commit>` (use this one for deploys) and `main`. 
 
 Without a registry you can build on the server instead: `docker build --build-arg GIT_SHA=$(git rev-parse HEAD) -t beginso-backend:sha-$(git rev-parse --short=7 HEAD) .` and deploy that tag.
 
-**During the cutover window, `deploy.yml` must not run.** A push to `main` runs it, and its last steps are `pm2 restart onboarding-backend`: that would **start the old server again** next to the container (two processes running the timers, the old one with the old uploads). The **repo owner** disables it before section 7 (Actions → Deploy Backend → "…" → Disable workflow) and enables it again only after the Docker deployment is settled, or after a rollback. (Once the automatic Docker deploy is switched on, section 11, `deploy.yml` skips itself and no longer needs to be disabled.)
+**During the cutover window nothing else may deploy.** The old pm2 deploy workflow has been removed from the repository, so a push to `main` no longer restarts pm2. Section 11 describes the one deploy path that remains (off until `DOCKER_DEPLOY_ENABLED` is `true`).
 
 ## 4b. Other containers on the VM  **[server]**
 
@@ -230,7 +230,7 @@ sort -k3 -n /var/log/beginso-pm2-usage.log | tail -1      # the line with the pe
 
 Change the two lines in `docker-compose.prod.yml` (the default there, `768m` and `1.5`, is sized for this VM: about 1.1 GB free beside the other containers, the live backend at about 120 MB), redeploy the same tag, and watch `docker stats --no-stream beginso-api` for the first week. Reports run inside this process (two at a time, `REPORT_CONCURRENCY`), so a limit set from a quiet week can be too low on a day with many exports: if the container is killed for memory (`docker inspect beginso-api --format '{{.State.OOMKilled}}'` says `true`), raise it by 50 percent.
 
-## 7. The real cutover  **[server]**, with the repo owner's `deploy.yml` disabled (section 4)
+## 7. The real cutover  **[server]**
 
 **The short way: one command.** `./scripts/cutover.sh <image>` does steps 2 to 7 below by itself, checks every step, and **puts the pm2 backend back automatically** if any check from step 2 on fails (it stops our container, restores `.deploy/env`, copies newer uploads back, starts pm2 and waits until the old commit answers). Run it as root in `/opt/beginso-backend`:
 
@@ -347,7 +347,7 @@ Use it when step 5 of the cutover does not match, when the live checks fail, or 
    ```
 5. **Nothing to switch back.** pm2 takes port 5000 again, the address the forwarder already uses; check `curl https://api.beginso.com/` reports the old build's commit.
 6. **Check:** sign in, open a form, open an uploaded file, and one that was uploaded while the container was live.
-7. Keep the volume (`/opt/beginso-backend/data`) as it is. Tell the repo owner to enable `deploy.yml` again only when the old way is meant to stay.
+7. Keep the volume (`/opt/beginso-backend/data`) as it is. There is no pm2 deploy workflow any more, so a later push does not touch the old server.
 
 Rolling back **between Docker tags** (a bad image, same uploads): `./scripts/deploy-docker.sh rollback`. It starts the previous tag, checks health and the commit, and does not touch the uploads.
 
@@ -382,14 +382,14 @@ After a push to `main` the whole Docker deploy can run by itself. It is **off** 
 push to main -> ci (green) -> Publish Docker Image (sha-<commit>) -> Deploy Backend (Docker) on the VM
 ```
 
-| `DOCKER_DEPLOY_ENABLED` | `Deploy Backend` (pm2, `deploy.yml`) | `Publish Docker Image` (after ci) | `Deploy Backend (Docker)` |
-|---|---|---|---|
-| not set, empty, `false`, anything but `true` | **runs** (as it always did) | does not run by itself | does not run, not even by hand |
-| `true` | skips itself | runs | **runs** |
+| `DOCKER_DEPLOY_ENABLED` | `Publish Docker Image` (after ci) | `Deploy Backend (Docker)` |
+|---|---|---|
+| not set, empty, `false`, anything but `true` | does not run by itself | does not run, not even by hand |
+| `true` | runs | **runs** |
 
-The two deploys can never run together: the pm2 job has the opposite condition, and both jobs share the concurrency group `backend-deploy`, so even at the moment the variable is flipped they queue one behind the other. A **manual** run of `Publish Docker Image` is allowed whatever the variable says: it only builds and pushes an image and touches no server (the test container of section 5 needs one before the switch is on).
+Both jobs share the concurrency group `backend-deploy`, so two deploys never overlap. A **manual** run of `Publish Docker Image` is allowed whatever the variable says: it only builds and pushes an image and touches no server.
 
-**The runner is the VM.** `deploy.yml` shows it: its `self-hosted` job copies into `/root/Onboarding-backend`, runs `pm2 restart` and curls `127.0.0.1:5000`, which only works on the machine that runs the app. The Docker deploy job runs on the same runner.
+**The runner is the VM.** The Docker deploy job runs on the self-hosted runner installed on the machine that runs the app; that is the only way it can start containers there and curl `127.0.0.1:5000`.
 
 ### What the Docker deploy does
 
@@ -406,7 +406,7 @@ The two deploys can never run together: the pm2 job has the opposite condition, 
 
 ### Which runner user needs Docker, and the risk
 
-The user the Actions runner service runs as. Find it on the VM: `ps -o user= -C Runner.Listener` (or `systemctl status 'actions.runner.*'`). From `deploy.yml` (it writes into `/root/Onboarding-backend` and runs `pm2`) it is almost certainly **root**: then it needs nothing added. If it is **not** root, it must be allowed to use Docker: `sudo usermod -aG docker <runner-user>`, then restart the runner service.
+The user the Actions runner service runs as. Find it on the VM: `ps -o user= -C Runner.Listener` (or `systemctl status 'actions.runner.*'`). On this VM it is root, so it needs nothing added. If it is **not** root, it must be allowed to use Docker: `sudo usermod -aG docker <runner-user>`, then restart the runner service.
 
 **The risk:** membership of the `docker` group is **root-equivalent on that machine**: whoever can run a job on this runner (anyone who can push a workflow to this repository, or approve a pull request that runs there) can start a container that mounts the whole disk and become root. That is why (a) the Docker deploy job runs only from `main` after ci, (b) it uses the `production` Environment, where **required reviewers** can be added, and (c) `ci` and the pull-request checks run on GitHub's own runners, never on the VM.
 
@@ -421,13 +421,13 @@ Only after the **manual cutover (section 7) has worked and settled** (the contai
 
 **By hand** (Actions → Deploy Backend (Docker) → Run workflow, only while the variable is `true`): `deploy` with a **tag** (`sha-abc1234`, or a full image name) deploys any tag, **an earlier one included: that is the rollback to a tag**. `rollback` starts the tag that ran before the current one.
 
-### Going back to pm2 by clearing the variable
+### Stopping the automatic deploys
 
-Clearing the variable stops the **automatic** Docker deploys and makes `deploy.yml` run again on the next push. It does **not** stop the container or start pm2 by itself, so do it in this order:
+Clearing the variable stops the **automatic** Docker deploys. It does **not** stop the container or start pm2 by itself. To go all the way back to pm2, do it in this order:
 
 1. **[repo owner]** Delete the variable (Settings → Secrets and variables → Actions → Variables → `DOCKER_DEPLOY_ENABLED` → delete) and wait for any Docker deploy that is running to finish (they never overlap).
 2. **[server]** Roll back the server: section 9, steps 1 to 6 (stop the container, copy the newer uploads back, verify, `pm2 start onboarding-backend`, check the site; there is no proxy to switch).
-3. The next push to `main` deploys with pm2 again. Push a small change and confirm that `Deploy Backend` ran and `Deploy Backend (Docker)` did not.
+3. pm2 has no deploy workflow any more: from here updates to the old server are by hand (`pm2 restart onboarding-backend` after copying the build), until the Docker deploy is switched on again.
 
 ### Not verified
 

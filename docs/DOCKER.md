@@ -39,7 +39,7 @@ The server starts work on its own, with no user behind it. **While two processes
 | Time zone | `TZ=UTC` (change with the `TZ` variable) |
 | Secrets | none in the image. Settings come from the env file at run time; the Firebase key is mounted read-only |
 
-The container **refuses to start in production** when one of these is missing, and says which one by name (never its value): `JWT_SECRET`, `MONGODB_URI`, `PROXY_SHARED_SECRET`, `APP_URL`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_EMAIL`, and the Firebase key file. This check lives in `docker/preflight.js` and runs only in the container.
+The container **refuses to start in production** when one of these is missing, and says which one by name (never its value): `JWT_SECRET`, `MONGODB_URI`, `PROXY_SHARED_SECRET`, and the Firebase key file. The mail settings and `APP_URL` are **not** required: the code has a default for each (`APP_URL` https://beginso.com, `SMTP_HOST` email.toowix.com, no login, sender no-reply@beginso.com), the live server's `.env` sets none of them, and the container prints a note naming the ones that are not set. This check lives in `docker/preflight.js` and runs only in the container.
 
 ## 2. Try it on a laptop (QA)
 

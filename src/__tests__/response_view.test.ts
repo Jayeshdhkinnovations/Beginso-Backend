@@ -18,6 +18,7 @@ import UserResponseViewPref from "../models/UserResponseViewPref";
 import FormAccessGrant from "../models/FormAccessGrant";
 import { generateToken } from "../utils/generateToken";
 import { pickView, SYSTEM_DEFAULT } from "../services/responseView.service";
+import { startInFreshWindow } from "./helpers/freshWindow";
 
 let mongoServer: MongoMemoryServer;
 let owner: any, admin: any, editor: any, viewer: any, outsider: any, grantee: any, other: any;
@@ -213,6 +214,7 @@ describe("PUT /me/response-view and DELETE", () => {
   });
 
   it("is rate limited per user on writes", async () => {
+    await startInFreshWindow([60_000]); // the limiter counts in fixed one-minute windows: a burst across a boundary starts a new count
     process.env.USER_RATE_LIMIT_MAX = "3";
     try {
       const codes: number[] = [];

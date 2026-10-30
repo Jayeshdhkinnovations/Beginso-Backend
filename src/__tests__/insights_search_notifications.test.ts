@@ -32,6 +32,7 @@ import { sendActivityEmails, signUnsubscribeToken } from "../services/notificati
 import { clearRateLimitStore } from "../middleware/rateLimiter";
 import jwt from "jsonwebtoken";
 import { migrateInsightsIndexes, rollbackInsightsIndexes } from "../scripts/migrateInsightsIndexes";
+import { startInFreshWindow } from "./helpers/freshWindow";
 
 let mongoServer: MongoMemoryServer;
 let owner: any, member: any, viewer: any, outsider: any, sharee: any, solo: any;
@@ -584,6 +585,7 @@ describe("BE 0.6 - GET /api/search permission filtering (security critical)", ()
   });
 
   it("is rate limited per user", async () => {
+    await startInFreshWindow([60_000]); // the limiter counts in fixed one-minute windows: a burst across a boundary starts a new count
     process.env.SEARCH_RATE_LIMIT_MAX = "3";
     await clearRateLimitStore();
     const codes: number[] = [];

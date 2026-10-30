@@ -36,7 +36,15 @@ jobs:
 
   deploy:
     needs: test
+    # The pm2 deploy runs only while the Docker deploy is NOT switched on. The repository variable DOCKER_DEPLOY_ENABLED ('true' turns the Docker
+    # deploy on, see deploy-docker.yml and docs/DOCKER.md) decides, and exactly one of the two backend deploys can ever run: unset or anything
+    # else means this one, as it always was.
+    if: ${{ vars.DOCKER_DEPLOY_ENABLED != 'true' }}
     runs-on: self-hosted
+    # Shared with the Docker deploy: two backend deploys never overlap, even at the moment the variable is flipped.
+    concurrency:
+      group: backend-deploy
+      cancel-in-progress: false
 
     steps:
       - name: Checkout Code

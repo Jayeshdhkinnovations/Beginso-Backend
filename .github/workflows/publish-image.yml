@@ -1,13 +1,21 @@
 name: Publish Docker Image
 
-# Manual only, off by default. Builds the Docker image and pushes it to GitHub Container Registry with two tags: sha-<short sha> and main.
-# Runs ONLY when someone starts it by hand (Actions -> Publish Docker Image -> Run workflow). Nothing is published automatically until the
-# owner decides to change `on:` to run after the main branch is green.
+# Builds the backend image and pushes it to GitHub Container Registry as ghcr.io/<owner>/beginso-backend:sha-<7 characters of the commit>, plus the moving
+# tag `main`. There is never a `latest` tag.
 #
-# What it needs (the BACKEND REPO OWNER does this once, a collaborator cannot):
+# Two ways it starts:
+#   1. AUTOMATIC, after the `ci` workflow finishes green on a push to main. Only when the repository variable DOCKER_DEPLOY_ENABLED is 'true'.
+#      It is the first step of the Docker deploy: ci -> Publish Docker Image -> Deploy Backend (Docker).
+#   2. BY HAND (Actions -> Publish Docker Image -> Run workflow), at any time, whatever the variable says. It only builds and pushes an image:
+#      it deploys nothing and touches no server, so it is safe before the cutover (the first test container needs an image to start).
+#
+# What it needs (the BACKEND REPO OWNER does this once):
 #   - Settings -> Actions -> General -> Workflow permissions: "Read and write permissions" (the job asks for `packages: write` below).
-#   - After the first publish: Packages -> beginso-backend -> Package settings -> link it to this repository, and keep it PRIVATE.
+#   - After the first publish: Packages -> beginso-backend -> Package settings -> link it to this repository and keep it PRIVATE.
 on:
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       ref:
@@ -20,16 +28,28 @@ permissions:
 
 jobs:
   publish:
+    # By hand: always. Automatic: only when the Docker deploy is switched on AND ci was green on a push to main.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (vars.DOCKER_DEPLOY_ENABLED == 'true' &&
+           github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # One build per commit; a newer commit does not cancel a build that is already pushing.
+    concurrency:
+      group: publish-image-${{ github.event.workflow_run.head_sha || inputs.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Check out the code
+      - name: Check out the commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
+          # After ci: exactly the commit ci ran on (github.sha would be the head of main, which may already have moved on).
+          ref: ${{ github.event.workflow_run.head_sha || inputs.ref }}
           persist-credentials: false
 
       - name: Work out the tags

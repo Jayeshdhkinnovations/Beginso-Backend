@@ -3,11 +3,17 @@
 # Nothing here is a real credential. The API runs with NODE_ENV=development, so the Firebase key is not needed (the app uses a dummy one
 # and warns) and the start-up check only warns. Real mail is not sent: SMTP points at a host that does not exist.
 # For a server, use docker-compose.prod.yml instead.
-name: beginso-backend-dev
+#
+# Everything this file creates is called beginso-api-dev... (project, containers, volumes, network, image) and carries the label
+# com.beginso.app=api, so it never mixes with other containers on the machine. The one published port is bound to 127.0.0.1 and set by the
+# one variable HOST_PORT.
+name: beginso-api-dev
 
 services:
   mongo:
     image: mongo:7
+    labels:
+      com.beginso.app: api
     restart: unless-stopped
     volumes:
       - mongo-data:/data/db
@@ -19,6 +25,9 @@ services:
       start_period: 20s
 
   api:
+    image: beginso-api-dev:local
+    labels:
+      com.beginso.app: api
     build:
       context: .
       args:
@@ -28,7 +37,7 @@ services:
       mongo:
         condition: service_healthy
     ports:
-      - "${HOST_PORT:-5000}:5000"
+      - "127.0.0.1:${HOST_PORT:-5000}:5000"
     environment:
       NODE_ENV: development
       PORT: "5000"
@@ -49,4 +58,16 @@ services:
 
 volumes:
   mongo-data:
+    name: beginso-api-dev-mongo-data
+    labels:
+      com.beginso.app: api
   uploads:
+    name: beginso-api-dev-uploads
+    labels:
+      com.beginso.app: api
+
+networks:
+  default:
+    name: beginso-api-dev
+    labels:
+      com.beginso.app: api

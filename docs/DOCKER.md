@@ -80,7 +80,7 @@ To run every proof (fresh build, non-root, no secret in the image, uploads survi
    sudo chmod 440 /opt/beginso-backend/secrets/serviceAccountKey.json
    ls -ln /opt/beginso-backend/secrets/serviceAccountKey.json      # expect: -r--r----- 1 1000 <deploy gid> ...
    ```
-   (uid 1000 reads it as owner; the deploy user reads it through the group; nobody else can.) The file must exist **before** the first start. If the errors below appear, the logs of the container (`docker logs beginso-backend`) say, by name:
+   (uid 1000 reads it as owner; the deploy user reads it through the group; nobody else can.) The file must exist **before** the first start. If the errors below appear, the logs of the container (`docker logs beginso-api`) say, by name:
 
    | Mistake | What the log says |
    |---|---|
@@ -111,7 +111,57 @@ Tags: `sha-<7 characters of the commit>` (use this one for deploys) and `main`. 
 
 Without a registry you can build on the server instead: `docker build --build-arg GIT_SHA=$(git rev-parse HEAD) -t beginso-backend:sha-$(git rev-parse --short=7 HEAD) .` and deploy that tag.
 
-**During the cutover window, `deploy.yml` must not run.** A push to `main` runs it, and its last steps are `pm2 restart onboarding-backend`: that would **start the old server again** next to the container (two processes running the timers, the old one with the old uploads). The **repo owner** disables it before section 7 (Actions → Deploy Backend → "…" → Disable workflow) and enables it again only after the Docker deployment is settled, or after a rollback.
+**During the cutover window, `deploy.yml` must not run.** A push to `main` runs it, and its last steps are `pm2 restart onboarding-backend`: that would **start the old server again** next to the container (two processes running the timers, the old one with the old uploads). The **repo owner** disables it before section 7 (Actions → Deploy Backend → "…" → Disable workflow) and enables it again only after the Docker deployment is settled, or after a rollback. (Once the automatic Docker deploy is switched on, section 11, `deploy.yml` skips itself and no longer needs to be disabled.)
+
+## 4b. Other containers on the VM  **[server]**
+
+The VM already runs other Docker containers that must not be affected. This setup is built to never touch them, and you can check that before every cutover.
+
+**What is ours, and only ours**
+
+| Object | Name | Label |
+|---|---|---|
+| Compose project | `beginso-api` (laptop: `beginso-api-dev`), fixed in the file, never taken from the folder name | |
+| Container | `beginso-api` (write-check container: `beginso-api-write-test`) | `com.beginso.app=api` |
+| Network | `beginso-api`, created and removed with the project | `com.beginso.app=api` |
+| Image | the registry name `ghcr.io/<owner>/beginso-backend:sha-<commit>` | `com.beginso.app=api`, built into the image |
+| Volumes | none on the server: the data is a folder, `/opt/beginso-backend/data` (a bind mount) | |
+
+**Rules, enforced by `scripts/check-docker-hygiene.sh` (it runs in CI and fails the build when one is broken)**
+
+- Nothing runs `docker system prune`, `docker image prune -a`, `docker volume prune`, `docker network prune` or any other prune without the label filter `com.beginso.app=api`. Nothing stops, kills or removes "all containers". Nothing restarts the Docker daemon.
+- Cleanup is `./scripts/deploy-docker.sh cleanup` (also run after every successful deploy). It removes only **stopped containers and images that carry our label**, keeps the **newest 5 image tags** and never the current or the previous one. Run it with `--dry-run` first to see the list.
+- Every published port is bound to `127.0.0.1` and set by one variable (below). The deploy checks the port **before it starts anything**: when something else holds it, it stops with a message and changes nothing.
+- **Docker must not be reinstalled, upgraded or restarted for this.** Restarting the daemon interrupts every container on the machine, and a reinstall can replace the daemon's settings. If Docker itself needs a change, that is a separate decision with whoever owns the other containers, not a step of this runbook.
+- To stop ours: `docker compose -f docker-compose.prod.yml down` (the fixed project name means exactly our container and network). Never `docker stop $(docker ps -q)`.
+
+**Check before the first start and before the cutover (changes nothing)**
+
+```
+cd /opt/beginso-backend
+./scripts/deploy-docker.sh check
+```
+
+It lists every container with its image, ports and status; every listening TCP port; whether `HOST_PORT` is free (or held by our own container); and the free memory, with a warning when less than the container limit (1536 MB) plus 512 MB is available. The same by hand:
+
+```
+docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'      # names and ports in use, ours is beginso-api
+docker ps -a --filter name=beginso-api                                              # our name is not taken by anything else
+sudo ss -ltnp                                                                       # who listens on which port
+docker network ls ; docker volume ls                                                # nothing of ours exists yet
+free -h ; docker stats --no-stream                                                  # memory left, and what the other containers use
+```
+
+If the port is taken the deploy ends with `PORT <n> IS ALREADY IN USE by something that is not beginso-api` and exit code 3. Choose another port: put `HOST_PORT=<free port>` in `/opt/beginso-backend/.deploy/env`, point the proxy at it, run again. Never stop the other container to make room. If the memory warning appears, do not cut over until the other containers' usage is understood.
+
+**Our ports** (all on `127.0.0.1`, each set by one variable)
+
+| Port | Variable | Used by |
+|---|---|---|
+| 5000 | `HOST_PORT` | the server container (the first test container uses 5001) |
+| 5002 | `WRITE_TEST_PORT` | the write-check container (section 8) |
+| 5000 | `HOST_PORT` | `docker compose up` on a laptop (`docker-compose.yml`) |
+| 55000 | `PROOF_PORT` | `scripts/docker-proof.sh` on a laptop |
 
 ## 5. Start the test container (background jobs OFF)  **[server]**
 
@@ -125,8 +175,9 @@ For the write checks (uploads, reports, exports) use a **separate test database*
 ```
 cd /opt/beginso-backend
 # copy docker-compose.prod.yml and scripts/ here from the repository (the deploy workflow does this for you)
+./scripts/deploy-docker.sh check          # section 4b: other containers, ports, free memory; changes nothing
 ./scripts/deploy-docker.sh deploy ghcr.io/<owner>/beginso-backend:sha-abc1234
-docker logs beginso-backend 2>&1 | grep "Background jobs"          # must say: Background jobs are OFF
+docker logs beginso-api 2>&1 | grep "Background jobs"          # must say: Background jobs are OFF
 curl http://127.0.0.1:5001/api/health                              # {"success":true,...,"commit":"abc1234"}
 ./scripts/deploy-docker.sh status
 ```
@@ -159,13 +210,13 @@ sort -k3 -n /var/log/beginso-pm2-usage.log | tail -1      # the line with the pe
 | `mem_limit` | peak memory (MB) × 1.5, never below 768 | peak 410 MB → 615 → set `768m` |
 | `cpus` | peak CPU (% of one core) ÷ 100 × 1.5, never below 1.0 | peak 80 % → 1.2 → set `1.5` |
 
-Change the two lines in `docker-compose.prod.yml` (the default there, `1536m` and `1.5`, is a guess from the code, not a measurement), redeploy the same tag, and watch `docker stats --no-stream beginso-backend` for the first week. Reports run inside this process (two at a time, `REPORT_CONCURRENCY`), so a limit set from a quiet week can be too low on a day with many exports: if the container is killed for memory (`docker inspect beginso-backend --format '{{.State.OOMKilled}}'` says `true`), raise it by 50 percent.
+Change the two lines in `docker-compose.prod.yml` (the default there, `1536m` and `1.5`, is a guess from the code, not a measurement), redeploy the same tag, and watch `docker stats --no-stream beginso-api` for the first week. Reports run inside this process (two at a time, `REPORT_CONCURRENCY`), so a limit set from a quiet week can be too low on a day with many exports: if the container is killed for memory (`docker inspect beginso-api --format '{{.State.OOMKilled}}'` says `true`), raise it by 50 percent.
 
 ## 7. The real cutover  **[server]**, with the repo owner's `deploy.yml` disabled (section 4)
 
 Do it at a quiet time. The site is down from step 2 until step 9 (a few minutes, mostly the copy). Run the commands as `deploy` (`sudo` where shown). Replace the image tag.
 
-1. **Say it is starting** and check the old server is the live one: `curl -s http://127.0.0.1:5000/` shows the commit; `docker logs beginso-backend 2>&1 | grep "Background jobs"` still says OFF.
+1. **Say it is starting** and check the old server is the live one: `curl -s http://127.0.0.1:5000/` shows the commit; `docker logs beginso-api 2>&1 | grep "Background jobs"` still says OFF.
 2. **Stop the old server (stops its timers and its writes):**
    ```
    sudo pm2 stop onboarding-backend
@@ -192,12 +243,12 @@ Do it at a quiet time. The site is down from step 2 until step 9 (a few minutes,
 7. **Start the container:**
    ```
    cd /opt/beginso-backend && ./scripts/deploy-docker.sh deploy ghcr.io/<owner>/beginso-backend:sha-abc1234
-   docker logs beginso-backend 2>&1 | grep "Background jobs"          # must say: Background jobs are ON
+   docker logs beginso-api 2>&1 | grep "Background jobs"          # must say: Background jobs are ON
    curl -s http://127.0.0.1:5001/ | grep abc1234                      # the live commit
    ```
 8. **Look before the proxy changes:** through the test frontend (or `curl`), open a form, open an existing uploaded file (it must download and match its checksum).
 9. **Switch the proxy** from the old port to the container's: change the upstream from `127.0.0.1:5000` to `127.0.0.1:5001`, then `sudo nginx -t && sudo systemctl reload nginx` (Caddy: `sudo systemctl reload caddy`).
-10. **Check the live site:** sign in, open a form, submit a test response with a file, open the file, export a PDF. Watch `docker logs -f beginso-backend` for errors for ten minutes.
+10. **Check the live site:** sign in, open a form, submit a test response with a file, open the file, export a PDF. Watch `docker logs -f beginso-api` for errors for ten minutes.
 11. **Leave pm2 stopped, not deleted** (`pm2 stop`, never `pm2 delete`), and keep `/root/Onboarding-backend/uploads` untouched for a few weeks: they are the way back. Do **not** run `pm2 start` while the container is live.
 
 ## 8. Write checks on a separate test database  **[server]**
@@ -206,7 +257,7 @@ Do this **before** the cutover, with a second container on a **throwaway databas
 
 ```
 mkdir -p /tmp/dtest && sudo chown 1000:1000 /tmp/dtest
-docker run -d --name beginso-write-test -p 127.0.0.1:5002:5000 -v /tmp/dtest:/data \
+docker run -d --label com.beginso.app=api --name beginso-api-write-test -p 127.0.0.1:${WRITE_TEST_PORT:-5002}:5000 -v /tmp/dtest:/data \
   --env-file /opt/beginso-backend/.env \
   -e MONGODB_URI='<the SAME cluster, database name beginso_docker_test>' \
   -e BACKGROUND_JOBS=off \
@@ -217,13 +268,13 @@ docker run -d --name beginso-write-test -p 127.0.0.1:5002:5000 -v /tmp/dtest:/da
 The manual checklist (tick each):
 
 1. **Upload a file:** in the test frontend create a form with a file question, open its public page and submit a response with a small file. Find it in the volume: `sudo find /tmp/dtest/uploads -type f -newer /opt/beginso-backend/.env` (it is under `<user id>/<form id>/responses/<response id>/`). Note its checksum: `sudo sha256sum <that path>`.
-2. **Recreate the container:** `docker rm -f beginso-write-test`, then run the same `docker run` command again.
+2. **Recreate the container:** `docker rm -f beginso-api-write-test`, then run the same `docker run` command again.
 3. **Download the same file through the API:** in the test frontend open that response and download the file (or `GET /api/responses/<response id>/file/<file id>` with the session). `sha256sum` of the download must equal the checksum from step 1.
 4. **Run one report:** Exports → a CSV, then a PDF of those responses. Both must reach `Completed`. Find them: `sudo ls -l /tmp/dtest/uploads/reports/`.
 5. **Run one export:** Settings → export workspace data. Find it: `sudo ls -l /tmp/dtest/uploads/exports/`.
-6. **Stop it gracefully:** `time docker stop beginso-write-test`; `docker inspect beginso-write-test --format '{{.State.ExitCode}}'` says `0`, and the stop took well under 30 seconds.
+6. **Stop it gracefully:** `time docker stop beginso-api-write-test`; `docker inspect beginso-api-write-test --format '{{.State.ExitCode}}'` says `0`, and the stop took well under 30 seconds.
 7. **Confirm from outside that the container's port is closed** (below).
-8. Clean up: `docker rm -f beginso-write-test; sudo rm -rf /tmp/dtest`, and drop the `beginso_docker_test` database.
+8. Clean up: `docker rm -f beginso-api-write-test; sudo rm -rf /tmp/dtest`, and drop the `beginso_docker_test` database.
 
 **Confirm from outside that port 5001 (and 5002) is closed.** From **another machine** (a laptop, not the server):
 
@@ -236,7 +287,7 @@ On the server, the listener must be on the loopback only:
 
 ```
 sudo ss -ltnp | grep -E ":500[12]"        # must show 127.0.0.1:5001 , never 0.0.0.0:5001 or *:5001
-docker port beginso-backend               # 5000/tcp -> 127.0.0.1:5001
+docker port beginso-api               # 5000/tcp -> 127.0.0.1:5001
 ```
 
 Do not rely on `ufw` for this: Docker writes its own firewall rules for published ports and they bypass `ufw`. Only the `127.0.0.1:` in the port mapping keeps the port private. Port 80/443 stay with the proxy.
@@ -274,11 +325,13 @@ Rolling back **between Docker tags** (a bad image, same uploads): `./scripts/dep
 
 | Task | Command |
 |---|---|
-| Logs (live) | `docker logs -f --tail 200 beginso-backend` |
+| Logs (live) | `docker logs -f --tail 200 beginso-api` |
 | Is it healthy? | `docker ps` (the Status column says `healthy`), or `curl http://127.0.0.1:5001/api/health` |
 | Update | publish a new image, then `./scripts/deploy-docker.sh deploy ghcr.io/<owner>/beginso-backend:sha-<new>` |
 | Roll back an image | `./scripts/deploy-docker.sh rollback` |
 | What is running | `./scripts/deploy-docker.sh status` |
+| Other containers, ports, free memory | `./scripts/deploy-docker.sh check` (changes nothing; section 4b) |
+| Remove our old images | `./scripts/deploy-docker.sh cleanup --dry-run`, then `./scripts/deploy-docker.sh cleanup` (only our label, keeps the newest 5 tags; also runs after each deploy) |
 | Back up the uploads | `tar -czf uploads-$(date +%F).tar.gz -C /opt/beginso-backend/data uploads` (or rsync the folder to another machine); a database backup is separate (MongoDB Atlas) |
 | Change a setting | edit `/opt/beginso-backend/.env`, then redeploy the same tag (`deploy` with the current tag restarts it) |
 
@@ -286,12 +339,71 @@ A deploy is a **few seconds** of refused connections: one container behind one p
 
 **If the health check fails:**
 
-1. `docker logs --tail 200 beginso-backend`. The first lines say what the container refused: a **missing setting is named** (`JWT_SECRET is missing (...)`), the Firebase key is named (see the table in section 3), a database that cannot be reached shows "MongoDB connection attempt N failed" (it retries 10 times, 5 seconds apart).
+1. `docker logs --tail 200 beginso-api`. The first lines say what the container refused: a **missing setting is named** (`JWT_SECRET is missing (...)`), the Firebase key is named (see the table in section 3), a database that cannot be reached shows "MongoDB connection attempt N failed" (it retries 10 times, 5 seconds apart).
 2. The deploy script has already started the previous tag again. Confirm with `./scripts/deploy-docker.sh status`.
 3. Missing setting: add it to `.env`, redeploy. Database: check the Atlas IP allow-list includes this server. Permission error writing `/data`: `sudo chown -R 1000:1000 /opt/beginso-backend/data`.
 4. Still stuck: `./scripts/deploy-docker.sh rollback`, or the full rollback to pm2 (section 9).
 
-## 11. Decisions and limits
+## 11. Automatic Docker deploy (OFF by default)  **[repo owner]**
+
+After a push to `main` the whole Docker deploy can run by itself. It is **off** until the repository variable `DOCKER_DEPLOY_ENABLED` is exactly `true`. Nothing is enabled by merging the workflows.
+
+```
+push to main -> ci (green) -> Publish Docker Image (sha-<commit>) -> Deploy Backend (Docker) on the VM
+```
+
+| `DOCKER_DEPLOY_ENABLED` | `Deploy Backend` (pm2, `deploy.yml`) | `Publish Docker Image` (after ci) | `Deploy Backend (Docker)` |
+|---|---|---|---|
+| not set, empty, `false`, anything but `true` | **runs** (as it always did) | does not run by itself | does not run, not even by hand |
+| `true` | skips itself | runs | **runs** |
+
+The two deploys can never run together: the pm2 job has the opposite condition, and both jobs share the concurrency group `backend-deploy`, so even at the moment the variable is flipped they queue one behind the other. A **manual** run of `Publish Docker Image` is allowed whatever the variable says: it only builds and pushes an image and touches no server (the test container of section 5 needs one before the switch is on).
+
+**The runner is the VM.** `deploy.yml` shows it: its `self-hosted` job copies into `/root/Onboarding-backend`, runs `pm2 restart` and curls `127.0.0.1:5000`, which only works on the machine that runs the app. The Docker deploy job runs on the same runner.
+
+### What the Docker deploy does
+
+1. Pulls `ghcr.io/<owner>/beginso-backend:sha-<commit>` (the image the publish step built for exactly the commit ci passed; there is no `latest`).
+2. Writes down the tag now running as the **previous** one (`.deploy/previous` on the VM; the previous image stays on the disk).
+3. Starts the new tag with `docker-compose.prod.yml`.
+4. Waits for the health check (90 s), then checks that `GET /` reports **this commit**.
+5. If either check fails, or anything else goes wrong: **starts the previous tag again** and fails the job: red, with an error annotation and a summary that says what was wanted. A first deploy with no previous tag just stays red.
+
+### What stays on the VM and what GitHub holds
+
+- On the VM only: the env file (`/opt/beginso-backend/.env`, `chmod 600`), the Firebase key, the uploads volume, `.deploy/`. The workflow copies only `docker-compose.prod.yml` and the two scripts into `/opt/beginso-backend` and never reads or prints the env file.
+- GitHub holds **no secret for this**: the job's own `GITHUB_TOKEN` (permission `packages: read`, valid for the job) logs in to the registry to pull the image, and the job logs out at the end. No personal access token is stored. (The package must be linked to this repository, section 4.)
+
+### Which runner user needs Docker, and the risk
+
+The user the Actions runner service runs as. Find it on the VM: `ps -o user= -C Runner.Listener` (or `systemctl status 'actions.runner.*'`). From `deploy.yml` (it writes into `/root/Onboarding-backend` and runs `pm2`) it is almost certainly **root**: then it needs nothing added. If it is **not** root, it must be allowed to use Docker: `sudo usermod -aG docker <runner-user>`, then restart the runner service.
+
+**The risk:** membership of the `docker` group is **root-equivalent on that machine**: whoever can run a job on this runner (anyone who can push a workflow to this repository, or approve a pull request that runs there) can start a container that mounts the whole disk and become root. That is why (a) the Docker deploy job runs only from `main` after ci, (b) it uses the `production` Environment, where **required reviewers** can be added, and (c) `ci` and the pull-request checks run on GitHub's own runners, never on the VM.
+
+### Switching it on, and where it fits in the cutover
+
+Only after the **manual cutover (section 7) has worked and settled** (the container is the live backend, the uploads are in the volume, `BACKGROUND_JOBS` is on). Never before: switching it on while pm2 is the live server would deploy a container next to it.
+
+1. **[repo owner]** Create the Environment: Settings → Environments → New environment → `production`. Add **Required reviewers** (yourself) if you want every deploy to wait for a click.
+2. **[server]** Check the runner user and Docker (above), and that `/opt/beginso-backend/.deploy/env` has `UPLOADS_PATH=/opt/beginso-backend/data`, `BACKGROUND_JOBS=on` and the `HOST_PORT` the proxy uses.
+3. **[repo owner]** Set the variable: Settings → Secrets and variables → Actions → Variables → New repository variable → name `DOCKER_DEPLOY_ENABLED`, value `true`.
+4. Push a small change to `main` (or run `Deploy Backend (Docker)` by hand with the tag that is already running) and watch the run: ci, Publish Docker Image, Deploy Backend (Docker). Check the site, `docker ps`, and `curl http://127.0.0.1:<port>/`.
+
+**By hand** (Actions → Deploy Backend (Docker) → Run workflow, only while the variable is `true`): `deploy` with a **tag** (`sha-abc1234`, or a full image name) deploys any tag, **an earlier one included: that is the rollback to a tag**. `rollback` starts the tag that ran before the current one.
+
+### Going back to pm2 by clearing the variable
+
+Clearing the variable stops the **automatic** Docker deploys and makes `deploy.yml` run again on the next push. It does **not** stop the container or start pm2 by itself, so do it in this order:
+
+1. **[repo owner]** Delete the variable (Settings → Secrets and variables → Actions → Variables → `DOCKER_DEPLOY_ENABLED` → delete) and wait for any Docker deploy that is running to finish (they never overlap).
+2. **[server]** Roll back the server: section 9, steps 1 to 6 (stop the container, copy the newer uploads back, verify, `pm2 start onboarding-backend`, switch the proxy back, check).
+3. The next push to `main` deploys with pm2 again. Push a small change and confirm that `Deploy Backend` ran and `Deploy Backend (Docker)` did not.
+
+### Not verified
+
+The workflows cannot be run until the variable is `true`, so the first real run is the test. What was checked before: the workflow files are valid, every action they use exists, the CI `docker` job (image build, health, commit, graceful stop) passes, and `scripts/deploy-docker.sh` has been run only against a laptop's Docker (`docker-proof.sh`), not on the VM.
+
+## 12. Decisions and limits
 
 - **MongoDB stays on Atlas** (`MONGODB_URI`). It is not containerised for production; the dev compose file has its own MongoDB for local work only.
 - **Uploads stay on local disk** (a volume). Moving them to object storage is a separate, later plan.

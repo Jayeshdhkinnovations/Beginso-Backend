@@ -9,12 +9,19 @@
 #   .env                         the settings, readable only by the deploy user (chmod 600)
 #   UPLOADS_PATH                 a folder for /data (uploads, reports, exports); owned by uid 1000, the `node` user in the image
 #   FIREBASE_KEY_PATH            the Firebase service-account key file, mounted read-only
-name: beginso-backend
+# THE VM ALSO RUNS OTHER DOCKER CONTAINERS: everything this file creates is called beginso-api (project, container, network) and carries the
+# label com.beginso.app=api, so it can be found, cleaned up and left alone by that name and label only. The project name is fixed here, not taken
+# from the folder name, so no other compose project can ever be confused with it.
+name: beginso-api
 
 services:
   api:
     image: ${BACKEND_IMAGE:?set BACKEND_IMAGE to an image tag, for example ghcr.io/owner/beginso-backend:sha-abc1234}
-    container_name: beginso-backend
+    container_name: beginso-api
+    labels:
+      com.beginso.app: api
+    networks:
+      - default
     restart: unless-stopped
     env_file: ./.env
     environment:
@@ -22,8 +29,9 @@ services:
       PORT: "5000"
       # `off` for the first test container (see docs/DOCKER.md): only ONE process may run the timers. `on` for the live one.
       BACKGROUND_JOBS: ${BACKGROUND_JOBS:-on}
-    # Published on the loopback only: the proxy (nginx, Caddy) on the same host is the one way in. The app trusts TRUST_PROXY_HOPS
-    # proxies for the client IP, so it must never be reachable directly from the internet.
+    # The ONLY published port, on the loopback only, set by the ONE variable HOST_PORT (default 5000; the first test container uses 5001).
+    # The proxy (nginx, Caddy) on the same host is the one way in. The app trusts TRUST_PROXY_HOPS proxies for the client IP, so it must
+    # never be reachable directly from the internet. scripts/deploy-docker.sh checks that the port is free BEFORE it starts anything.
     ports:
       - "127.0.0.1:${HOST_PORT:-5000}:5000"
     volumes:
@@ -54,3 +62,10 @@ services:
         max-size: "10m"
         max-file: "5"
     # The health check is the one built into the image (GET /api/health).
+
+# Our own network, named and labelled, so it is not the shared default of the machine and `docker compose down` removes exactly this one.
+networks:
+  default:
+    name: beginso-api
+    labels:
+      com.beginso.app: api

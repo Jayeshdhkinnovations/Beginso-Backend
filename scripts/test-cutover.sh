@@ -6,7 +6,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 fails=0
 ok() { echo "PASS  $1"; }
-no() { echo "FAIL  $1"; fails=$((fails + 1)); }
+no() { echo "FAIL  $1"; fails=$((fails + 1)); [ -f "${T:-}/out.txt" ] && { echo "      what the script printed:"; tail -n 12 "$T/out.txt" | sed "s/^/      | /"; echo "      calls:"; tail -n 12 "$T/state/calls" | sed "s/^/      | /"; }; }
 check() { if eval "$2"; then ok "$1"; else no "$1"; fi; }
 
 # one fresh fake VM per case: T/deploy (the deploy folder), T/old (the old app), T/bin (the stand-in commands), T/state

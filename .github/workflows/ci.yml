@@ -84,6 +84,9 @@ jobs:
       - name: This machine's other containers are safe (no unfiltered prune, fixed project names, loopback ports)
         run: ./scripts/check-docker-hygiene.sh
 
+      - name: The cutover script puts the old backend back by itself when a check fails (stand-in commands, no server)
+        run: bash scripts/test-cutover.sh
+
       - name: The pre-start port check refuses a port somebody else holds, and says so
         run: |
           python3 -m http.server 5099 --bind 127.0.0.1 >/dev/null 2>&1 &

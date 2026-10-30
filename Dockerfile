@@ -48,6 +48,8 @@ FROM ${NODE_IMAGE} AS runtime
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=
 LABEL org.opencontainers.image.title="beginso-backend"
+# The marker every Beginso image, container and network carries. Cleanup on a shared machine filters by it (docs/DOCKER.md) and by nothing else.
+LABEL com.beginso.app="api"
 LABEL org.opencontainers.image.revision="${GIT_SHA}"
 LABEL org.opencontainers.image.created="${BUILD_TIME}"
 

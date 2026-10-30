@@ -126,11 +126,11 @@ jobs:
           PLAN_ACTION: ${{ steps.plan.outputs.action }}
           PLAN_IMAGE: ${{ steps.plan.outputs.image }}
         run: |
-          echo "::error title=Docker deploy FAILED::${PLAN_ACTION} ${PLAN_IMAGE}: the new version did not pass its health or commit check. The previous version was put back (see the log above). Read: docker logs beginso-backend"
+          echo "::error title=Docker deploy FAILED::${PLAN_ACTION} ${PLAN_IMAGE}: the new version did not pass its health or commit check. The previous version was put back (see the log above). Read: docker logs beginso-api"
           {
             echo "## Docker deploy FAILED"
             echo "- Wanted: \`${PLAN_ACTION} ${PLAN_IMAGE}\`"
-            echo "- The previous version was started again by the deploy script. Check \`./scripts/deploy-docker.sh status\` on the VM and \`docker logs beginso-backend\`."
+            echo "- The previous version was started again by the deploy script. Check \`./scripts/deploy-docker.sh status\` on the VM and \`docker logs beginso-api\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log out of the registry

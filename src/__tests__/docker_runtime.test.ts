@@ -109,12 +109,12 @@ describe("docker/preflight.js (runs before the server inside the container)", ()
   };
 
   it("in production names every missing setting, exits 1, and never prints a value", () => {
-    const { JWT_SECRET: _a, SMTP_PASS: _b, ...rest } = complete;
+    const { JWT_SECRET: _a, PROXY_SHARED_SECRET: _b, ...rest } = complete;
     void _a; void _b;
     const result = run(rest);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("JWT_SECRET is missing");
-    expect(result.stderr).toContain("SMTP_PASS is missing");
+    expect(result.stderr).toContain("PROXY_SHARED_SECRET is missing");
     expect(result.stderr).not.toContain("must-never-be-printed");
   });
 
@@ -133,6 +133,28 @@ describe("docker/preflight.js (runs before the server inside the container)", ()
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
       fs.rmSync(folderOnly, { recursive: true, force: true });
+    }
+  });
+
+  it("a server that sets only the three required settings (the live one sets no mail settings and no APP_URL) starts, with a note", () => {
+    const fs = require("fs"); const os = require("os");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preflight-min-"));
+    const file = path.join(dir, "key.json");
+    fs.writeFileSync(file, "{}");
+    try {
+      const result = run({
+        NODE_ENV: "production",
+        JWT_SECRET: "value-that-must-never-be-printed-1",
+        MONGODB_URI: "mongodb://value-that-must-never-be-printed-2",
+        PROXY_SHARED_SECRET: "value-that-must-never-be-printed-3",
+        PREFLIGHT_KEY_PATH: file,
+      });
+      expect(result.status).toBe(0);
+      expect(result.stderr).not.toContain("Refusing to start");
+      expect(result.stdout + result.stderr).toContain("APP_URL");
+      expect(result.stdout + result.stderr).not.toContain("must-never-be-printed");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 

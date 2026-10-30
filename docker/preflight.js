@@ -9,19 +9,28 @@
 const fs = require("fs");
 const path = require("path");
 
+// What the application cannot run correctly without, and has no safe default for. Everything else the code has a default for (see the list below),
+// so a server that does not set it behaves exactly as it does under pm2. The live Beginso server's .env sets none of the mail settings and no APP_URL:
+// requiring them here would have kept the container from starting on it.
 const REQUIRED = [
   ["JWT_SECRET", "signs every session"],
   ["MONGODB_URI", "the database connection string"],
   ["PROXY_SHARED_SECRET", "lets the backend believe the real client IP sent by the frontend proxy (rate limits and IP hashes depend on it)"],
-  ["APP_URL", "the address used in links inside emails"],
-  ["SMTP_HOST", "outgoing mail (verification codes, invitations)"],
-  ["SMTP_USER", "outgoing mail"],
-  ["SMTP_PASS", "outgoing mail"],
-  ["SMTP_FROM_EMAIL", "outgoing mail"],
 ];
 
-// Said once, never fatal: the defaults are safe for one proxy in front of the container, and the runbook explains the rest.
-const ADVISED = ["TRUST_PROXY_HOPS", "CORS_ORIGINS", "SUPER_ADMIN_EMAILS", "UPLOAD_DIR"];
+// Said once, never fatal: each has a default in the code (APP_URL https://beginso.com, SMTP_HOST email.toowix.com, SMTP_USER and SMTP_PASS empty =
+// a relay without login, SMTP_FROM_EMAIL no-reply@beginso.com, one proxy hop), and the runbook explains the rest.
+const ADVISED = [
+  "TRUST_PROXY_HOPS",
+  "CORS_ORIGINS",
+  "SUPER_ADMIN_EMAILS",
+  "UPLOAD_DIR",
+  "APP_URL",
+  "SMTP_HOST",
+  "SMTP_USER",
+  "SMTP_PASS",
+  "SMTP_FROM_EMAIL",
+];
 
 // PREFLIGHT_KEY_PATH exists only so the tests can point at a temporary file.
 const FIREBASE_KEY = process.env.PREFLIGHT_KEY_PATH || path.join(__dirname, "dist", "config", "firebase", "serviceAccountKey.json");

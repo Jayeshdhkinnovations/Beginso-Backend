@@ -19,6 +19,9 @@ import { Event } from "../models/Event";
 import Template from "../models/Template";
 import { generateToken } from "../utils/generateToken";
 
+// Every test shares one beforeAll that builds the indexes of 7 models; on a busy machine that alone has taken over the 120 s default. This suite only.
+jest.setTimeout(300_000);
+
 process.env.JWT_SECRET = "test-jwt-secret-key-for-event-coverage-suite";
 
 let mongoServer: MongoMemoryServer;

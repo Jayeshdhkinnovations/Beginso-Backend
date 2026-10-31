@@ -34,9 +34,11 @@ const fetchReport = async (body: any) => {
   const created = await request(app).post("/api/reports").set(personal(alice)).send(body);
   expect(created.status).toBe(202);
   const id = created.body.report.id;
-  for (let i = 0; i < 200; i++) {
+  // Wait for the background job by time, not by a count of polls: a busy machine answers each poll slowly.
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
     const r = await request(app).get(`/api/reports/${id}`).set(personal(alice));
-    if (r.body.report?.status === "completed") break;
+    if (r.body.report?.status === "completed" || r.body.report?.status === "failed") break;
     await new Promise((res) => setTimeout(res, 50));
   }
   return request(app).get(`/api/reports/${id}/file`).set(personal(alice)).buffer(true).parse((res, cb) => {

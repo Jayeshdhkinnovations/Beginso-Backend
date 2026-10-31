@@ -167,7 +167,12 @@ describe("Bulk endpoint (B2.1)", () => {
 
   it("a filter that matches more than the filter limit is refused with a message that says the limit, and nothing is touched", async () => {
     const huge: any = await Form.create({ title: "Huge form", workspaceId: (await Form.findById(formId))!.workspaceId, status: "published", publishedSlug: "ro-huge-form", fields: [{ fieldId: "f1", label: "Name", type: "short_text", required: false }] });
-    await ResponseModel.insertMany(Array.from({ length: MAX_BULK_FILTER_SIZE + 1 }, () => ({ formId: huge._id, answers: {}, status: "new" })));
+    // One raw insert, with the defaults the model would add: validating and defaulting 5,001 documents one by one took about 20 s on an idle
+    // machine and over 5 minutes on a busy one, and this test only needs the rows to exist.
+    const now = new Date();
+    await ResponseModel.collection.insertMany(
+      Array.from({ length: MAX_BULK_FILTER_SIZE + 1 }, () => ({ formId: huge._id, answers: {}, status: "new", submittedAt: now, deletedAt: null, isTest: false, tagIds: [], createdAt: now, updatedAt: now }))
+    );
     const res = await request(app)
       .post(`/api/responses/bulk`)
       .set("Authorization", `Bearer ${ownerToken}`)

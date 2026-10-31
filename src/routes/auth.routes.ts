@@ -11,7 +11,7 @@ import {
   notifyPasswordChanged,
 } from "../controllers/auth.controller";
 import { getSessions, revokeSession, revokeOtherSessions } from "../controllers/session.controller";
-import { protect, blockSuspended } from "../middleware/auth.middleware";
+import { protect, optionalProtect, blockSuspended } from "../middleware/auth.middleware";
 import { authRateLimiter, emailTargetRateLimiter } from "../middleware/rateLimiter";
 import { requirePermission } from "../middleware/permission.middleware";
 
@@ -23,8 +23,7 @@ router.post("/email-verification/reveal", authRateLimiter, revealEmailCode);
 router.post("/email-verification/verify", authRateLimiter, verifyEmailCode);
 router.post("/forgot-password", authRateLimiter, emailTargetRateLimiter, requestForgotPassword);
 router.post("/confirm-password-reset", authRateLimiter, emailTargetRateLimiter, confirmPasswordReset);
-router.post("/password-changed", authRateLimiter, emailTargetRateLimiter, notifyPasswordChanged);
-router.post("/notify-password-changed", authRateLimiter, emailTargetRateLimiter, notifyPasswordChanged);
+router.post("/password-changed", authRateLimiter, emailTargetRateLimiter, optionalProtect as any, notifyPasswordChanged);
 router.post("/logout", protect as any, blockSuspended as any, logout);
 router.get("/me", protect as any, blockSuspended as any, getMe);
 router.get("/sessions", protect as any, blockSuspended as any, requirePermission("sessions:read") as any, getSessions);

@@ -247,7 +247,7 @@ export class SuperAdminService {
 
     const total = await SystemLog.countDocuments(query);
     const logs = await SystemLog.find(query)
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit);
 
@@ -320,7 +320,7 @@ export class SuperAdminService {
 
     const total = await MailLog.countDocuments(query);
     const logs = await MailLog.find(query)
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit);
 
@@ -360,7 +360,7 @@ export class SuperAdminService {
 
     const total = await User.countDocuments(query);
     const admins = await User.find(query)
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit)
       .populate("workspaceId");

@@ -45,6 +45,18 @@ Required / security-relevant (names read from `src/`):
 
 Cookie flags: `auth.controller.ts` sets the `token` cookie with `httpOnly: true, secure: true, sameSite: "lax"` unconditionally (30 days). To verify on the deployed service: log in via the real HTTPS host and check the `Set-Cookie` header (`curl -si` the session endpoint or browser devtools) shows `HttpOnly; Secure; SameSite=Lax`. `secure: true` means plain-HTTP local tests will not keep the cookie. Also confirm no secrets or raw IPs appear in Render logs (errors now log `ipHash`, not `ip`).
 
+### First super admin, and scripts that refuse production
+
+`npm run seed:superadmin` is the only way to create the first super admin (the admin console's own "admins" screen needs one to exist). Because it must be able to run against a real database, it is **not blocked** in production, but it refuses to start unless that run is explicit:
+
+```
+NODE_ENV=production ALLOW_SUPERADMIN_BOOTSTRAP=yes SUPER_ADMIN_EMAILS=you@example.com SUPER_ADMIN_PASSWORD=... npm run seed:superadmin
+```
+
+Without `ALLOW_SUPERADMIN_BOOTSTRAP=yes` it prints `Refusing to create or update super admins` and exits 1 before it loads anything or connects. Set the flag for that one command only, not in the environment file.
+
+The test-data scripts (`seed:field-showcase`, `seed:form`, `seed:test-users`, `seed:user-responses`, `seed:v2a-volume`, `time:search-analytics`) refuse to run when `NODE_ENV=production` (exit 1, `Refusing to run <script>`). `ALLOW_DESTRUCTIVE_SEED=yes` overrides that, and should be used only against a copy of the data. The migration, backfill and reconcile scripts are meant for production and have no such guard.
+
 ## 4. Health check
 
 `curl https://<api-host>/api/health` returns `success: true` plus `commit` (the short id from `dist/version.json`, written by the deploy workflow; the commit message and deploy time are only on the authenticated `/api/superadmin/health`). After deploy, `commit` must equal the commit you intended; `null` means the version file was not written.

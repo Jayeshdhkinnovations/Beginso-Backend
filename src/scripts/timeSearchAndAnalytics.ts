@@ -6,6 +6,7 @@
 //                                               at production. A URI that does not look local/test/staging/clone is refused.
 // Env: WORKSPACES (default 10), FORMS (per workspace, 10), RESPONSES (per form, 300), RUNS (per endpoint, 40).
 // Budget to compare with: no query > 100 ms, search p95 within the OQ-5 figure (300 ms in tasks.md).
+import "./_refuseProduction"; // must stay the first import: stops the script before anything else loads
 import mongoose from "mongoose";
 import request from "supertest";
 import app from "../app";

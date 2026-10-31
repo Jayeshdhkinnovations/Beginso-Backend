@@ -1,3 +1,4 @@
+import "./_bootstrapGuard"; // must stay the first import: stops the script before anything else loads
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import User from "../models/User";

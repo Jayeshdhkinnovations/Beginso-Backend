@@ -7,3 +7,11 @@ export const refuseInProduction = (what: string): void => {
     process.exit(1);
   }
 };
+
+// For the one script that must be able to run in production (the first super admin): it needs an explicit flag for that run, not a silent pass.
+export const requireBootstrapFlag = (what: string): void => {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_SUPERADMIN_BOOTSTRAP !== "yes") {
+    console.error(`Refusing to ${what}: NODE_ENV is "production". If you really are creating the first super admin, set ALLOW_SUPERADMIN_BOOTSTRAP=yes for this one run.`);
+    process.exit(1);
+  }
+};

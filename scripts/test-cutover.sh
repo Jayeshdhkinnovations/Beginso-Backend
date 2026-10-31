@@ -49,6 +49,12 @@ case "$1 $2" in
 esac
 exit 0
 EOF
+  # chown to uid 1000 needs root; a CI runner is not root, and the test must not depend on who runs it
+  cat > "$T/bin/chown" <<'EOF'
+#!/usr/bin/env bash
+echo "chown $*" >> "$FAKE_STATE/calls"
+exit 0
+EOF
   cat > "$T/bin/rsync" <<'EOF'
 #!/usr/bin/env bash
 echo "rsync $*" >> "$FAKE_STATE/calls"
@@ -97,6 +103,7 @@ fresh; run "$IMG"
 check "it succeeds" '[ $CODE -eq 0 ] && grep -q "DONE" "$T/out.txt"'
 check "in the right order: pull, pm2 stop, remove OUR container, copy, deploy" 'calls | grep -nE "docker pull|pm2 stop|docker rm -f beginso-api|rsync -a|deploy-docker deploy" | cut -d: -f2 | awk "{print \$1\$2}" | tr "\n" " " | grep -q "dockerpull pm2stop dockerrm rsync-a deploy-dockerdeploy"'
 check "the uploads were copied, identical" 'diff -r "$T/old/uploads" "$T/deploy/data/uploads" >/dev/null'
+check "the volume is handed to the container's user (uid 1000) after the copy" 'calls | grep -q "chown -R 1000:1000 $T/deploy/data"'
 check "the settings are the live ones" 'grep -q "^HOST_PORT=5000$" "$T/deploy/.deploy/env" && grep -q "^BIND_ADDRESS=0.0.0.0$" "$T/deploy/.deploy/env" && grep -q "^BACKGROUND_JOBS=on$" "$T/deploy/.deploy/env" && grep -q "^UPLOADS_PATH=$T/deploy/data$" "$T/deploy/.deploy/env"'
 check "pm2 is stopped, never deleted or restarted" 'grep -q stopped "$T/state/pm2" && ! calls | grep -qE "pm2 (delete|start|restart)"'
 check "it only ever removes OUR container, and never prunes" '! calls | grep -E "docker rm" | grep -qv "beginso-api" && ! calls | grep -q prune'

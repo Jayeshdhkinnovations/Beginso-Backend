@@ -1,6 +1,6 @@
 # Beginso Backend
 
-**Status: Beginso V2.0.0 complete, 31 Oct 2026** (declared by the owner). The `version` field in `package.json` is `1.0.0` and is set to the release number in a separate step. Status, open items and verification: `Beginso-Report/PROJECT_STATUS.md`.
+**Status: V2 code-complete 31 Oct 2026, release gates open** (declared complete by the owner). The `version` field in `package.json` is `1.0.0`; no release number has been set yet. Status, open items and verification: `Beginso-Report/PROJECT_STATUS.md`.
 
 *Last updated 31 Oct 2026, checked against `main` `77969ed`: type-check, lint and build clean; 115 test suites and 1,403 tests pass; the printed Express route table has 265 routes; `GET /api/health` answers 200.*
 

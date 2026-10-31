@@ -922,7 +922,9 @@ describe("Form API Property-Based Testing", () => {
           expect(res.body.response._id.toString()).toBe(originalResp._id.toString());
           expect(res.body.response.formId.toString()).toBe(form._id.toString());
           expect(res.body.response.answers.PBTKey).toBe("PBTValue123");
-          expect(res.body.response.ipHash).toBe("1111222233334444");
+          // ipHash is never returned any more, and the status change must not have touched the stored value
+          expect(res.body.response.ipHash).toBeUndefined();
+          expect(((await ResponseModel.findById(originalResp._id).lean()) as any).ipHash).toBe("1111222233334444");
         }
       ),
       { numRuns: 10 }

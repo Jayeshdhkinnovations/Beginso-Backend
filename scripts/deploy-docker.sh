@@ -19,7 +19,7 @@
 # tag was built from, and puts the previous tag back by itself if either check fails. With one container behind one proxy the switch is
 # a few seconds of refused connections (docker stops the old container, then starts the new one). Zero downtime would need two
 # containers behind the proxy; it is not done here because the server runs timers (close expired forms, purge Trash, storage
-# reconcile) that have not been shown safe to run twice at once (docs/DOCKER.md).
+# reconcile) that have not been shown safe to run twice at once (Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md).
 #
 # Needs in this folder: docker-compose.prod.yml and .env. Needs in the environment or in .deploy/env: UPLOADS_PATH, FIREBASE_KEY_PATH.
 # HOST_PORT (default 5000) is the ONE variable that sets the port; BIND_ADDRESS (default 127.0.0.1) is the ONE variable that sets the address.

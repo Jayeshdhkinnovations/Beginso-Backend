@@ -48,7 +48,7 @@ FROM ${NODE_IMAGE} AS runtime
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=
 LABEL org.opencontainers.image.title="beginso-backend"
-# The marker every Beginso image, container and network carries. Cleanup on a shared machine filters by it (docs/DOCKER.md) and by nothing else.
+# The marker every Beginso image, container and network carries. Cleanup on a shared machine filters by it (Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md) and by nothing else.
 LABEL com.beginso.app="api"
 LABEL org.opencontainers.image.revision="${GIT_SHA}"
 LABEL org.opencontainers.image.created="${BUILD_TIME}"
@@ -70,7 +70,7 @@ COPY --chown=root:root package.json ./
 COPY --chown=root:root docker/preflight.js ./preflight.js
 
 # Uploaded files, report PDFs and CSVs and workspace exports live under /data/uploads, on a volume. The working directory is /data, so
-# the report and export folders, which the code builds from the working directory, land on the same volume (see docs/DOCKER.md).
+# the report and export folders, which the code builds from the working directory, land on the same volume (see Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md).
 # The code under /app belongs to root and is read-only to the app; only /data is writable.
 RUN mkdir -p /data/uploads && chown -R node:node /data
 VOLUME ["/data"]

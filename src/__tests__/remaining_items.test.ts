@@ -13,7 +13,6 @@ import ResponseModel from "../models/Response";
 import Report from "../models/Report";
 import Upload from "../models/Upload";
 import Notification from "../models/Notification";
-import { generateToken } from "../utils/generateToken";
 import * as reportService from "../services/report.service";
 import { kickReportQueue, recoverReportQueue } from "../services/reportQueue";
 import { resolveIpLocation } from "../services/geolocation.service";
@@ -24,7 +23,6 @@ process.env.JWT_SECRET = "test-jwt-secret-key-for-remaining-items";
 let mongoServer: MongoMemoryServer;
 let owner: any;
 let ws: any;
-const tok = (u: any) => generateToken({ id: u._id.toString(), email: u.email, role: u.role });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Bug fix (CI flake): a flat `sleep(300)` assumed the queue's async processing always lands
 // inside that window — true on a fast local machine, not guaranteed on a CPU-shared CI runner.
@@ -114,21 +112,6 @@ describe("report queue", () => {
     // it was re-queued and picked up again: generation started for exactly this job
     expect(spy.mock.calls.map((c) => c[0])).toEqual([String(stale._id)]);
     spy.mockRestore();
-  });
-});
-
-describe("submissions are paged", () => {
-  it("returns a page with total and totalPages", async () => {
-    const form: any = await Form.create({ title: "P", workspaceId: ws._id, createdBy: owner._id, fields: [{ fieldId: "f", label: "Q", type: "short_text", required: false }] });
-    await ResponseModel.create(Array.from({ length: 5 }, (_, i) => ({ formId: form._id, answers: { Q: `a${i}` } })));
-    const res = await request(app)
-      .get(`/api/forms/${form._id}/submissions`)
-      .query({ page: 2, limit: 2 })
-      .set("Authorization", `Bearer ${tok(owner)}`)
-      .set("x-workspace-id", ws._id.toString());
-    expect(res.status).toBe(200);
-    expect(res.body.submissions).toHaveLength(2);
-    expect(res.body).toMatchObject({ total: 5, page: 2, limit: 2, totalPages: 3 });
   });
 });
 

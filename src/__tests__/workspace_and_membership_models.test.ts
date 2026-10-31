@@ -425,14 +425,6 @@ describe("Workspace and membership models and contracts", () => {
         expect(res.body.success).toBe(false);
       });
 
-      it("GET /api/forms/:formId/submissions for Form A requested by User B returns 403", async () => {
-        const res = await request(app)
-          .get(`/api/forms/${formA._id}/submissions`)
-          .set("Authorization", `Bearer ${userBToken}`);
-
-        expect(res.status).toBe(403);
-        expect(res.body.success).toBe(false);
-      });
     });
 
     describe("Responses routes", () => {

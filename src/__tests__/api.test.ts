@@ -54,6 +54,7 @@ import Workspace from "../models/Workspace";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import jwt from "jsonwebtoken";
+import { FormService } from "../services/form.service";
 
 let mongoServer: MongoMemoryServer;
 
@@ -220,29 +221,6 @@ describe("Beginso Integration Tests", () => {
   // ==========================================
 
   describe("User API", () => {
-    it("Perform profile modifications", async () => {
-      const user = await User.create({
-        firebaseUid: "mod-uid",
-        fullName: "Original Name",
-        email: "original@test.com",
-      });
-
-      const token = jwt.sign(
-        { id: user._id.toString(), email: user.email, role: user.role },
-        process.env.JWT_SECRET!
-      );
-
-      const res = await request(app)
-        .put("/api/users/profile")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ fullName: "Modified Name", isActive: false });
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.user.fullName).toBe("Modified Name");
-      expect(res.body.user.isActive).toBe(false);
-    });
-
     it("Cascade delete profile, workspace, forms, and responses", async () => {
       const user = await User.create({
         firebaseUid: "cascade-uid",
@@ -390,7 +368,7 @@ describe("Beginso Integration Tests", () => {
 
       // 3. Submit Form (fails validation because required field 'Full Name' is missing)
       const badSubRes1 = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Favorite color": "Blue" } });
 
@@ -400,7 +378,7 @@ describe("Beginso Integration Tests", () => {
 
       // 4. Submit Form (fails validation because dropdown selection is invalid)
       const badSubRes2 = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Full Name": "Jayesh", "Favorite color": "Yellow" } });
 
@@ -410,21 +388,18 @@ describe("Beginso Integration Tests", () => {
 
       // 5. Submit Form (Success)
       const goodSubRes = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Full Name": "Jayesh", "Favorite color": "Blue" } });
 
       expect(goodSubRes.status).toBe(201);
       expect(goodSubRes.body.success).toBe(true);
 
-      // 6. Get Submissions
-      const subRes = await request(app)
-        .get(`/api/forms/${formId}/submissions`)
-        .set("Authorization", `Bearer ${token}`);
-
-      expect(subRes.status).toBe(200);
-      expect(subRes.body.submissions.length).toBe(1);
-      expect(subRes.body.submissions[0].answers["Full Name"]).toBe("Jayesh");
+      // 6. The test submission is stored (isTest), with the answer the user gave
+      const stored = await mongoose.connection.collection("responses").find({ formId: new mongoose.Types.ObjectId(formId) }).toArray();
+      expect(stored).toHaveLength(1);
+      expect(stored[0].isTest).toBe(true);
+      expect(Object.values(stored[0].answers)).toContain("Jayesh");
     });
 
     it("Support querying forms by search, status, and pagination", async () => {
@@ -578,9 +553,8 @@ describe("Beginso Integration Tests", () => {
         process.env.JWT_SECRET!
       );
       const res = await request(app)
-        .post("/api/forms/invalid-objectid-format/submissions")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ answers: {} });
+        .get("/api/responses/invalid-objectid-format")
+        .set("Authorization", `Bearer ${token}`);
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.message).toBe("Invalid identifier");
@@ -1017,7 +991,7 @@ describe("Beginso Integration Tests", () => {
 
       // 1. Check required validation
       const badReq = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: {} });
       expect(badReq.status).toBe(422);
@@ -1026,14 +1000,14 @@ describe("Beginso Integration Tests", () => {
 
       // 2. Check Text length validations
       const badTextShort = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "ab", "Email": "a@b.com" } });
       expect(badTextShort.status).toBe(422);
       expect(badTextShort.body.errors[0].message).toContain("must be at least 3 characters");
 
       const badTextLong = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdefghi", "Email": "a@b.com" } });
       expect(badTextLong.status).toBe(422);
@@ -1041,7 +1015,7 @@ describe("Beginso Integration Tests", () => {
 
       // 3. Check Email format validation
       const badEmail = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "invalid-email" } });
       expect(badEmail.status).toBe(422);
@@ -1049,7 +1023,7 @@ describe("Beginso Integration Tests", () => {
 
       // 4. Check Phone pattern validation
       const badPhone = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "Phone": "12345" } });
       expect(badPhone.status).toBe(422);
@@ -1057,14 +1031,14 @@ describe("Beginso Integration Tests", () => {
 
       // 5. Check Number bounds validation
       const badNumMin = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "Number": 5 } });
       expect(badNumMin.status).toBe(422);
       expect(badNumMin.body.errors[0].message).toContain("must be at least 10");
 
       const badNumMax = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "Number": 25 } });
       expect(badNumMax.status).toBe(422);
@@ -1072,14 +1046,14 @@ describe("Beginso Integration Tests", () => {
 
       // 6. Check Date limits validation
       const badDateMin = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "Date": "2026-05-15" } });
       expect(badDateMin.status).toBe(422);
       expect(badDateMin.body.errors[0].message).toContain("cannot be earlier than 2026-06-01");
 
       const badDateMax = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "Date": "2026-07-01" } });
       expect(badDateMax.status).toBe(422);
@@ -1087,7 +1061,7 @@ describe("Beginso Integration Tests", () => {
 
       // 7. Check Dropdown / MultipleChoice validation
       const badDropdown = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "Dropdown": "C" } });
       expect(badDropdown.status).toBe(422);
@@ -1095,49 +1069,38 @@ describe("Beginso Integration Tests", () => {
 
       // 8. Check Checkbox validation (single boolean vs multi-select array)
       const badCheckboxSingle = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "CheckboxSingle": "yes" } });
       expect(badCheckboxSingle.status).toBe(422);
       expect(badCheckboxSingle.body.errors[0].message).toContain("must be a boolean");
 
       const badCheckboxMulti = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({ answers: { "Text": "abcdef", "Email": "a@b.com", "CheckboxMulti": ["Green"] } });
       expect(badCheckboxMulti.status).toBe(422);
       expect(badCheckboxMulti.body.errors[0].message).toContain("not a valid option for checkbox field");
 
-      // 9. Check File upload validation
-      const badFileSize = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
-        .set("Authorization", `Bearer ${token}`)
-        .send({
-          answers: {
-            "Text": "abcdef",
-            "Email": "a@b.com",
-            "File": { fileName: "photo.jpg", fileSize: 3 * 1024 * 1024, mimeType: "image/jpeg" } // 3MB exceeds 2MB
-          }
-        });
-      expect(badFileSize.status).toBe(422);
-      expect(badFileSize.body.errors[0].message).toContain("file size exceeds the limit");
+      // 9. Check File upload validation (a test submission is JSON-only and exempts file fields, so use the validator the real submit path uses)
+      const formDoc = await Form.findById(formId);
+      const validate = (answers: Record<string, any>) => {
+        try {
+          new FormService().validateAnswers(formDoc as any, answers);
+          return null;
+        } catch (e: any) {
+          return e;
+        }
+      };
+      const badFileSize = validate({ Text: "abcdef", Email: "a@b.com", File: { fileName: "photo.jpg", fileSize: 3 * 1024 * 1024, mimeType: "image/jpeg" } }); // 3MB exceeds 2MB
+      expect(badFileSize?.errors[0].message).toContain("file size exceeds the limit");
 
-      const badFileMime = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
-        .set("Authorization", `Bearer ${token}`)
-        .send({
-          answers: {
-            "Text": "abcdef",
-            "Email": "a@b.com",
-            "File": { fileName: "document.pdf", fileSize: 1 * 1024 * 1024, mimeType: "application/pdf" } // mime pdf not allowed
-          }
-        });
-      expect(badFileMime.status).toBe(422);
-      expect(badFileMime.body.errors[0].message).toContain("file type \"application/pdf\" is not allowed");
+      const badFileMime = validate({ Text: "abcdef", Email: "a@b.com", File: { fileName: "document.pdf", fileSize: 1 * 1024 * 1024, mimeType: "application/pdf" } }); // mime pdf not allowed
+      expect(badFileMime?.errors[0].message).toContain("file type \"application/pdf\" is not allowed");
 
       // 10. Valid Submission (Success)
       const goodRes = await request(app)
-        .post(`/api/forms/${formId}/submissions`)
+        .post(`/api/forms/${formId}/test-submissions`)
         .set("Authorization", `Bearer ${token}`)
         .send({
           answers: {

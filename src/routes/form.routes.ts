@@ -6,8 +6,6 @@ import {
   updateForm,
   patchForm,
   deleteForm,
-  submitForm,
-  getSubmissions,
   duplicateForm,
   publishForm,
   closeForm,
@@ -70,8 +68,6 @@ router.get("/:formId/grants", protect as any, blockSuspended as any, requirePerm
 router.post("/:formId/grants", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, createFormGrant);
 router.delete("/:formId/grants/:userId", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, revokeFormGrant);
 
-router.post("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:write", { resourceType: "form" }) as any, submitForm);
-router.get("/:formId/submissions", protect as any, blockSuspended as any, requirePermission("responses:read", { resourceType: "form" }) as any, getSubmissions);
 
 // Response layout (Sprint 15). Reading the resolved view needs responses:read; setting the form-wide default needs
 // forms:write (viewers cannot). Both honour per-form grants.

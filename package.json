@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "express": "^5.2.1",
     "firebase-admin": "^14.1.0",
     "geoip-lite": "^2.0.3",

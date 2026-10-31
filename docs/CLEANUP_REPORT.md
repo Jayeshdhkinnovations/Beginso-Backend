@@ -118,3 +118,72 @@ Neither touches anything listed above for deletion.
 ## 11. Proposed Step 1 (after approval)
 
 Whatever the owner approves from section 1. The only certain candidates are none yet: every file found is either live, documented, recent, or needs the owner's decision.
+
+---
+
+## Owner decisions and Step 1 to 3 results (31 Oct 2026)
+
+### Decisions on section 1 and what was done
+
+| # | Decision | Done |
+|---|---|---|
+| 1 | keep `src/types/index.ts`, `template.ts`; report commit and branches | Kept. Last commit to `index.ts`: `c35bda8` (29 Oct) "feat: form header text and links; remove dead types and the unused logo asset", which removed its line `export * from "./form.types"` (it is a barrel of type exports that is now almost empty, 4 lines). `template.ts` (12 lines) was last changed earlier (`a03948a`, 26 Sep, "fix"). No open local or remote branch touches either file or mentions them in a commit message. |
+| 2 | keep `removeOwnerSelfGrants.ts` and the soak test; delete the mail-server test | `scratch/test_mail_server.ts` deleted (no reference anywhere). |
+| 3 | delete `run_bruno_runner.ts` after confirming `npm run bruno` does not use it | Confirmed: the script is `bru run bruno --env Development` (the Bruno CLI); the runner had no reference in `package.json`, `bruno/`, workflows, Docker files or docs. Deleted. |
+| 4 | delete seven scripts unless they hold real personal data | See the next table. |
+| 5 | keep `bruno/` | Kept. |
+| 6 | production guard on seven scripts; explicit flag for `seedSuperAdmin` | Done in commit `326f9b6` (branch `chore/script-production-guards`). |
+
+### Item 4: personal data check
+
+| Script | Personal data found | Action |
+|---|---|---|
+| `seedKalaChasmaTemplate.ts` | none | **deleted** |
+| `testPdfReport.ts` | none | **deleted** |
+| `generateSeeds.ts` | only `piyush@example.com` (an example domain) | **kept**: its output `seeds.json` is read by `seedProjectPitch.ts` (kept), and `.gitleaks.toml`, which the CI security scan reads, names this file |
+| `importKalaChashmaCsv.ts` | real-looking address `kalachashmaent@gmail.com`; imports a client's CSV | **kept, not deleted** |
+| `seedKingsData.ts` | `kingsssss027@gmail.com` (and a generated list of respondent names) | **kept, not deleted** |
+| `seedProjectPitch.ts` | `deepaknangalia@gmail.com`, `piyush270205@gmail.com` | **kept, not deleted** |
+| `sendTemplatePreview.ts` | `piyush270205@gmail.com` as the default recipient (and example addresses) | **kept, not deleted** |
+
+Also noted: `seedTestUsers.ts` (kept) holds `piyushthedev27@gmail.com` and `kingsssss027@gmail.com`; `importKalaChashmaCsv.ts` imports `csv-parse`, which is **not** in `package.json` (depcheck "missing"), so that script cannot run on a fresh install. `src/data/kalaChasmaTemplate.ts` has no personal data; it stays (used by `seedTemplates`). These addresses are in git history already; this report does not recommend rewriting history.
+
+### Item 6: guards
+
+`seedFieldShowcase`, `seedFullForm`, `seedTestUsers`, `seedUserResponses`, `seedV2aVolume` and `timeSearchAndAnalytics` import `./_refuseProduction` **first**; it exits 1 with `Refusing to run <script>: NODE_ENV is "production"...` before anything else loads or connects. `ALLOW_DESTRUCTIVE_SEED=yes` overrides, as for the already guarded seeders. `seedSuperAdmin` is the only way to create the first super admin, so it is **not** blocked: in production it needs `ALLOW_SUPERADMIN_BOOTSTRAP=yes` for that run (`_bootstrapGuard.ts`), documented in `docs/insights-launch-runbook.md` ("First super admin"). Ten tests in `src/__tests__/script_production_guards.test.ts`: one per script, two for the flag, two for the helpers. The guard reads `NODE_ENV` from the real environment, before `dotenv` runs, like the existing guarded seeders.
+
+### Step 1 (branch `chore/cleanup-backend-step1`, commit `af1a388`)
+
+Deleted `scratch/test_mail_server.ts`, `run_bruno_runner.ts`, `src/scripts/seedKalaChasmaTemplate.ts`, `src/scripts/testPdfReport.ts`: 4 files, 254 lines.
+
+| | Before | After |
+|---|---|---|
+| Type-check, lint | clean | clean |
+| Tests | 111 suites, 1,385 tests (1,375 + the 10 new guard tests) | 112 suites, 1,385 tests; 1 failed under load (`chart_query.test.ts`) and **passes alone, 65 of 65** |
+| Express route table (printed by walking the router tree) | 269 routes | **identical, 269** |
+| `GET /api/health` | 200 | 200 |
+| Build | succeeds | succeeds |
+| `dist` | 4,121 KB, 380 files | 4,121 KB, 380 files: `tsc` does not delete stale files, so `dist` on a developer machine does not shrink; the Docker image builds from a clean tree |
+| Docker build | not possible on this machine (no Docker installed) | covered by the `docker` job in `ci.yml` on push |
+
+The test failures seen on this machine in full runs (`event_coverage` earlier, `chart_query` now) are time-outs under load; each suite passes alone.
+
+### Step 2: dependencies (no change)
+
+`knip` and `depcheck` both report **no unused dependency and no unused devDependency**. One copy of each kind of library (one HTTP server, one ORM, one validator, one mailer, one PDF library, no date or HTTP client library). Findings, not changed (adding or moving dependencies needs your approval):
+* Used but not declared in `package.json`: `mongodb` (a test helper), `mongodb-memory-server-core` (two tests), and `csv-parse` (the held `importKalaChashmaCsv` script). They are present only through other packages.
+* `@types/pdfkit` is under `dependencies`; type packages belong in `devDependencies` (it only matters for the production install size).
+* `knip` flags `.github/workflows/deploy.yml` for using `pm2`; that workflow is removed on branch `chore/remove-pm2-deploy` (not merged yet).
+
+### Step 3 (conservative rules): nothing to remove
+
+`knip` lists 26 unused exports and 57 unused exported types. Only two names are also unused inside their own file: `kalaChasmaCsvUrlFields` and `kalaChasmaCsvLabelOverrides` in `src/data/kalaChasmaTemplate.ts`, and that file was touched on 19 Oct (inside the 30-day window). They exist for the held `importKalaChashmaCsv` script. No file that `knip` flags has been untouched since before 1 Oct. No code changed.
+
+### Numbers
+
+| | Step 0 | Now |
+|---|---|---|
+| Tracked files | 516 (515 + this report) | 515 |
+| Lines | 79,609 + report | 79,604 + this section |
+
+Endpoints: none deleted. The ten scripts that write to the database without the production guard were all guarded (list in section 4 and item 6 above).

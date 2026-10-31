@@ -108,6 +108,18 @@ export const protect = async (
   }
 };
 
+// Runs every check of `protect` (token, revoked session, user lookup) but never answers: with no valid session the request simply
+// continues without `req.user`. For routes that must look the same to a signed-in and a signed-out caller.
+export const optionalProtect = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const quiet: any = { status: () => quiet, json: () => quiet, setHeader: () => quiet };
+  await protect(req, quiet as Response, () => undefined);
+  next();
+};
+
 export const requireSuperAdmin = (
   req: AuthenticatedRequest,
   res: Response,

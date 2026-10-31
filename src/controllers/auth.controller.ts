@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { getAuth } from "firebase-admin/auth";
-import jwt from "jsonwebtoken";
 
 import crypto from "crypto";
 import User from "../models/User";
@@ -707,7 +706,10 @@ export const confirmPasswordReset = async (
 
 /**
  * POST /api/auth/password-changed
- * Directly triggers the password_changed_success email for a user.
+ * Sends the password_changed_success email to the SIGNED-IN user's own address.
+ * The address comes only from the verified session (optionalProtect): never from the request body, so nobody can use this
+ * route to send a "your password was changed" email to someone else. With no valid session it answers with the same success
+ * response and sends nothing, so a caller cannot tell a valid session from an invalid one.
  */
 export const notifyPasswordChanged = async (
   req: Request,
@@ -715,36 +717,15 @@ export const notifyPasswordChanged = async (
 ): Promise<void> => {
   res.setHeader("Cache-Control", "no-store");
   try {
-    const rawEmail = req.body?.email;
-    let targetEmail: string | undefined = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : undefined;
-
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      try {
-        const token = authHeader.split("Bearer ")[1];
-        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-        if (decoded && decoded.email) {
-          targetEmail = String(decoded.email).trim().toLowerCase();
-        }
-      } catch {
-        // Fallback to body email
-      }
-    }
-
-    if (!targetEmail) {
-      res.status(400).json({
-        success: false,
-        message: "Email is required.",
+    const sessionEmail = (req as any).user?.email;
+    if (typeof sessionEmail === "string" && sessionEmail) {
+      const appUrl = process.env.APP_URL || "https://beginso.com";
+      await mailService.sendMail({
+        to: sessionEmail.trim().toLowerCase(),
+        template: "password_changed_success",
+        actionUrl: `${appUrl}/login`,
       });
-      return;
     }
-
-    const appUrl = process.env.APP_URL || "https://beginso.com";
-    await mailService.sendMail({
-      to: targetEmail,
-      template: "password_changed_success",
-      actionUrl: `${appUrl}/login`,
-    });
 
     res.status(200).json({
       success: true,

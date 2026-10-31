@@ -6,7 +6,7 @@
 #
 #   <image> is the full name with a tag per commit, for example ghcr.io/jayeshdhkinnovations/beginso-backend:sha-7d26bd9
 #
-# Run it as root from /opt/beginso-backend, after docs/DOCKER.md sections 3 to 5 (folders, .env, key, .deploy/env, the registry login, the test
+# Run it as root from /opt/beginso-backend, after Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md sections 3 to 5 (folders, .env, key, .deploy/env, the registry login, the test
 # container). It is the "real cutover" of section 7 in one script. In order:
 #   1. checks (nothing is changed yet): the image can be read, the files are there, pm2 is serving, the uploads folder exists
 #   2. pulls the image (so the downtime is short)
@@ -71,7 +71,7 @@ rollback() {
   # anything the container may have written meanwhile goes back, only newer files, nothing is overwritten or deleted
   if [ -d "$DEPLOY_DIR/data/uploads" ]; then
     rsync -rlt --update --no-owner --no-group "$DEPLOY_DIR/data/uploads/" "$OLD_APP/uploads/" >>"$LOG" 2>&1 \
-      || log "WARNING: copying the uploads back failed: do it by hand (docs/DOCKER.md section 9, step 2)"
+      || log "WARNING: copying the uploads back failed: do it by hand (Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md section 9, step 2)"
   fi
   pm2 start "$PM2_NAME" >>"$LOG" 2>&1
   if wait_for "$HEALTH_WAIT" old_answers; then
@@ -87,9 +87,9 @@ fail() { log "FAILED: $*"; [ -n "$STOPPED" ] && rollback; exit 1; }
 [ -n "$IMAGE" ] || die "usage: cutover.sh <image> [--dry-run]   e.g. ghcr.io/jayeshdhkinnovations/beginso-backend:sha-7d26bd9"
 case "$IMAGE" in *:latest|*:|*[[:space:]]*) die "use an image with a tag per commit, not latest" ;; esac
 for c in pm2 docker rsync curl sha256sum ss; do command -v "$c" >/dev/null 2>&1 || die "'$c' is not installed"; done
-[ -f .env ] || die "$DEPLOY_DIR/.env is missing (docs/DOCKER.md section 3)"
+[ -f .env ] || die "$DEPLOY_DIR/.env is missing (Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md section 3)"
 [ -f docker-compose.prod.yml ] && [ -x "$DEPLOY_SCRIPT" ] || die "docker-compose.prod.yml or $DEPLOY_SCRIPT is missing"
-[ -f "$STATE/env" ] || die "$STATE/env is missing (docs/DOCKER.md section 3, step 5)"
+[ -f "$STATE/env" ] || die "$STATE/env is missing (Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md section 3, step 5)"
 KEY="$(sed -n 's/^FIREBASE_KEY_PATH=//p' "$STATE/env")"
 [ -f "$KEY" ] || die "the Firebase key file is missing at '$KEY'"
 [ -d "$OLD_APP/uploads" ] || die "the old uploads folder is missing: $OLD_APP/uploads"
@@ -154,4 +154,4 @@ docker logs "$CONTAINER" 2>&1 | grep -q "Background jobs are ON" || fail "the co
 
 log "DONE. The backend now runs in Docker (commit $WANT) on port $LIVE_PORT; pm2 '$PM2_NAME' is stopped, not deleted."
 log "Next: open the site, sign in, open a form and a file, export a PDF; watch 'docker logs -f $CONTAINER' for ten minutes."
-log "Do NOT run 'pm2 start $PM2_NAME' while the container is live. To go back: docs/DOCKER.md section 9."
+log "Do NOT run 'pm2 start $PM2_NAME' while the container is live. To go back: Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md section 9."

@@ -1,7 +1,7 @@
 name: Deploy Backend (Docker)
 
 # The Docker deploy. OFF BY DEFAULT: it runs only when the repository variable DOCKER_DEPLOY_ENABLED is exactly 'true'
-# (Settings -> Secrets and variables -> Actions -> Variables). Set it to 'true' only after the cutover in docs/DOCKER.md has settled.
+# (Settings -> Secrets and variables -> Actions -> Variables). Set it to 'true' only after the cutover in Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md has settled.
 # There is no pm2 deploy any more: the old workflow was removed after the cutover.
 #
 # Automatic path, after a push to main:  ci (green) -> Publish Docker Image -> this workflow, on the self-hosted runner, which is the VM
@@ -95,7 +95,7 @@ jobs:
       - name: Copy the deploy files into the deploy folder (never .env, never the uploads, never the key)
         run: |
           set -e
-          test -f "$DEPLOY_DIR/.env" || { echo "::error::$DEPLOY_DIR/.env is missing: the VM is not prepared (docs/DOCKER.md, section 3)"; exit 1; }
+          test -f "$DEPLOY_DIR/.env" || { echo "::error::$DEPLOY_DIR/.env is missing: the VM is not prepared (Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md, section 3)"; exit 1; }
           install -m 644 docker-compose.prod.yml "$DEPLOY_DIR/"
           install -d "$DEPLOY_DIR/scripts"
           install -m 755 scripts/deploy-docker.sh scripts/docker-wait.sh "$DEPLOY_DIR/scripts/"

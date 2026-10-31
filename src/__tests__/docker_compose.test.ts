@@ -3,7 +3,7 @@ import path from "path";
 
 /**
  * The server compose file is the contract with the VM: what it names, what it publishes, how much memory it may take. These are the facts the
- * runbook (docs/DOCKER.md, sections 3b and 4b) and scripts/check-docker-hygiene.sh rely on, so a change to any of them is a decision, not an accident.
+ * runbook (Beginso-Report/Beginso-Backend-Report/docs/DOCKER.md, sections 3b and 4b) and scripts/check-docker-hygiene.sh rely on, so a change to any of them is a decision, not an accident.
  */
 const read = (file: string) => fs.readFileSync(path.join(__dirname, "..", "..", file), "utf8").replace(/\r\n/g, "\n");
 const prod = read("docker-compose.prod.yml");

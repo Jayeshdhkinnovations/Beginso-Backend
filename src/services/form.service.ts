@@ -992,17 +992,6 @@ export class FormService {
     return newResponse;
   }
 
-  async getSubmissions(formId: string, workspaceId: string, isGrant?: boolean, options: { page?: unknown; limit?: unknown } = {}) {
-    await this.getFormById(formId, workspaceId, isGrant);
-    const page = clampInt(options.page, 1, 1, 100000);
-    const limit = clampInt(options.limit, 100, 1, 500);
-    const [submissions, total] = await Promise.all([
-      ResponseModel.find({ formId, deletedAt: null }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-      ResponseModel.countDocuments({ formId, deletedAt: null }),
-    ]);
-    return { submissions, total, page, limit, totalPages: Math.ceil(total / limit) };
-  }
-
   async duplicateForm(formId: string, workspaceId: string, createdBy?: unknown): Promise<IForm> {
     const originalForm = await this.getFormById(formId, workspaceId);
     await assertStorageQuota(await ownerOfForm({ workspaceId: originalForm.workspaceId, createdBy: createdBy ?? originalForm.createdBy }));

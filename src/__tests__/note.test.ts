@@ -285,16 +285,6 @@ describe("Notes are never reachable from a respondent-facing, public or export p
     expect(asString.toLowerCase()).not.toContain('"notes"');
   });
 
-  it("the authenticated getSubmissions (form-owner) path never includes note data", async () => {
-    await ResponseModel.create({ formId, answers: {} });
-    const res = await request(app)
-      .get(`/api/forms/${formId}/submissions`)
-      .set("Authorization", `Bearer ${ownerToken}`);
-    expect(res.status).toBe(200);
-    const asString = JSON.stringify(res.body);
-    expect(asString.toLowerCase()).not.toContain("notecount");
-  });
-
   it("the CSV export never includes a note or note count column, even when notes exist", async () => {
     const resp = await ResponseModel.create({ formId, answers: { Name: "HasNotes" }, reference: "#900" });
     await Note.create({ responseId: resp._id, authorId: ownerId, authorName: "Owner", body: "a private note", mentionIds: [] });

@@ -537,17 +537,8 @@ describe("Form API Property-Based Testing", () => {
           }
         }
 
-        const submitRes = await request(app)
-          .post(`/api/forms/${formId}/submissions`)
-          .set("Authorization", `Bearer ${tokenA}`)
-          .send({ answers });
-        if (submitRes.status !== 201) {
-          console.log("SUBMIT STATUS:", submitRes.status);
-          console.log("SUBMIT BODY:", JSON.stringify(submitRes.body, null, 2));
-          console.log("ANSWERS:", JSON.stringify(answers, null, 2));
-          console.log("FIELDS:", JSON.stringify(formPayload.fields, null, 2));
-        }
-        expect(submitRes.status).toBe(201);
+        // A response to delete along with the form (the authenticated submit route is gone; the cascade is what this property is about)
+        await ResponseModel.create({ formId, answers });
 
         // Verify response is in DB
         const initialResponses = await ResponseModel.find({ formId });

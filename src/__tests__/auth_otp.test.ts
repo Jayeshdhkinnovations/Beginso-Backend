@@ -171,22 +171,4 @@ describe("Auth OTP & Extended API Requirements", () => {
     }
   });
 
-  it("should enforce close-date / response-limit gate on POST /api/forms/:formId/submissions", async () => {
-    const closedForm = await Form.create({
-      title: "Closed Internal Form",
-      workspaceId: mockWorkspaceId,
-      status: "closed",
-      pages: [{ id: new mongoose.Types.ObjectId().toString(), order: 0, title: "Page 1" }],
-      fields: [],
-    });
-
-    const res = await request(app)
-      .post(`/api/forms/${closedForm._id}/submissions`)
-      .set("Authorization", `Bearer ${userAToken}`)
-      .send({ answers: {} });
-
-    // Same availability rule as the public route: a closed form is refused with its reason, not a bare 404.
-    expect(res.status).toBe(410);
-    expect(res.body.error.code).toBe("FORM_CLOSED");
-  });
 });

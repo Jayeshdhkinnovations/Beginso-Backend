@@ -2,39 +2,7 @@ import { Request, Response } from "express";
 import { verifyRecentReauth, findSharedOwnedWorkspaces, deleteAccountData } from "../services/cleanup.service";
 import { recordEvent } from "../services/event.service";
 import { getAuth } from "firebase-admin/auth";
-import User from "../models/User";
 import Workspace from "../models/Workspace";
-
-export const updateProfile = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const authReq = req as any;
-    if (!authReq.user) {
-      res.status(401).json({ success: false, message: "Not authorized" });
-      return;
-    }
-
-    const { fullName, isActive } = req.body;
-    
-    const user = await User.findById(authReq.user._id);
-    if (!user) {
-      res.status(404).json({ success: false, message: "User not found" });
-      return;
-    }
-
-    if (fullName !== undefined) user.fullName = fullName;
-    if (isActive !== undefined) user.isActive = isActive;
-
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Profile updated successfully",
-      user,
-    });
-  } catch {
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-};
 
 // Closes the caller's account. Behind both DELETE /api/users/profile and DELETE /api/workspaces/current
 // (the app's "Delete workspace" button, whose confirmation says it deletes the account).

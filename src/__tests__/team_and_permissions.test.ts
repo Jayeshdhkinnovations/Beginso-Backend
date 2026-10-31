@@ -742,15 +742,6 @@ describe("Team and permissions contracts", () => {
       expect(res.body.form.title).toBe("Personal Grant Form");
     });
 
-    it("Grantee can read form submissions via GET /api/forms/:id/submissions", async () => {
-      const res = await request(app)
-        .get(`/api/forms/${personalForm._id}/submissions`)
-        .set("Authorization", `Bearer ${outsiderToken}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-    });
-
     it("Grantee can load the form's responses, stats and analytics via ?formId= (the form pages)", async () => {
       const auth = { Authorization: `Bearer ${outsiderToken}` };
       const q = `formId=${personalForm._id}`;

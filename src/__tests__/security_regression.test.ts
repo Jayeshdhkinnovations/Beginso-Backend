@@ -493,7 +493,7 @@ describe("S-18 form events and anonymous-ish submissions", () => {
 
   it("a non-member must not inject a response into a draft B form", async () => {
     const form = await mkForm(wsB._id, ownerB._id);
-    const res = await auth(request(app).post(`/api/forms/${form._id}/submissions?workspaceId=personal`).send({ answers: { a: 1 } }), outsider);
+    const res = await auth(request(app).post(`/api/forms/${form._id}/test-submissions?workspaceId=personal`).send({ answers: { a: 1 } }), outsider);
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(await ResponseModel.countDocuments({ formId: form._id })).toBe(0);
   });

@@ -227,7 +227,7 @@ export const createWorkspaceExport = async (req: Request, res: Response, next: N
         // includeDeleted: the export is everything the workspace still stores, Trash included.
         const forms = await Form.find({ workspaceId: workspace._id }).setOptions({ includeDeleted: true });
         const formIds = forms.map((f) => f._id);
-        const responses = await ResponseModel.find({ formId: { $in: formIds } });
+        const responses = await ResponseModel.find({ formId: { $in: formIds } }).select("-ipHash"); // ipHash stays stored (duplicate detection, rate limits) but is not handed out
         const uploads = await Upload.find({ workspaceId: workspace._id });
 
         const exportData = {

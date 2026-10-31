@@ -10,8 +10,12 @@ console.error = (...a: unknown[]) => {
   if (!String(a[0]).startsWith("Failed to write MailLog")) origError(...a);
 };
 
-// Usage: npx ts-node src/scripts/sendTemplatePreview.ts [address]
-const to = process.argv[2] || "piyush270205@gmail.com";
+// Usage: npx ts-node src/scripts/sendTemplatePreview.ts <address>   (the address is required: this sends real mail)
+const to = process.argv[2];
+if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+  console.error("Usage: npx ts-node src/scripts/sendTemplatePreview.ts <address>\nThe recipient is required and must be an email address; there is no default.");
+  process.exit(1);
+}
 const app = process.env.APP_URL || "https://www.beginso.com";
 const day = 24 * 60 * 60 * 1000;
 const unsubscribeUrl = `${app}/api/public/notifications/unsubscribe/sample-token`;

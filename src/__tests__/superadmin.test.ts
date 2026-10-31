@@ -251,6 +251,30 @@ describe("Super Admin Stats & Abuse Endpoints Integration Tests", () => {
       expect(res.body.pagination.limit).toBe(100);
     });
 
+    it("keeps a stable newest-first order, and pages that never repeat or skip a row, when many logs share one timestamp", async () => {
+      const sameInstant = new Date();
+      const created: string[] = [];
+      try {
+        for (let i = 0; i < 3; i++) {
+          const doc = await SystemLog.create({ level: "info", message: `tie ${i}`, route: "/api/tie-test", statusCode: 200, createdAt: sameInstant });
+          created.push(String(doc._id));
+        }
+        const seen: string[] = [];
+        for (let page = 1; page <= 3; page++) {
+          const res = await request(app)
+            .get(`/api/superadmin/logs?route=/api/tie-test&limit=1&page=${page}`)
+            .set("Authorization", `Bearer ${superAdminToken}`);
+          expect(res.status).toBe(200);
+          expect(res.body.logs).toHaveLength(1);
+          seen.push(String(res.body.logs[0]._id));
+        }
+        // Newest first by id when the timestamps are equal, each row exactly once.
+        expect(seen).toEqual([...created].reverse());
+      } finally {
+        await SystemLog.deleteMany({ route: "/api/tie-test" });
+      }
+    });
+
     it("should apply filters correctly (level, route, search)", async () => {
       // 1. Level filter
       let res = await request(app)

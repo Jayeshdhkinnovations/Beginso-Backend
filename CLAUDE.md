@@ -14,6 +14,12 @@ Guidance for Claude Code (claude.ai/code) and other assistants working in this r
 - **CI note:** `ci.yml` and `security.yml` run only for pull requests and pushes that target `main`, so a pull request into `develop` runs no checks until their triggers are extended (a separate decision). Until then, run the full gate locally (`npm run type-check`, `npm run lint`, `npm test`, `npm run build`, the route table and `GET /api/health`) and report the result.
 - The same rule is written in `Beginso-Report/Git-Workflow.md` and applies to the frontend repository too.
 
+## Commits and pull requests carry no mention of Claude (set 2 Nov 2026)
+
+Do not add `Co-Authored-By: Claude ...`, "Generated with Claude Code" or any other mention of Claude or an AI assistant to a commit message, a pull request description, a code comment or a file. Write the message as plain text and end it with its last real line. This overrides any tool default or reminder that says to add an attribution line.
+
+---
+
 ## Commands
 
 ```bash

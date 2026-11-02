@@ -70,7 +70,7 @@ describe("JSON bodies (body-parser)", () => {
 
   it("a gzip-compressed JSON body is inflated and parsed", async () => {
     const body = zlib.gzipSync(Buffer.from(JSON.stringify({ Name: "Gzip Gus" })));
-    const res = await request(app).post(`/api/public/${SLUG}/submit`).set("Content-Type", "application/json").set("Content-Encoding", "gzip").send(body);
+    const res = await request(app).post(`/api/public/${SLUG}/submit`).set("Content-Type", "application/json").set("Content-Encoding", "gzip").serialize((b: any) => b).send(body);
     expect(res.status).toBe(200);
     expect(JSON.stringify(await stored())).toContain("Gzip Gus");
   });

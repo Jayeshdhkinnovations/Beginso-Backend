@@ -2,7 +2,7 @@ import type { ResponseGeo } from "../utils/geo";
 import { FormRepository } from "../repositories/form.repository";
 import { deleteFormData } from "./cleanup.service";
 import FormPin from "../models/FormPin";
-import { PIN_LIMIT, pinsFor } from "./pin.service";
+import { PIN_LIMIT } from "./pin.service";
 import Form, { IForm, IFormField } from "../models/Form";
 import ResponseModel from "../models/Response";
 import mongoose from "mongoose";
@@ -315,11 +315,23 @@ export class FormService {
       total = matched.length;
       forms = matched.slice(skip, skip + limit);
     } else {
-      [forms, total] = await Promise.all([
-        this.formRepository.findWithPagination(query, skip, limit, workspaceId, parseFormSort(options.sort, options.order)),
+      const sort = parseFormSort(options.sort, options.order);
+      // The caller's pinned forms come first, on every page, then the rest; each group in the requested order. A caller has at most PIN_LIMIT
+      // pins, so the list is the pinned group followed by the rest, and a page is a window over it: some of the pinned group, then some of the rest.
+      const pins = options.userId ? await FormPin.find({ userId: options.userId }).select("formId pinnedAt").lean() : [];
+      pinnedAt = new Map(pins.map((p) => [String(p.formId), p.pinnedAt]));
+      const pinnedQuery = { ...query, _id: { $in: pins.map((p) => p.formId) } };
+      const pinnedTotal = pins.length ? await this.formRepository.count(pinnedQuery, workspaceId) : 0;
+      const pinnedOnPage = Math.max(0, Math.min(limit, pinnedTotal - skip));
+      const restOnPage = limit - pinnedOnPage; // 0 when the whole page is pinned forms (a limit of 0 would mean "no limit" to Mongo)
+      const restQuery = pinnedTotal ? { ...query, _id: { $nin: pins.map((p) => p.formId) } } : query;
+      const [fromPinned, fromRest, count] = await Promise.all([
+        pinnedOnPage > 0 ? this.formRepository.findWithPagination(pinnedQuery, skip, pinnedOnPage, workspaceId, sort) : [],
+        restOnPage > 0 ? this.formRepository.findWithPagination(restQuery, Math.max(0, skip - pinnedTotal), restOnPage, workspaceId, sort) : [],
         this.formRepository.count(query, workspaceId),
       ]);
-      if (options.userId) pinnedAt = await pinsFor(options.userId, forms.map((f) => f._id));
+      forms = [...fromPinned, ...fromRest];
+      total = count;
     }
 
     // One grouped count for the whole page instead of one query per form.

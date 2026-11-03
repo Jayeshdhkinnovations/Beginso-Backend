@@ -51,13 +51,20 @@ export const createFormStyle = async (req: Request, res: Response): Promise<void
       res.status(409).json({ success: false, message: `You can keep up to ${MAX_STYLES_PER_SCOPE} saved styles. Delete one to save another.`, error: { code: "STYLE_LIMIT" } });
       return;
     }
+    // A photographer's credit belongs to a photo, and a style never keeps an uploaded or outside photo: it keeps no credit either.
+    const branding: Record<string, any> = { ...parsed.data.branding };
+    if (branding.theme?.credit) {
+      const { credit: _credit, ...theme } = branding.theme;
+      if (Object.keys(theme).length > 1) branding.theme = theme;
+      else delete branding.theme;
+    }
     const authReq = req as any;
     const created = await FormStyle.create({
       ...scope,
       createdBy: authReq.user._id,
       name: parsed.data.name,
       layout: normaliseLayout(parsed.data.layout),
-      branding: parsed.data.branding,
+      branding,
     });
     res.status(201).json({ success: true, data: present(created) });
   } catch (error) {

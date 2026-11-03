@@ -253,6 +253,12 @@ const themeHex = z
   .optional();
 const themeInt = (min: number, max: number) => z.number().int().min(min).max(max).optional();
 
+// Who took an Unsplash photo: a name (no control characters or markup) and their unsplash.com profile address, nothing else.
+const themeCredit = z.object({
+  name: z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f<>]+$/, "name has characters that are not allowed"),
+  url: z.string().max(300).regex(/^https:\/\/unsplash\.com\/(@[A-Za-z0-9_.-]{1,60})?(\?[A-Za-z0-9_=&%.-]{0,120})?$/, "must be an unsplash.com profile address"),
+});
+
 // branding.theme: versioned. A key this version does not know is dropped (zod strips it); a wrong type, an out-of-range number or another version is a 400.
 const themeSchema = z.object({
   v: z.literal(THEME_VERSION),
@@ -261,6 +267,10 @@ const themeSchema = z.object({
   card: z.object({ radius: themeInt(0, 40), shadow: themeInt(0, 100) }).optional(),
   layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64), panelSide: z.enum(PANEL_SIDES).optional() }).optional(),
   fonts: z.object({ heading: z.enum(FORM_FONTS).optional() }).optional(),
+  // Who took the Unsplash photo: a name (no control characters) and their unsplash.com profile address, nothing else.
+  credit: z
+    .object({ cover: themeCredit.optional(), background: themeCredit.optional() })
+    .optional(),
 });
 
 export const brandingSchema = z.object({

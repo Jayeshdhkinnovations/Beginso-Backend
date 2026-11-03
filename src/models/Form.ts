@@ -133,6 +133,8 @@ export interface IFormTheme {
   layout?: { maxWidth?: number; fieldGap?: number; panelSide?: (typeof PANEL_SIDES)[number] };
   // Typeface of the headings (the form title and page titles); absent = the same as the form's font.
   fonts?: { heading?: (typeof FORM_FONTS)[number] };
+  // The photographer of an Unsplash photo used as the cover and/or the page background, one credit for each picture: shown on the form (Unsplash's rule). Only an unsplash.com profile address.
+  credit?: { cover?: { name: string; url: string }; background?: { name: string; url: string } };
 }
 
 export interface IBranding {
@@ -337,6 +339,7 @@ const ThemeSchema = new Schema<IFormTheme>(
     card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
     layout: new Schema({ maxWidth: Number, fieldGap: Number, panelSide: { type: String, enum: PANEL_SIDES } }, { _id: false }),
     fonts: new Schema({ heading: { type: String, enum: FORM_FONTS } }, { _id: false }),
+    credit: new Schema({ cover: new Schema({ name: String, url: String }, { _id: false }), background: new Schema({ name: String, url: String }, { _id: false }) }, { _id: false }),
   },
   { _id: false }
 );

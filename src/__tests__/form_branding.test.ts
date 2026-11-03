@@ -205,3 +205,25 @@ describe("branding.theme (colours, fields look, exact values)", () => {
     expect((plain.body.branding ?? plain.body.form?.branding)?.theme).toBeUndefined();
   });
 });
+
+describe("built-in pictures (the app's own library)", () => {
+  it.each(["logoUrl", "coverImageUrl", "backgroundImageUrl"])("%s accepts a built-in picture path", async (key) => {
+    const res = await patchBranding({ [key]: "/form-pictures/aurora-mint.jpg" });
+    expect(res.status).toBe(200);
+  });
+
+  it.each(["coverImageUrl", "backgroundImageUrl"])("%s keeps the built-in path on the public form read", async (key) => {
+    await patchBranding({ [key]: "/form-pictures/calm-waves.jpg" });
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding[key]).toBe("/form-pictures/calm-waves.jpg");
+  });
+
+  it.each([
+    "/form-pictures/../secret.jpg", "/form-pictures/a/b.jpg", "/form-pictures/UPPER.jpg", "/form-pictures/x.png", "/form-pictures/.jpg", "/form-pictures/",
+    "/form-pictures/" + "a".repeat(41) + ".jpg", "form-pictures/x.jpg", "//form-pictures/x.jpg", "/form-pictures/x.jpg?a=b", "/form-pictures/x.jpg#f", "/form-pictures/x y.jpg",
+    "/other/x.jpg", "/form-pictures/%2e%2e/x.jpg",
+  ])("rejects %s", async (value) => {
+    expect((await patchBranding({ coverImageUrl: value })).status).toBe(400);
+  });
+});

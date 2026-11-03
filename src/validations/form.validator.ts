@@ -235,13 +235,15 @@ export const safeImageUrl = z
     if (v === "") return true;
     if (/["'()<>\\\s]/.test(v)) return false;
     if (v.startsWith("/api/upload/file/")) return true;
+    // A picture from the app's own built-in library (public/form-pictures on the frontend): a fixed folder, a lowercase name, .jpg only.
+    if (/^\/form-pictures\/[a-z0-9-]{1,40}\.jpg$/.test(v)) return true;
     try {
       const u = new URL(v);
       return (u.protocol === "https:" || u.protocol === "http:") && !u.username && !u.password;
     } catch {
       return false;
     }
-  }, "must be an http(s) image address or an uploaded file path")
+  }, "must be an http(s) image address, an uploaded file path or a built-in picture")
   .optional();
 
 const themeHex = z

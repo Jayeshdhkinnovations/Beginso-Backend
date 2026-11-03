@@ -257,3 +257,28 @@ describe("more typefaces and a heading font", () => {
     expect((await patchBranding({ theme: { v: 1, fonts: "caveat" } })).status).toBe(400);
   });
 });
+
+describe("new layouts and the Split Feature picture side", () => {
+  it.each(["chat", "sidebar", "open", "focus"])("accepts the %s layout and the public read returns it unchanged", async (layout) => {
+    const res = await request(app).patch(`/api/forms/${formId}`).set(headers()).send({ settings: { layout } });
+    expect(res.status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).settings.layout).toBe(layout);
+  });
+
+  it("still refuses a layout that does not exist", async () => {
+    expect((await request(app).patch(`/api/forms/${formId}`).set(headers()).send({ settings: { layout: "carousel" } })).status).toBe(400);
+  });
+
+  it.each(["start", "end"])("theme.layout.panelSide accepts %s and the public read returns it", async (side) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSide: side } } })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme.layout.panelSide).toBe(side);
+  });
+
+  it.each([["left"], ["right"], ["both"], [""], [1], [null]])("theme.layout.panelSide rejects %j", async (value) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSide: value } } })).status).toBe(400);
+  });
+});

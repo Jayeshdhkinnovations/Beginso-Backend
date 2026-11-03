@@ -240,7 +240,7 @@ describe("B1 - readiness, publish, unpublish, regenerate-link", () => {
 describe("B3 - layout presets", () => {
   it("accepts the six presets and the three legacy values, rejects anything else", async () => {
     const form = await mkForm();
-    for (const layout of ["classic", "card_stack", "guided", "steps", "split_feature", "compact", "single_column", "two_column"]) {
+    for (const layout of ["classic", "card_stack", "guided", "steps", "split_feature", "compact", "chat", "sidebar", "open", "focus", "single_column", "two_column"]) {
       const res = await request(app).patch(`/api/forms/${form._id}`).set(as(tOwner)).send({ settings: { layout } });
       expect(res.status).toBe(200);
     }

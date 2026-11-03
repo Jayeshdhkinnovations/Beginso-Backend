@@ -118,6 +118,8 @@ export const LOGO_SIZES = ["sm", "md", "lg"] as const;
 export const FORM_WIDTHS = ["narrow", "standard", "wide"] as const;
 // The owner's own colours, fields look and exact sizes: one versioned object (branding.theme). Every key is optional; absent = the default look.
 export const THEME_VERSION = 1;
+// Split Feature: which side the picture panel is on, in reading order (start = the left in left-to-right languages).
+export const PANEL_SIDES = ["start", "end"] as const;
 export const FIELD_STYLES = ["outlined", "filled", "underline"] as const;
 export const LABEL_POSITIONS = ["above", "start"] as const;
 export const CHOICE_STYLES = ["plain", "tiles"] as const;
@@ -128,7 +130,7 @@ export interface IFormTheme {
   colors?: { text?: string; heading?: string; card?: string; field?: string; fieldBorder?: string; buttonText?: string };
   fields?: { style?: (typeof FIELD_STYLES)[number]; radius?: number; label?: (typeof LABEL_POSITIONS)[number]; choice?: (typeof CHOICE_STYLES)[number] };
   card?: { radius?: number; shadow?: number };
-  layout?: { maxWidth?: number; fieldGap?: number };
+  layout?: { maxWidth?: number; fieldGap?: number; panelSide?: (typeof PANEL_SIDES)[number] };
   // Typeface of the headings (the form title and page titles); absent = the same as the form's font.
   fonts?: { heading?: (typeof FORM_FONTS)[number] };
 }
@@ -171,6 +173,10 @@ export type FormLayout =
   | "steps"
   | "split_feature"
   | "compact"
+  | "chat"
+  | "sidebar"
+  | "open"
+  | "focus"
   | "single_column"
   | "two_column";
 
@@ -181,6 +187,10 @@ export const FORM_LAYOUT_VALUES: FormLayout[] = [
   "steps",
   "split_feature",
   "compact",
+  "chat",
+  "sidebar",
+  "open",
+  "focus",
   "single_column",
   "two_column",
 ];
@@ -325,7 +335,7 @@ const ThemeSchema = new Schema<IFormTheme>(
     colors: new Schema({ text: String, heading: String, card: String, field: String, fieldBorder: String, buttonText: String }, { _id: false }),
     fields: new Schema({ style: { type: String, enum: FIELD_STYLES }, radius: Number, label: { type: String, enum: LABEL_POSITIONS }, choice: { type: String, enum: CHOICE_STYLES } }, { _id: false }),
     card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
-    layout: new Schema({ maxWidth: Number, fieldGap: Number }, { _id: false }),
+    layout: new Schema({ maxWidth: Number, fieldGap: Number, panelSide: { type: String, enum: PANEL_SIDES } }, { _id: false }),
     fonts: new Schema({ heading: { type: String, enum: FORM_FONTS } }, { _id: false }),
   },
   { _id: false }

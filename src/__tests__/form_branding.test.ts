@@ -227,3 +227,33 @@ describe("built-in pictures (the app's own library)", () => {
     expect((await patchBranding({ coverImageUrl: value })).status).toBe(400);
   });
 });
+
+describe("more typefaces and a heading font", () => {
+  const NEW_FONTS = ["poppins", "manrope", "plus_jakarta_sans", "outfit", "space_grotesk", "montserrat", "playfair_display", "merriweather", "source_serif_4", "fraunces", "dm_serif_display", "quicksand", "fredoka", "caveat", "pacifico", "bebas_neue", "space_mono"];
+
+  it.each(NEW_FONTS)("fontFamily accepts %s", async (font) => {
+    expect((await patchBranding({ fontFamily: font })).status).toBe(200);
+  });
+
+  it("the original five still work", async () => {
+    for (const font of ["dm_sans", "inter", "work_sans", "lora", "nunito"]) expect((await patchBranding({ fontFamily: font })).status).toBe(200);
+  });
+
+  it("theme.fonts.heading is stored and returned by the public form read", async () => {
+    expect((await patchBranding({ theme: { v: 1, fonts: { heading: "playfair_display" } } })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual({ v: 1, fonts: { heading: "playfair_display" } });
+  });
+
+  it.each([["comic_sans"], ["Playfair Display"], ["playfair_display; x"], [""], [7], [null]])("theme.fonts.heading rejects %j", async (value) => {
+    expect((await patchBranding({ theme: { v: 1, fonts: { heading: value } } })).status).toBe(400);
+  });
+
+  it("drops a key in theme.fonts it does not know, and rejects fonts that is not an object", async () => {
+    const res = await patchBranding({ theme: { v: 1, fonts: { heading: "caveat", weight: 900 } } });
+    expect(res.status).toBe(200);
+    expect((res.body.branding ?? res.body.form?.branding).theme.fonts).toEqual({ heading: "caveat" });
+    expect((await patchBranding({ theme: { v: 1, fonts: "caveat" } })).status).toBe(400);
+  });
+});

@@ -260,6 +260,7 @@ const themeSchema = z.object({
   fields: z.object({ style: z.enum(FIELD_STYLES).optional(), radius: themeInt(0, 32), label: z.enum(LABEL_POSITIONS).optional(), choice: z.enum(CHOICE_STYLES).optional() }).optional(),
   card: z.object({ radius: themeInt(0, 40), shadow: themeInt(0, 100) }).optional(),
   layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64) }).optional(),
+  fonts: z.object({ heading: z.enum(FORM_FONTS).optional() }).optional(),
 });
 
 const brandingSchema = z.object({

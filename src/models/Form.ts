@@ -98,7 +98,14 @@ export const COVER_POSITIONS = ["center", "top", "bottom"] as const;
 export const FORM_SPACINGS = ["compact", "comfortable", "spacious"] as const;
 // Respondent-form look: a curated font list (loaded by the frontend), a type scale, the card surface, the colour
 // panel treatment and whether short fields pair up into two columns.
-export const FORM_FONTS = ["dm_sans", "inter", "work_sans", "lora", "nunito"] as const;
+// The typefaces a form can use (the frontend loads each from Google Fonts, only when a form uses it). The first five are the original set.
+export const FORM_FONTS = [
+  "dm_sans", "inter", "work_sans", "lora", "nunito",
+  "poppins", "manrope", "plus_jakarta_sans", "outfit", "space_grotesk", "montserrat",
+  "playfair_display", "merriweather", "source_serif_4", "fraunces", "dm_serif_display",
+  "quicksand", "fredoka",
+  "caveat", "pacifico", "bebas_neue", "space_mono",
+] as const;
 export const TYPE_SCALES = ["compact", "default", "large"] as const;
 export const CARD_STYLES = ["flat", "soft", "bordered", "elevated"] as const;
 export const PANEL_TREATMENTS = ["solid", "gradient", "image", "pattern"] as const;
@@ -122,6 +129,8 @@ export interface IFormTheme {
   fields?: { style?: (typeof FIELD_STYLES)[number]; radius?: number; label?: (typeof LABEL_POSITIONS)[number]; choice?: (typeof CHOICE_STYLES)[number] };
   card?: { radius?: number; shadow?: number };
   layout?: { maxWidth?: number; fieldGap?: number };
+  // Typeface of the headings (the form title and page titles); absent = the same as the form's font.
+  fonts?: { heading?: (typeof FORM_FONTS)[number] };
 }
 
 export interface IBranding {
@@ -317,6 +326,7 @@ const ThemeSchema = new Schema<IFormTheme>(
     fields: new Schema({ style: { type: String, enum: FIELD_STYLES }, radius: Number, label: { type: String, enum: LABEL_POSITIONS }, choice: { type: String, enum: CHOICE_STYLES } }, { _id: false }),
     card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
     layout: new Schema({ maxWidth: Number, fieldGap: Number }, { _id: false }),
+    fonts: new Schema({ heading: { type: String, enum: FORM_FONTS } }, { _id: false }),
   },
   { _id: false }
 );

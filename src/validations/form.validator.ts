@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
 import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
-import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FIELD_STYLES, LABEL_POSITIONS, CHOICE_STYLES, THEME_VERSION, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -244,7 +244,24 @@ export const safeImageUrl = z
   }, "must be an http(s) image address or an uploaded file path")
   .optional();
 
+const themeHex = z
+  .string()
+  .max(7)
+  .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "must be a hex colour like #1D4ED8")
+  .optional();
+const themeInt = (min: number, max: number) => z.number().int().min(min).max(max).optional();
+
+// branding.theme: versioned. A key this version does not know is dropped (zod strips it); a wrong type, an out-of-range number or another version is a 400.
+const themeSchema = z.object({
+  v: z.literal(THEME_VERSION),
+  colors: z.object({ text: themeHex, heading: themeHex, card: themeHex, field: themeHex, fieldBorder: themeHex, buttonText: themeHex }).optional(),
+  fields: z.object({ style: z.enum(FIELD_STYLES).optional(), radius: themeInt(0, 32), label: z.enum(LABEL_POSITIONS).optional(), choice: z.enum(CHOICE_STYLES).optional() }).optional(),
+  card: z.object({ radius: themeInt(0, 40), shadow: themeInt(0, 100) }).optional(),
+  layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64) }).optional(),
+});
+
 const brandingSchema = z.object({
+  theme: themeSchema.nullable().optional(),
   primaryColor: z
     .string()
     .trim()

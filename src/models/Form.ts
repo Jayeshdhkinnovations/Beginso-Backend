@@ -109,9 +109,23 @@ export const COVER_FITS = ["banner", "original"] as const;
 // How big the form's logo is drawn on the header: small, medium (the default) or large.
 export const LOGO_SIZES = ["sm", "md", "lg"] as const;
 export const FORM_WIDTHS = ["narrow", "standard", "wide"] as const;
+// The owner's own colours, fields look and exact sizes: one versioned object (branding.theme). Every key is optional; absent = the default look.
+export const THEME_VERSION = 1;
+export const FIELD_STYLES = ["outlined", "filled", "underline"] as const;
+export const LABEL_POSITIONS = ["above", "start"] as const;
+export const CHOICE_STYLES = ["plain", "tiles"] as const;
 export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid", "image"] as const;
 
+export interface IFormTheme {
+  v: number;
+  colors?: { text?: string; heading?: string; card?: string; field?: string; fieldBorder?: string; buttonText?: string };
+  fields?: { style?: (typeof FIELD_STYLES)[number]; radius?: number; label?: (typeof LABEL_POSITIONS)[number]; choice?: (typeof CHOICE_STYLES)[number] };
+  card?: { radius?: number; shadow?: number };
+  layout?: { maxWidth?: number; fieldGap?: number };
+}
+
 export interface IBranding {
+  theme?: IFormTheme | null; // null only travels in a PATCH (clears it); it is never stored
   primaryColor?: string;
   logoUrl?: string;
   coverImageUrl?: string;
@@ -296,8 +310,20 @@ const FormPageSchema = new Schema<IFormPage>(
   { _id: false }
 );
 
+const ThemeSchema = new Schema<IFormTheme>(
+  {
+    v: { type: Number, required: true },
+    colors: new Schema({ text: String, heading: String, card: String, field: String, fieldBorder: String, buttonText: String }, { _id: false }),
+    fields: new Schema({ style: { type: String, enum: FIELD_STYLES }, radius: Number, label: { type: String, enum: LABEL_POSITIONS }, choice: { type: String, enum: CHOICE_STYLES } }, { _id: false }),
+    card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
+    layout: new Schema({ maxWidth: Number, fieldGap: Number }, { _id: false }),
+  },
+  { _id: false }
+);
+
 const BrandingSchema = new Schema<IBranding>(
   {
+    theme: { type: ThemeSchema },
     primaryColor: { type: String },
     logoUrl: { type: String },
     coverImageUrl: { type: String },

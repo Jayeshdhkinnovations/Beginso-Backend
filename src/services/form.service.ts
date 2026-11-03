@@ -385,6 +385,19 @@ export class FormService {
     }
   }
 
+  // PATCH replaces `branding` wholesale too, so a client that predates branding.theme would wipe a saved theme on its next autosave.
+  // The stored theme is carried over when the incoming branding does not name one; a client that knows the field clears it with `theme: null`.
+  private preserveTheme(existing: IForm, incoming: Partial<IForm>): void {
+    const b = incoming.branding as any;
+    if (!b || typeof b !== "object") return;
+    if (b.theme === null) {
+      delete b.theme;
+      return;
+    }
+    const stored = (existing.branding as any)?.theme;
+    if (b.theme === undefined && stored) b.theme = stored.toObject ? stored.toObject() : stored;
+  }
+
   async updateForm(
     formId: string,
     workspaceId: string,
@@ -399,6 +412,7 @@ export class FormService {
     const existing = await this.getFormById(formId, workspaceId);
     const pages = updateDetails.pages || existing.pages || [];
     this.preserveAccessMode(existing, updateDetails);
+    this.preserveTheme(existing, updateDetails);
 
     if (updateDetails.fields) {
       const { fields, fieldsChanged } = this.processFieldsUpdate(existing.fields, updateDetails.fields);
@@ -435,6 +449,7 @@ export class FormService {
     const existing = await this.getFormById(formId, workspaceId);
     const pages = patchDetails.pages || existing.pages || [];
     this.preserveAccessMode(existing, patchDetails);
+    this.preserveTheme(existing, patchDetails);
 
     if (patchDetails.fields) {
       const { fields, fieldsChanged } = this.processFieldsUpdate(existing.fields, patchDetails.fields);

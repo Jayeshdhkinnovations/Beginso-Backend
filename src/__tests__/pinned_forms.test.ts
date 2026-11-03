@@ -202,6 +202,40 @@ describe("list", () => {
     expect((await list(t.editor, "pinned=true&status=published", wsA.slug)).body.forms.map((x: any) => x.title)).toEqual(["Beta survey"]);
   });
 
+  it("the normal list puts the caller's pinned forms first on every page, then the rest, each group in the requested order", async () => {
+    // five forms, oldest first: o1 < o2 < o3 < o4 < o5 (newest first is the default order)
+    const forms: any[] = [];
+    for (let n = 1; n <= 5; n += 1) forms.push(await mkForm({ title: `Order ${n}`, createdAt: new Date(Date.UTC(2026, 0, n)) }));
+    await pin(t.editor, forms[0]._id); // Order 1 (oldest) and
+    await pin(t.editor, forms[2]._id); // Order 3 are pinned
+    const titles = async (qs: string) => (await list(t.editor, `search=Order&${qs}`, wsA.slug)).body.forms.map((x: any) => x.title);
+
+    // pinned (newest first): 3, 1; then the rest (newest first): 5, 4, 2
+    expect(await titles("limit=10")).toEqual(["Order 3", "Order 1", "Order 5", "Order 4", "Order 2"]);
+    // a page edge inside the pinned group, between the groups, and inside the rest
+    expect(await titles("limit=1&page=1")).toEqual(["Order 3"]);
+    expect(await titles("limit=1&page=2")).toEqual(["Order 1"]);
+    expect(await titles("limit=1&page=3")).toEqual(["Order 5"]);
+    expect(await titles("limit=3&page=1")).toEqual(["Order 3", "Order 1", "Order 5"]);
+    expect(await titles("limit=3&page=2")).toEqual(["Order 4", "Order 2"]);
+    // the pinned group follows the requested order too: by title, ascending
+    expect(await titles("limit=10&sort=title&order=asc")).toEqual(["Order 1", "Order 3", "Order 2", "Order 4", "Order 5"]);
+    // the total is the whole list, pinned or not
+    expect((await list(t.editor, "search=Order&limit=2", wsA.slug)).body).toMatchObject({ total: 5, pages: 3 });
+    // someone else's pins do not move anything for this user
+    expect(await (async () => (await list(t.owner, "search=Order&limit=10", wsA.slug)).body.forms.map((x: any) => x.title))()).toEqual(["Order 5", "Order 4", "Order 3", "Order 2", "Order 1"]);
+  });
+
+  it("a form is not listed twice or skipped when every form on the page is pinned", async () => {
+    const a = await mkForm({ title: "AllPinned A", createdAt: new Date(Date.UTC(2026, 1, 1)) });
+    const b = await mkForm({ title: "AllPinned B", createdAt: new Date(Date.UTC(2026, 1, 2)) });
+    await pin(t.editor, a._id);
+    await pin(t.editor, b._id);
+    const res = await list(t.editor, "search=AllPinned&limit=2", wsA.slug);
+    expect(res.body.forms.map((x: any) => x.title)).toEqual(["AllPinned B", "AllPinned A"]);
+    expect(res.body).toMatchObject({ total: 2, pages: 1 });
+  });
+
   it("respects context scoping: workspace pins are not in personal or other-workspace lists", async () => {
     const wf = await mkForm({ title: "WS form" });
     const pf = await mkForm({ title: "Personal form", workspaceId: null, createdBy: editor._id });

@@ -263,7 +263,7 @@ const themeSchema = z.object({
   fonts: z.object({ heading: z.enum(FORM_FONTS).optional() }).optional(),
 });
 
-const brandingSchema = z.object({
+export const brandingSchema = z.object({
   theme: themeSchema.nullable().optional(),
   primaryColor: z
     .string()

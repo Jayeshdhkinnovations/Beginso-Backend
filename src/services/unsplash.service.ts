@@ -71,6 +71,7 @@ export function toPhoto(raw: any): UnsplashPhoto | null {
   const id = typeof raw?.id === "string" && /^[A-Za-z0-9_-]{6,24}$/.test(raw.id) ? raw.id : null;
   const rawUrl = safeHttps(raw?.urls?.raw, "images.unsplash.com");
   const thumb = safeHttps(raw?.urls?.small, "images.unsplash.com");
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
   const name = typeof raw?.user?.name === "string" ? raw.user.name.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 80) : "";
   const profile = safeHttps(raw?.user?.links?.html, "unsplash.com");
   if (!id || !rawUrl || !thumb || !name || !profile) return null;

@@ -40,6 +40,9 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
+// the branding as the reply carries it: at the top, or inside the form
+const brandingOf = (body: any) => body.branding ?? body.form?.branding;
+
 describe("curated look choices", () => {
   it("accepts every documented value", async () => {
     const res = await patchBranding({
@@ -48,7 +51,7 @@ describe("curated look choices", () => {
       buttonStyle: "outline", buttonRadius: "16px", coverPosition: "top", spacing: "spacious", showProgress: false,
     });
     expect(res.status).toBe(200);
-    expect(res.body.branding ?? res.body.form?.branding).toMatchObject({ fontFamily: "lora", formWidth: "wide", coverFit: "original", logoSize: "lg", backgroundStyle: "mesh" });
+    expect(brandingOf(res.body)).toMatchObject({ fontFamily: "lora", formWidth: "wide", coverFit: "original", logoSize: "lg", backgroundStyle: "mesh" });
   });
 
   it.each([
@@ -125,7 +128,7 @@ describe("form icon (used when there is no uploaded logo)", () => {
   it("accepts an icon name and colour", async () => {
     const res = await patchBranding({ iconName: "shopping-cart", iconColor: "#16A34A" });
     expect(res.status).toBe(200);
-    expect(res.body.branding ?? res.body.form?.branding).toMatchObject({ iconName: "shopping-cart", iconColor: "#16A34A" });
+    expect(brandingOf(res.body)).toMatchObject({ iconName: "shopping-cart", iconColor: "#16A34A" });
   });
 
   it.each([
@@ -168,7 +171,7 @@ describe("branding.theme (colours, fields look, exact values)", () => {
   it("drops keys it does not know instead of storing them", async () => {
     const res = await patchBranding({ theme: { v: 1, evil: "x", colors: { text: "#000", sparkle: "#fff" }, card: { radius: 8, glow: 3 } } });
     expect(res.status).toBe(200);
-    const stored = (res.body.branding ?? res.body.form?.branding).theme;
+    const stored = brandingOf(res.body).theme;
     expect(stored).toEqual({ v: 1, colors: { text: "#000" }, card: { radius: 8 } });
   });
 
@@ -195,14 +198,14 @@ describe("branding.theme (colours, fields look, exact values)", () => {
     await patchBranding({ theme });
     expect((await patchBranding({ primaryColor: "#16A34A" })).status).toBe(200);
     const got = await request(app).get(`/api/forms/${formId}`).set(headers());
-    expect((got.body.branding ?? got.body.form?.branding).theme).toEqual(theme);
+    expect(brandingOf(got.body).theme).toEqual(theme);
     // a client that knows the field clears it with null
     expect((await patchBranding({ theme: null })).status).toBe(200);
     const cleared = await request(app).get(`/api/forms/${formId}`).set(headers());
-    expect((cleared.body.branding ?? cleared.body.form?.branding).theme).toBeUndefined();
+    expect(brandingOf(cleared.body).theme).toBeUndefined();
     const other = await request(app).post("/api/forms").set(headers()).send({ title: "Plain", fields: [{ label: "A", type: "short_text", required: false }] });
     const plain = await request(app).get(`/api/forms/${other.body.form._id}`).set(headers());
-    expect((plain.body.branding ?? plain.body.form?.branding)?.theme).toBeUndefined();
+    expect(brandingOf(plain.body)?.theme).toBeUndefined();
   });
 });
 
@@ -253,7 +256,7 @@ describe("more typefaces and a heading font", () => {
   it("drops a key in theme.fonts it does not know, and rejects fonts that is not an object", async () => {
     const res = await patchBranding({ theme: { v: 1, fonts: { heading: "caveat", weight: 900 } } });
     expect(res.status).toBe(200);
-    expect((res.body.branding ?? res.body.form?.branding).theme.fonts).toEqual({ heading: "caveat" });
+    expect(brandingOf(res.body).theme.fonts).toEqual({ heading: "caveat" });
     expect((await patchBranding({ theme: { v: 1, fonts: "caveat" } })).status).toBe(400);
   });
 });

@@ -68,6 +68,7 @@ describe("toPhoto: one result as the app uses it", () => {
 
   it("cleans control characters out of the name and caps its length", () => {
     const p = toPhoto(raw("abcDEF123", { user: { name: `Ana\u0000\u001f${"x".repeat(200)}`, links: { html: "https://unsplash.com/@ana" } } }))!;
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
     expect(p.credit.name).not.toMatch(/[\u0000-\u001f]/);
     expect(p.credit.name.length).toBeLessThanOrEqual(80);
   });

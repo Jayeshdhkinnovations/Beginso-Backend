@@ -260,7 +260,7 @@ class MailService {
         subject: rendered.subject,
         text: rendered.text,
         html: rendered.html.trim(),
-        replyTo: process.env.SMTP_REPLY_TO || "support@beginso.com",
+        replyTo: process.env.SMTP_REPLY_TO || "no-reply@beginso.com",
         ...(sendingDomain
           ? { envelope: { from: `bounces@${sendingDomain}`, to }, messageId: `<${crypto.randomUUID()}@${sendingDomain}>` }
           : {}),

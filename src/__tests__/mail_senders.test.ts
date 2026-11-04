@@ -1,5 +1,5 @@
 // Who each mail comes from: no-reply for codes, registration and account notices; notifications for form submissions and workflow alerts; support for
-// support emails. Replies to all of them reach support.
+// support emails. Replies to all of them go to SMTP_REPLY_TO (no-reply@beginso.com unless set).
 
 const sendMail = jest.fn().mockResolvedValue({ messageId: "m" });
 jest.mock("nodemailer", () => ({ __esModule: true, default: { createTransport: () => ({ sendMail }) } }));
@@ -54,7 +54,7 @@ describe("senderFor", () => {
 });
 
 describe("sendMail", () => {
-  it("sends a sign-in code from no-reply and a workflow alert from notifications, both with replies to support", async () => {
+  it("sends a sign-in code from no-reply and a workflow alert from notifications, both with replies to no-reply", async () => {
     await mailService.sendMail({ to: "a@example.test", template: "reset_password", actionUrl: "https://beginso.com/reset?t=1" });
     await mailService.sendMail({
       to: "b@example.test",
@@ -64,8 +64,8 @@ describe("sendMail", () => {
     const [reset, exported] = sendMail.mock.calls.map((c) => c[0]);
     expect(reset.from).toBe('"Beginso" <no-reply@beginso.com>');
     expect(exported.from).toBe('"Beginso" <notifications@beginso.com>');
-    expect(reset.replyTo).toBe("support@beginso.com");
-    expect(exported.replyTo).toBe("support@beginso.com");
+    expect(reset.replyTo).toBe("no-reply@beginso.com");
+    expect(exported.replyTo).toBe("no-reply@beginso.com");
   });
 
   it("sends from support when the caller says so", async () => {

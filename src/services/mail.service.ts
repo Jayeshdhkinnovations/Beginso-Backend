@@ -65,6 +65,49 @@ export interface SendMailOptions {
   formName?: string;
   expiresAt?: Date;
   activity?: ActivityEmailInput;
+  /** Which address the mail comes from. Left out, it follows the template (see SENDER_OF). */
+  sender?: MailSender;
+}
+
+// Who a mail comes from. no-reply: OTP, registration and (account) notifications. notifications: form submissions and workflow alerts
+// (a new response, a mention, an assignment, a receipt for a submission, the response limit, the weekly digest of responses).
+// support: mail from the support team (nothing sends it by itself yet; a person or a future help-desk flow picks it with `sender`).
+export type MailSender = "no-reply" | "support" | "notifications";
+
+const SENDER_OF: Record<AuthMailType, MailSender> = {
+  verify_email: "no-reply",
+  verify_email_otp: "no-reply",
+  reset_password: "no-reply",
+  welcome_user: "no-reply",
+  email_verified_success: "no-reply",
+  password_changed_success: "no-reply",
+  new_device_signin: "no-reply",
+  workspace_invitation: "no-reply",
+  invitation_reminder: "no-reply",
+  invitation_accepted: "no-reply",
+  role_changed: "no-reply",
+  member_removed: "no-reply",
+  workspace_deleted: "no-reply",
+  storage_warning: "no-reply",
+  export_ready: "no-reply",
+  export_failed: "no-reply",
+  form_shared: "no-reply",
+  respondent_submission_link: "no-reply",
+  respondent_email_code: "no-reply",
+  activity_notification: "notifications",
+  respondent_confirmation: "notifications",
+  respondent_receipt: "notifications",
+  response_limit_reached: "notifications",
+  weekly_digest: "notifications",
+};
+
+/** The From address and name for a mail. SMTP_FROM_EMAIL keeps meaning the no-reply address; the other two have their own settings. */
+export function senderFor(o: Pick<SendMailOptions, "template" | "sender">): { name: string; email: string } {
+  const kind = o.sender ?? SENDER_OF[o.template] ?? "no-reply";
+  const baseName = process.env.SMTP_FROM_NAME || "Beginso";
+  if (kind === "support") return { name: process.env.SMTP_FROM_NAME_SUPPORT || `${baseName} Support`, email: process.env.SMTP_FROM_EMAIL_SUPPORT || "support@beginso.com" };
+  if (kind === "notifications") return { name: process.env.SMTP_FROM_NAME_NOTIFICATIONS || baseName, email: process.env.SMTP_FROM_EMAIL_NOTIFICATIONS || "notifications@beginso.com" };
+  return { name: baseName, email: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || "no-reply@beginso.com" };
 }
 
 // Notification and bulk mail carry List-Unsubscribe. Transactional mail must not.
@@ -186,9 +229,8 @@ class MailService {
   async sendMail(options: SendMailOptions): Promise<boolean> {
     const startTime = Date.now();
     const reqId = options.requestId || `req_${crypto.randomBytes(8).toString("hex")}`;
-    const fromName = process.env.SMTP_FROM_NAME || "Beginso";
-    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || "no-reply@beginso.com";
-    const from = `"${fromName}" <${fromEmail}>`;
+    const sender = senderFor(options);
+    const from = `"${sender.name}" <${sender.email}>`;
     // Set once mail.beginso.com has SPF/DKIM/DMARC. Until then the relay's own defaults apply.
     const sendingDomain = process.env.MAIL_DOMAIN;
 
@@ -219,7 +261,7 @@ class MailService {
         subject: rendered.subject,
         text: rendered.text,
         html: rendered.html.trim(),
-        replyTo: process.env.SMTP_REPLY_TO || "support@beginso.com",
+        replyTo: process.env.SMTP_REPLY_TO || "no-reply@beginso.com",
         ...(sendingDomain
           ? { envelope: { from: `bounces@${sendingDomain}`, to }, messageId: `<${crypto.randomUUID()}@${sendingDomain}>` }
           : {}),

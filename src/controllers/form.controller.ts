@@ -1807,6 +1807,9 @@ export const listFormGrants = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+/** The role names people see (the same words the app uses), for the "your access changed" notification. */
+const GRANT_ROLE_LABEL: Record<string, string> = { admin: "Admin", editor: "Editor", member: "Editor", reviewer: "Reviewer", viewer: "Reviewer" };
+
 export const createFormGrant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!(await assertCanManageGrants(req, res))) return;
@@ -1888,6 +1891,12 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
       return;
     }
 
+    // Granting again to someone who already has access is how a role is changed (it is an upsert): remember what they had, so a change is
+    // told as a change ("now a Reviewer"), and saving the same role again is not told at all.
+    const previous = await FormAccessGrant.findOne({ formId: rawId, userId: targetUserId }).select("role").lean();
+    const roleChanged = !!previous && previous.role !== assignedRole;
+    const unchanged = !!previous && previous.role === assignedRole;
+
     const grant = await FormAccessGrant.findOneAndUpdate(
       { formId: rawId, userId: targetUserId },
       {
@@ -1912,18 +1921,28 @@ export const createFormGrant = async (req: Request, res: Response, next: NextFun
     const userFullName = targetUser?.fullName || "User";
 
     const grantForm = await Form.findById(rawId).select("workspaceId title").lean();
-    await recordEvent(req, grantForm?.workspaceId, "access_grant.create", { id: targetUserId, type: "access_grant", label: userEmail }, { formId: String(rawId), formTitle: grantForm?.title, role: assignedRole });
+    if (!unchanged) {
+      await recordEvent(
+        req,
+        grantForm?.workspaceId,
+        roleChanged ? "access_grant.role_change" : "access_grant.create",
+        { id: targetUserId, type: "access_grant", label: userEmail },
+        { formId: String(rawId), formTitle: grantForm?.title, role: assignedRole, ...(roleChanged ? { previousRole: previous!.role } : {}) },
+      );
+    }
 
     // Tell the grantee. Personal context (no workspaceId), so it shows in their personal bell and drives the
     // "Shared with me" badge. Never blocks or fails the grant.
-    if (String(targetUserId) !== String(authReq.user._id)) {
+    if (String(targetUserId) !== String(authReq.user._id) && !unchanged) {
+      const who = authReq.user.fullName || authReq.user.name || "Someone";
+      const formName = grantForm?.title || "a form";
       await Notification.create({
         userId: targetUserId,
         workspaceId: null,
         formId: String(rawId),
         type: "form_shared",
-        title: "A form was shared with you",
-        message: `${authReq.user.fullName || authReq.user.name || "Someone"} shared "${grantForm?.title || "a form"}" with you`,
+        title: roleChanged ? "Your access to a form changed" : "A form was shared with you",
+        message: roleChanged ? `${who} changed your access to "${formName}" to ${GRANT_ROLE_LABEL[assignedRole] ?? assignedRole}` : `${who} shared "${formName}" with you`,
       }).catch(() => null);
     }
 

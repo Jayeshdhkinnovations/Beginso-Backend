@@ -255,6 +255,7 @@ const themeInt = (min: number, max: number) => z.number().int().min(min).max(max
 
 // Who took an Unsplash photo: a name (no control characters or markup) and their unsplash.com profile address, nothing else.
 const themeCredit = z.object({
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
   name: z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f<>]+$/, "name has characters that are not allowed"),
   url: z.string().max(300).regex(/^https:\/\/unsplash\.com\/(@[A-Za-z0-9_.-]{1,60})?(\?[A-Za-z0-9_=&%.-]{0,120})?$/, "must be an unsplash.com profile address"),
 });

@@ -979,6 +979,8 @@ export const getPublicFormBySlug = async (
       formWidth: branding.formWidth,
       coverFit: branding.coverFit,
       logoSize: branding.logoSize,
+      // Only a version this server understands is sent on; the page falls back to the default look without it.
+      theme: branding.theme?.v === 1 ? (branding.theme.toObject ? branding.theme.toObject() : branding.theme) : undefined,
       iconName: branding.iconName,
       iconColor: branding.iconColor,
       bannerText: branding.bannerText,

@@ -110,6 +110,13 @@ export const publicTemplatesRateLimiter = createRateLimiter({
   log: true,
 });
 
+// Photo search for the form studio: per person (or per IP when there is no person), UNSPLASH_RATE_LIMIT_MAX per minute, default 20.
+export const unsplashRateLimiter = createRateLimiter({
+  name: "unsplash",
+  limit: () => ({ max: intEnv("UNSPLASH_RATE_LIMIT_MAX", 20), windowMs: 60000 }),
+  by: (req, ip) => (req as any).user?._id?.toString() ?? ip,
+});
+
 // Unauthenticated auth endpoints (session, OTP, reset, password-changed): per IP.
 export const authRateLimiter = createRateLimiter({
   name: "auth",

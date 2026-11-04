@@ -98,7 +98,14 @@ export const COVER_POSITIONS = ["center", "top", "bottom"] as const;
 export const FORM_SPACINGS = ["compact", "comfortable", "spacious"] as const;
 // Respondent-form look: a curated font list (loaded by the frontend), a type scale, the card surface, the colour
 // panel treatment and whether short fields pair up into two columns.
-export const FORM_FONTS = ["dm_sans", "inter", "work_sans", "lora", "nunito"] as const;
+// The typefaces a form can use (the frontend loads each from Google Fonts, only when a form uses it). The first five are the original set.
+export const FORM_FONTS = [
+  "dm_sans", "inter", "work_sans", "lora", "nunito",
+  "poppins", "manrope", "plus_jakarta_sans", "outfit", "space_grotesk", "montserrat",
+  "playfair_display", "merriweather", "source_serif_4", "fraunces", "dm_serif_display",
+  "quicksand", "fredoka",
+  "caveat", "pacifico", "bebas_neue", "space_mono",
+] as const;
 export const TYPE_SCALES = ["compact", "default", "large"] as const;
 export const CARD_STYLES = ["flat", "soft", "bordered", "elevated"] as const;
 export const PANEL_TREATMENTS = ["solid", "gradient", "image", "pattern"] as const;
@@ -109,9 +116,29 @@ export const COVER_FITS = ["banner", "original"] as const;
 // How big the form's logo is drawn on the header: small, medium (the default) or large.
 export const LOGO_SIZES = ["sm", "md", "lg"] as const;
 export const FORM_WIDTHS = ["narrow", "standard", "wide"] as const;
+// The owner's own colours, fields look and exact sizes: one versioned object (branding.theme). Every key is optional; absent = the default look.
+export const THEME_VERSION = 1;
+// Split Feature: which side the picture panel is on, in reading order (start = the left in left-to-right languages).
+export const PANEL_SIDES = ["start", "end"] as const;
+export const FIELD_STYLES = ["outlined", "filled", "underline"] as const;
+export const LABEL_POSITIONS = ["above", "start"] as const;
+export const CHOICE_STYLES = ["plain", "tiles"] as const;
 export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid", "image"] as const;
 
+export interface IFormTheme {
+  v: number;
+  colors?: { text?: string; heading?: string; card?: string; field?: string; fieldBorder?: string; buttonText?: string };
+  fields?: { style?: (typeof FIELD_STYLES)[number]; radius?: number; label?: (typeof LABEL_POSITIONS)[number]; choice?: (typeof CHOICE_STYLES)[number] };
+  card?: { radius?: number; shadow?: number };
+  layout?: { maxWidth?: number; fieldGap?: number; panelSide?: (typeof PANEL_SIDES)[number] };
+  // Typeface of the headings (the form title and page titles); absent = the same as the form's font.
+  fonts?: { heading?: (typeof FORM_FONTS)[number] };
+  // The photographer of an Unsplash photo used as the cover and/or the page background, one credit for each picture: shown on the form (Unsplash's rule). Only an unsplash.com profile address.
+  credit?: { cover?: { name: string; url: string }; background?: { name: string; url: string } };
+}
+
 export interface IBranding {
+  theme?: IFormTheme | null; // null only travels in a PATCH (clears it); it is never stored
   primaryColor?: string;
   logoUrl?: string;
   coverImageUrl?: string;
@@ -148,6 +175,10 @@ export type FormLayout =
   | "steps"
   | "split_feature"
   | "compact"
+  | "chat"
+  | "sidebar"
+  | "open"
+  | "focus"
   | "single_column"
   | "two_column";
 
@@ -158,6 +189,10 @@ export const FORM_LAYOUT_VALUES: FormLayout[] = [
   "steps",
   "split_feature",
   "compact",
+  "chat",
+  "sidebar",
+  "open",
+  "focus",
   "single_column",
   "two_column",
 ];
@@ -296,8 +331,22 @@ const FormPageSchema = new Schema<IFormPage>(
   { _id: false }
 );
 
+const ThemeSchema = new Schema<IFormTheme>(
+  {
+    v: { type: Number, required: true },
+    colors: new Schema({ text: String, heading: String, card: String, field: String, fieldBorder: String, buttonText: String }, { _id: false }),
+    fields: new Schema({ style: { type: String, enum: FIELD_STYLES }, radius: Number, label: { type: String, enum: LABEL_POSITIONS }, choice: { type: String, enum: CHOICE_STYLES } }, { _id: false }),
+    card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
+    layout: new Schema({ maxWidth: Number, fieldGap: Number, panelSide: { type: String, enum: PANEL_SIDES } }, { _id: false }),
+    fonts: new Schema({ heading: { type: String, enum: FORM_FONTS } }, { _id: false }),
+    credit: new Schema({ cover: new Schema({ name: String, url: String }, { _id: false }), background: new Schema({ name: String, url: String }, { _id: false }) }, { _id: false }),
+  },
+  { _id: false }
+);
+
 const BrandingSchema = new Schema<IBranding>(
   {
+    theme: { type: ThemeSchema },
     primaryColor: { type: String },
     logoUrl: { type: String },
     coverImageUrl: { type: String },

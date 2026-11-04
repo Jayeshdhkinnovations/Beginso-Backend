@@ -142,3 +142,143 @@ describe("form icon (used when there is no uploaded logo)", () => {
     expect((pub.body.form ?? pub.body).branding).toMatchObject({ iconName: "briefcase", iconColor: "#7C3AED" });
   });
 });
+
+describe("branding.theme (colours, fields look, exact values)", () => {
+  const theme = {
+    v: 1,
+    colors: { text: "#111827", heading: "#7C3AED", card: "#FFFFFF", field: "#F3F4F6", fieldBorder: "#9CA3AF", buttonText: "#fff" },
+    fields: { style: "underline", radius: 12, label: "start", choice: "tiles" },
+    card: { radius: 24, shadow: 60 },
+    layout: { maxWidth: 900, fieldGap: 20 },
+  };
+
+  it("accepts every key and the public form read returns the theme", async () => {
+    expect((await patchBranding({ theme })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(theme);
+  });
+
+  it("accepts the bounds exactly", async () => {
+    const res = await patchBranding({ theme: { v: 1, fields: { radius: 0 }, card: { radius: 40, shadow: 0 }, layout: { maxWidth: 360, fieldGap: 64 } } });
+    expect(res.status).toBe(200);
+    expect((await patchBranding({ theme: { v: 1, card: { shadow: 100 }, layout: { maxWidth: 1400, fieldGap: 4 }, fields: { radius: 32 } } })).status).toBe(200);
+  });
+
+  it("drops keys it does not know instead of storing them", async () => {
+    const res = await patchBranding({ theme: { v: 1, evil: "x", colors: { text: "#000", sparkle: "#fff" }, card: { radius: 8, glow: 3 } } });
+    expect(res.status).toBe(200);
+    const stored = (res.body.branding ?? res.body.form?.branding).theme;
+    expect(stored).toEqual({ v: 1, colors: { text: "#000" }, card: { radius: 8 } });
+  });
+
+  it.each([
+    ["colors", { text: "red" }], ["colors", { heading: "#12" }], ["colors", { card: "url(javascript:1)" }], ["colors", { field: "#GGGGGG" }],
+    ["colors", { fieldBorder: "" }], ["colors", { buttonText: "rgb(0,0,0)" }], ["colors", { text: "#" + "0".repeat(5000) }], ["colors", { text: 123 }],
+    ["fields", { style: "glass" }], ["fields", { label: "inside" }], ["fields", { choice: "cards" }], ["fields", { radius: 33 }], ["fields", { radius: -1 }], ["fields", { radius: "12px" }],
+    ["card", { radius: 41 }], ["card", { radius: 3.5 }], ["card", { shadow: 101 }], ["card", { shadow: "60" }],
+    ["layout", { maxWidth: 359 }], ["layout", { maxWidth: 1401 }], ["layout", { fieldGap: 3 }], ["layout", { fieldGap: 65 }], ["layout", { maxWidth: null }],
+  ])("rejects theme.%s = %j", async (group, value) => {
+    expect((await patchBranding({ theme: { v: 1, [group as string]: value } })).status).toBe(400);
+  });
+
+  it.each([[{}], [{ v: 2 }], [{ v: "1" }], [{ v: 0 }], ["theme"], [["v"]], [7], [{ v: 1, colors: "red" }], [{ v: 1, fields: [] }]])("rejects the whole theme %j", async (value) => {
+    expect((await patchBranding({ theme: value })).status).toBe(400);
+  });
+
+  it("rejects an oversized body", async () => {
+    const res = await patchBranding({ theme: { v: 1, junk: "x".repeat(2_000_000) } });
+    expect([400, 413]).toContain(res.status);
+  });
+
+  it("an older client that sends no theme leaves the stored theme alone, and a form that never had one reads without it", async () => {
+    await patchBranding({ theme });
+    expect((await patchBranding({ primaryColor: "#16A34A" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect((got.body.branding ?? got.body.form?.branding).theme).toEqual(theme);
+    // a client that knows the field clears it with null
+    expect((await patchBranding({ theme: null })).status).toBe(200);
+    const cleared = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect((cleared.body.branding ?? cleared.body.form?.branding).theme).toBeUndefined();
+    const other = await request(app).post("/api/forms").set(headers()).send({ title: "Plain", fields: [{ label: "A", type: "short_text", required: false }] });
+    const plain = await request(app).get(`/api/forms/${other.body.form._id}`).set(headers());
+    expect((plain.body.branding ?? plain.body.form?.branding)?.theme).toBeUndefined();
+  });
+});
+
+describe("built-in pictures (the app's own library)", () => {
+  it.each(["logoUrl", "coverImageUrl", "backgroundImageUrl"])("%s accepts a built-in picture path", async (key) => {
+    const res = await patchBranding({ [key]: "/form-pictures/aurora-mint.jpg" });
+    expect(res.status).toBe(200);
+  });
+
+  it.each(["coverImageUrl", "backgroundImageUrl"])("%s keeps the built-in path on the public form read", async (key) => {
+    await patchBranding({ [key]: "/form-pictures/calm-waves.jpg" });
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding[key]).toBe("/form-pictures/calm-waves.jpg");
+  });
+
+  it.each([
+    "/form-pictures/../secret.jpg", "/form-pictures/a/b.jpg", "/form-pictures/UPPER.jpg", "/form-pictures/x.png", "/form-pictures/.jpg", "/form-pictures/",
+    "/form-pictures/" + "a".repeat(41) + ".jpg", "form-pictures/x.jpg", "//form-pictures/x.jpg", "/form-pictures/x.jpg?a=b", "/form-pictures/x.jpg#f", "/form-pictures/x y.jpg",
+    "/other/x.jpg", "/form-pictures/%2e%2e/x.jpg",
+  ])("rejects %s", async (value) => {
+    expect((await patchBranding({ coverImageUrl: value })).status).toBe(400);
+  });
+});
+
+describe("more typefaces and a heading font", () => {
+  const NEW_FONTS = ["poppins", "manrope", "plus_jakarta_sans", "outfit", "space_grotesk", "montserrat", "playfair_display", "merriweather", "source_serif_4", "fraunces", "dm_serif_display", "quicksand", "fredoka", "caveat", "pacifico", "bebas_neue", "space_mono"];
+
+  it.each(NEW_FONTS)("fontFamily accepts %s", async (font) => {
+    expect((await patchBranding({ fontFamily: font })).status).toBe(200);
+  });
+
+  it("the original five still work", async () => {
+    for (const font of ["dm_sans", "inter", "work_sans", "lora", "nunito"]) expect((await patchBranding({ fontFamily: font })).status).toBe(200);
+  });
+
+  it("theme.fonts.heading is stored and returned by the public form read", async () => {
+    expect((await patchBranding({ theme: { v: 1, fonts: { heading: "playfair_display" } } })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual({ v: 1, fonts: { heading: "playfair_display" } });
+  });
+
+  it.each([["comic_sans"], ["Playfair Display"], ["playfair_display; x"], [""], [7], [null]])("theme.fonts.heading rejects %j", async (value) => {
+    expect((await patchBranding({ theme: { v: 1, fonts: { heading: value } } })).status).toBe(400);
+  });
+
+  it("drops a key in theme.fonts it does not know, and rejects fonts that is not an object", async () => {
+    const res = await patchBranding({ theme: { v: 1, fonts: { heading: "caveat", weight: 900 } } });
+    expect(res.status).toBe(200);
+    expect((res.body.branding ?? res.body.form?.branding).theme.fonts).toEqual({ heading: "caveat" });
+    expect((await patchBranding({ theme: { v: 1, fonts: "caveat" } })).status).toBe(400);
+  });
+});
+
+describe("new layouts and the Split Feature picture side", () => {
+  it.each(["chat", "sidebar", "open", "focus"])("accepts the %s layout and the public read returns it unchanged", async (layout) => {
+    const res = await request(app).patch(`/api/forms/${formId}`).set(headers()).send({ settings: { layout } });
+    expect(res.status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).settings.layout).toBe(layout);
+  });
+
+  it("still refuses a layout that does not exist", async () => {
+    expect((await request(app).patch(`/api/forms/${formId}`).set(headers()).send({ settings: { layout: "carousel" } })).status).toBe(400);
+  });
+
+  it.each(["start", "end"])("theme.layout.panelSide accepts %s and the public read returns it", async (side) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSide: side } } })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme.layout.panelSide).toBe(side);
+  });
+
+  it.each([["left"], ["right"], ["both"], [""], [1], [null]])("theme.layout.panelSide rejects %j", async (value) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSide: value } } })).status).toBe(400);
+  });
+});

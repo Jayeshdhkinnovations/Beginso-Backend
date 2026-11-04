@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
 import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
-import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FIELD_STYLES, LABEL_POSITIONS, CHOICE_STYLES, THEME_VERSION, PANEL_SIDES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -235,16 +235,46 @@ export const safeImageUrl = z
     if (v === "") return true;
     if (/["'()<>\\\s]/.test(v)) return false;
     if (v.startsWith("/api/upload/file/")) return true;
+    // A picture from the app's own built-in library (public/form-pictures on the frontend): a fixed folder, a lowercase name, .jpg only.
+    if (/^\/form-pictures\/[a-z0-9-]{1,40}\.jpg$/.test(v)) return true;
     try {
       const u = new URL(v);
       return (u.protocol === "https:" || u.protocol === "http:") && !u.username && !u.password;
     } catch {
       return false;
     }
-  }, "must be an http(s) image address or an uploaded file path")
+  }, "must be an http(s) image address, an uploaded file path or a built-in picture")
   .optional();
 
-const brandingSchema = z.object({
+const themeHex = z
+  .string()
+  .max(7)
+  .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "must be a hex colour like #1D4ED8")
+  .optional();
+const themeInt = (min: number, max: number) => z.number().int().min(min).max(max).optional();
+
+// Who took an Unsplash photo: a name (no control characters or markup) and their unsplash.com profile address, nothing else.
+const themeCredit = z.object({
+  name: z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f<>]+$/, "name has characters that are not allowed"),
+  url: z.string().max(300).regex(/^https:\/\/unsplash\.com\/(@[A-Za-z0-9_.-]{1,60})?(\?[A-Za-z0-9_=&%.-]{0,120})?$/, "must be an unsplash.com profile address"),
+});
+
+// branding.theme: versioned. A key this version does not know is dropped (zod strips it); a wrong type, an out-of-range number or another version is a 400.
+const themeSchema = z.object({
+  v: z.literal(THEME_VERSION),
+  colors: z.object({ text: themeHex, heading: themeHex, card: themeHex, field: themeHex, fieldBorder: themeHex, buttonText: themeHex }).optional(),
+  fields: z.object({ style: z.enum(FIELD_STYLES).optional(), radius: themeInt(0, 32), label: z.enum(LABEL_POSITIONS).optional(), choice: z.enum(CHOICE_STYLES).optional() }).optional(),
+  card: z.object({ radius: themeInt(0, 40), shadow: themeInt(0, 100) }).optional(),
+  layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64), panelSide: z.enum(PANEL_SIDES).optional() }).optional(),
+  fonts: z.object({ heading: z.enum(FORM_FONTS).optional() }).optional(),
+  // Who took the Unsplash photo: a name (no control characters) and their unsplash.com profile address, nothing else.
+  credit: z
+    .object({ cover: themeCredit.optional(), background: themeCredit.optional() })
+    .optional(),
+});
+
+export const brandingSchema = z.object({
+  theme: themeSchema.nullable().optional(),
   primaryColor: z
     .string()
     .trim()

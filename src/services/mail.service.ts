@@ -69,7 +69,8 @@ export interface SendMailOptions {
   sender?: MailSender;
 }
 
-// Who a mail comes from. no-reply: sign-in codes, registration and account notices. notifications: form submissions and workflow alerts.
+// Who a mail comes from. no-reply: OTP, registration and (account) notifications. notifications: form submissions and workflow alerts
+// (a new response, a mention, an assignment, a receipt for a submission, the response limit, the weekly digest of responses).
 // support: mail from the support team (nothing sends it by itself yet; a person or a future help-desk flow picks it with `sender`).
 export type MailSender = "no-reply" | "support" | "notifications";
 
@@ -88,6 +89,8 @@ const SENDER_OF: Record<AuthMailType, MailSender> = {
   member_removed: "no-reply",
   workspace_deleted: "no-reply",
   storage_warning: "no-reply",
+  export_ready: "no-reply",
+  export_failed: "no-reply",
   form_shared: "no-reply",
   respondent_submission_link: "no-reply",
   respondent_email_code: "no-reply",
@@ -95,8 +98,6 @@ const SENDER_OF: Record<AuthMailType, MailSender> = {
   respondent_confirmation: "notifications",
   respondent_receipt: "notifications",
   response_limit_reached: "notifications",
-  export_ready: "notifications",
-  export_failed: "notifications",
   weekly_digest: "notifications",
 };
 

@@ -33,7 +33,9 @@ describe("senderFor", () => {
     ["respondent_receipt", "notifications@beginso.com"],
     ["respondent_confirmation", "notifications@beginso.com"],
     ["response_limit_reached", "notifications@beginso.com"],
-    ["export_ready", "notifications@beginso.com"],
+    ["export_ready", "no-reply@beginso.com"],
+    ["storage_warning", "no-reply@beginso.com"],
+    ["role_changed", "no-reply@beginso.com"],
     ["weekly_digest", "notifications@beginso.com"],
   ])("%s comes from %s", (template, email) => {
     expect(senderFor({ template }).email).toBe(email);
@@ -54,18 +56,18 @@ describe("senderFor", () => {
 });
 
 describe("sendMail", () => {
-  it("sends a sign-in code from no-reply and a workflow alert from notifications, both with replies to no-reply", async () => {
+  it("sends a sign-in code from no-reply and a form alert from notifications, both with replies to no-reply", async () => {
     await mailService.sendMail({ to: "a@example.test", template: "reset_password", actionUrl: "https://beginso.com/reset?t=1" });
     await mailService.sendMail({
       to: "b@example.test",
-      template: "export_ready",
-      payload: { name: "B", formTitle: "Survey", downloadUrl: "https://beginso.com/x", expiresAt: new Date() } as never,
+      template: "response_limit_reached",
+      payload: { formName: "Survey", formId: "f1", reason: "limit", limit: 10, totalResponses: 10, closedAt: new Date(), unsubscribeUrl: "https://beginso.com/u" } as never,
     });
-    const [reset, exported] = sendMail.mock.calls.map((c) => c[0]);
+    const [reset, alert] = sendMail.mock.calls.map((c) => c[0]);
     expect(reset.from).toBe('"Beginso" <no-reply@beginso.com>');
-    expect(exported.from).toBe('"Beginso" <notifications@beginso.com>');
+    expect(alert.from).toBe('"Beginso" <notifications@beginso.com>');
     expect(reset.replyTo).toBe("no-reply@beginso.com");
-    expect(exported.replyTo).toBe("no-reply@beginso.com");
+    expect(alert.replyTo).toBe("no-reply@beginso.com");
   });
 
   it("sends from support when the caller says so", async () => {

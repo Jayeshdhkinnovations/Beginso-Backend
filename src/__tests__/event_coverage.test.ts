@@ -16,6 +16,7 @@ import ResponseModel from "../models/Response";
 import Invitation from "../models/Invitation";
 import FormAccessGrant from "../models/FormAccessGrant";
 import { Event } from "../models/Event";
+import Notification from "../models/Notification";
 import Template from "../models/Template";
 import { generateToken } from "../utils/generateToken";
 
@@ -127,6 +128,21 @@ describe("forms", () => {
       .send({ targetWorkspaceId: "personal" });
     const moves = await Event.find({ action: "form.move", targetId: f._id.toString() }).lean();
     expect(moves.some((m: any) => m.metadata?.to === "personal" && m.workspaceId.toString() === wsC._id.toString())).toBe(true);
+  });
+
+  it("access grants: changing a role is one role_change event and a 'changed' notice; saving the same role again tells no one", async () => {
+    const f = await mkForm();
+    const grant = (role: string) => as(request(app).post(`/api/forms/${f._id}/grants`).send({ userId: invitee._id.toString(), role }));
+    expect((await grant("viewer")).status).toBe(201);
+    expect((await grant("member")).status).toBe(201); // the change
+    expect((await grant("member")).status).toBe(201); // the same again
+    const events = await Event.find({ "metadata.formId": f._id.toString(), action: /^access_grant\./ }).sort({ createdAt: 1 }).lean();
+    expect(events.map((e: any) => e.action)).toEqual(["access_grant.create", "access_grant.role_change"]);
+    expect(events[1].metadata).toMatchObject({ role: "member", previousRole: "viewer" });
+    const notes = await Notification.find({ userId: invitee._id, formId: f._id.toString() }).sort({ createdAt: 1 }).lean();
+    expect(notes.map((n: any) => n.title)).toEqual(["A form was shared with you", "Your access to a form changed"]);
+    expect(notes[1].message).toContain("to Editor");
+    expect(await FormAccessGrant.countDocuments({ formId: f._id, userId: invitee._id })).toBe(1);
   });
 
   it("creating from a template", async () => {

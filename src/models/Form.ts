@@ -123,7 +123,22 @@ export const PANEL_SIDES = ["start", "end"] as const;
 export const FIELD_STYLES = ["outlined", "filled", "underline"] as const;
 export const LABEL_POSITIONS = ["above", "start"] as const;
 export const CHOICE_STYLES = ["plain", "tiles"] as const;
+// Buttons and details of the respondent form: how big and wide the buttons are, how they react to the pointer, and how the multi-page progress is drawn.
+export const BUTTON_SIZES = ["small", "default", "large"] as const;
+export const BUTTON_WIDTHS = ["fill", "auto"] as const;
+export const BUTTON_HOVERS = ["none", "lift", "darken"] as const;
+export const PROGRESS_STYLES = ["bar", "dots", "steps"] as const;
 export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid", "image"] as const;
+
+/** A crop that can be opened again: the original, the picture it made, and the frame (shape, centre as a share of the picture, zoom). */
+export interface ICropMemo {
+  from: string;
+  result: string;
+  aspect: number;
+  fx: number;
+  fy: number;
+  zoom: number;
+}
 
 export interface IFormTheme {
   v: number;
@@ -135,6 +150,19 @@ export interface IFormTheme {
   fonts?: { heading?: (typeof FORM_FONTS)[number] };
   // The photographer of an Unsplash photo used as the cover and/or the page background, one credit for each picture: shown on the form (Unsplash's rule). Only an unsplash.com profile address.
   credit?: { cover?: { name: string; url: string }; background?: { name: string; url: string } };
+  buttons?: { size?: (typeof BUTTON_SIZES)[number]; width?: (typeof BUTTON_WIDTHS)[number]; hover?: (typeof BUTTON_HOVERS)[number] };
+  // The owner's own words on the buttons (absent = Submit, Next, Back), a short line under the form, and the style of the multi-page progress.
+  labels?: { submit?: string; next?: string; back?: string };
+  progress?: { style?: (typeof PROGRESS_STYLES)[number] };
+  footer?: { note?: string };
+  // The screen a respondent sees after sending: a headline of the owner's own, an accent colour, a picture, confetti, and an optional move on to another page (https only).
+  success?: { headline?: string; colour?: string; picture?: string; confetti?: boolean; redirect?: { url: string; seconds?: number } };
+  // The page behind the form: the two colours and the angle of a gradient, and how much a picture is darkened (percent) and blurred (pixels).
+  background?: { from?: string; to?: string; angle?: number; darken?: number; blur?: number };
+  // How tall the cover banner is, in pixels (absent = as it has always been).
+  cover?: { height?: number };
+  // For the cover and the page background picture: the original it was cropped from and how it was framed, so the crop can be adjusted later.
+  crop?: { cover?: ICropMemo; background?: ICropMemo; logo?: ICropMemo };
 }
 
 export interface IBranding {
@@ -339,6 +367,21 @@ const ThemeSchema = new Schema<IFormTheme>(
     card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
     layout: new Schema({ maxWidth: Number, fieldGap: Number, panelSide: { type: String, enum: PANEL_SIDES } }, { _id: false }),
     fonts: new Schema({ heading: { type: String, enum: FORM_FONTS } }, { _id: false }),
+    buttons: new Schema({ size: { type: String, enum: BUTTON_SIZES }, width: { type: String, enum: BUTTON_WIDTHS }, hover: { type: String, enum: BUTTON_HOVERS } }, { _id: false }),
+    labels: new Schema({ submit: String, next: String, back: String }, { _id: false }),
+    progress: new Schema({ style: { type: String, enum: PROGRESS_STYLES } }, { _id: false }),
+    footer: new Schema({ note: String }, { _id: false }),
+    background: new Schema({ from: String, to: String, angle: Number, darken: Number, blur: Number }, { _id: false }),
+    cover: new Schema({ height: Number }, { _id: false }),
+    crop: new Schema(
+      {
+        cover: new Schema({ from: String, result: String, aspect: Number, fx: Number, fy: Number, zoom: Number }, { _id: false }),
+        background: new Schema({ from: String, result: String, aspect: Number, fx: Number, fy: Number, zoom: Number }, { _id: false }),
+        logo: new Schema({ from: String, result: String, aspect: Number, fx: Number, fy: Number, zoom: Number }, { _id: false }),
+      },
+      { _id: false },
+    ),
+    success: new Schema({ headline: String, colour: String, picture: String, confetti: Boolean, redirect: new Schema({ url: String, seconds: Number }, { _id: false }) }, { _id: false }),
     credit: new Schema({ cover: new Schema({ name: String, url: String }, { _id: false }), background: new Schema({ name: String, url: String }, { _id: false }) }, { _id: false }),
   },
   { _id: false }

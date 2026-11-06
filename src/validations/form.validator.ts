@@ -298,6 +298,9 @@ const themeSchema = z.object({
   labels: z.object({ submit: themeText(30), next: themeText(30), back: themeText(30) }).optional(),
   progress: z.object({ style: z.enum(PROGRESS_STYLES).optional() }).optional(),
   footer: z.object({ note: themeText(200) }).optional(),
+  // The page behind the form (gradient colours and angle; darken and blur for a picture) and the cover banner's height.
+  background: z.object({ from: themeHex, to: themeHex, angle: themeInt(0, 360), darken: themeInt(0, 80), blur: themeInt(0, 20) }).optional(),
+  cover: z.object({ height: themeInt(120, 480) }).optional(),
   // The thank-you screen. The redirect is an https address only (no credentials, no spaces or quotes), and gives the respondent 3 to 30 seconds to stay.
   success: z
     .object({

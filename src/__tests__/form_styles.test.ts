@@ -172,6 +172,15 @@ describe("a style keeps the look of the thank-you screen, not the form's own wor
   });
 });
 
+describe("a style keeps the background and the cover height", () => {
+  it("they are looks, so they travel with a style", async () => {
+    const theme = { v: 1, background: { from: "#1D4ED8", to: "#9333EA", angle: 45, darken: 35, blur: 8 }, cover: { height: 280 }, card: { radius: 12 } };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual(theme);
+  });
+});
+
 describe("hostile input", () => {
   it.each([
     ["no name", { ...STYLE, name: undefined }],

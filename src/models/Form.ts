@@ -147,6 +147,10 @@ export interface IFormTheme {
   footer?: { note?: string };
   // The screen a respondent sees after sending: a headline of the owner's own, an accent colour, a picture, confetti, and an optional move on to another page (https only).
   success?: { headline?: string; colour?: string; picture?: string; confetti?: boolean; redirect?: { url: string; seconds?: number } };
+  // The page behind the form: the two colours and the angle of a gradient, and how much a picture is darkened (percent) and blurred (pixels).
+  background?: { from?: string; to?: string; angle?: number; darken?: number; blur?: number };
+  // How tall the cover banner is, in pixels (absent = as it has always been).
+  cover?: { height?: number };
 }
 
 export interface IBranding {
@@ -355,6 +359,8 @@ const ThemeSchema = new Schema<IFormTheme>(
     labels: new Schema({ submit: String, next: String, back: String }, { _id: false }),
     progress: new Schema({ style: { type: String, enum: PROGRESS_STYLES } }, { _id: false }),
     footer: new Schema({ note: String }, { _id: false }),
+    background: new Schema({ from: String, to: String, angle: Number, darken: Number, blur: Number }, { _id: false }),
+    cover: new Schema({ height: Number }, { _id: false }),
     success: new Schema({ headline: String, colour: String, picture: String, confetti: Boolean, redirect: new Schema({ url: String, seconds: Number }, { _id: false }) }, { _id: false }),
     credit: new Schema({ cover: new Schema({ name: String, url: String }, { _id: false }), background: new Schema({ name: String, url: String }, { _id: false }) }, { _id: false }),
   },

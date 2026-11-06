@@ -389,3 +389,47 @@ describe("the thank-you screen (theme.success)", () => {
     expect(brandingOf(got.body).theme).toEqual(WHOLE);
   });
 });
+
+describe("backgrounds and the cover height (theme.background, theme.cover)", () => {
+  const WHOLE = { v: 1, background: { from: "#1D4ED8", to: "#9333EA", angle: 45, darken: 35, blur: 8 }, cover: { height: 280 } };
+
+  it("stores all of it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["a gradient colour that is not a hex", { background: { from: "blue" } }],
+    ["a gradient colour with a url()", { background: { to: "url(javascript:1)" } }],
+    ["an angle over 360", { background: { angle: 361 } }],
+    ["a negative angle", { background: { angle: -1 } }],
+    ["an angle that is not whole", { background: { angle: 45.5 } }],
+    ["darken over 80", { background: { darken: 81 } }],
+    ["a negative darken", { background: { darken: -5 } }],
+    ["blur over 20", { background: { blur: 21 } }],
+    ["a blur that is not a number", { background: { blur: "8px" } }],
+    ["a cover under 120 pixels", { cover: { height: 119 } }],
+    ["a cover over 480 pixels", { cover: { height: 481 } }],
+    ["a cover height that is not whole", { cover: { height: 200.5 } }],
+    ["background as a string", { background: "dark" }],
+    ["cover as a list", { cover: [] }],
+  ])("refuses %s", async (_name, group) => {
+    expect((await patchBranding({ theme: { v: 1, ...group } })).status).toBe(400);
+  });
+
+  it("accepts the edges, and drops keys it does not know", async () => {
+    const res = await patchBranding({ theme: { v: 1, background: { angle: 0, darken: 0, blur: 0, size: 9 }, cover: { height: 120, fit: "x" } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.background).toEqual({ angle: 0, darken: 0, blur: 0 });
+    expect(brandingOf(res.body).theme.cover).toEqual({ height: 120 });
+  });
+
+  it("keeps it when the form is patched by an older client that sends no theme", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme).toEqual(WHOLE);
+  });
+});

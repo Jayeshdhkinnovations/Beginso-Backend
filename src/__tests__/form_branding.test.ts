@@ -284,6 +284,17 @@ describe("new layouts and the Split Feature picture side", () => {
   it.each([["left"], ["right"], ["both"], [""], [1], [null]])("theme.layout.panelSide rejects %j", async (value) => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelSide: value } } })).status).toBe(400);
   });
+
+  it("theme.layout.panelSplit accepts 20 to 80 and the public read returns it", async () => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSplit: 35 } } })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme.layout.panelSplit).toBe(35);
+  });
+
+  it.each([[19], [81], [40.5], ["40"], [null]])("theme.layout.panelSplit rejects %j", async (value) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSplit: value } } })).status).toBe(400);
+  });
 });
 
 describe("buttons and details (theme.buttons, labels, progress, footer)", () => {

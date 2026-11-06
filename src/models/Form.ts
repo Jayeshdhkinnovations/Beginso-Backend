@@ -145,7 +145,7 @@ export interface IFormTheme {
   colors?: { text?: string; heading?: string; card?: string; field?: string; fieldBorder?: string; buttonText?: string };
   fields?: { style?: (typeof FIELD_STYLES)[number]; radius?: number; label?: (typeof LABEL_POSITIONS)[number]; choice?: (typeof CHOICE_STYLES)[number] };
   card?: { radius?: number; shadow?: number };
-  layout?: { maxWidth?: number; fieldGap?: number; panelSide?: (typeof PANEL_SIDES)[number] };
+  layout?: { maxWidth?: number; fieldGap?: number; panelSide?: (typeof PANEL_SIDES)[number]; panelSplit?: number };
   // Typeface of the headings (the form title and page titles); absent = the same as the form's font.
   fonts?: { heading?: (typeof FORM_FONTS)[number] };
   // The photographer of an Unsplash photo used as the cover and/or the page background, one credit for each picture: shown on the form (Unsplash's rule). Only an unsplash.com profile address.
@@ -365,7 +365,7 @@ const ThemeSchema = new Schema<IFormTheme>(
     colors: new Schema({ text: String, heading: String, card: String, field: String, fieldBorder: String, buttonText: String }, { _id: false }),
     fields: new Schema({ style: { type: String, enum: FIELD_STYLES }, radius: Number, label: { type: String, enum: LABEL_POSITIONS }, choice: { type: String, enum: CHOICE_STYLES } }, { _id: false }),
     card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
-    layout: new Schema({ maxWidth: Number, fieldGap: Number, panelSide: { type: String, enum: PANEL_SIDES } }, { _id: false }),
+    layout: new Schema({ maxWidth: Number, fieldGap: Number, panelSide: { type: String, enum: PANEL_SIDES }, panelSplit: Number }, { _id: false }),
     fonts: new Schema({ heading: { type: String, enum: FORM_FONTS } }, { _id: false }),
     buttons: new Schema({ size: { type: String, enum: BUTTON_SIZES }, width: { type: String, enum: BUTTON_WIDTHS }, hover: { type: String, enum: BUTTON_HOVERS } }, { _id: false }),
     labels: new Schema({ submit: String, next: String, back: String }, { _id: false }),

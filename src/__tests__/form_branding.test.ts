@@ -284,4 +284,201 @@ describe("new layouts and the Split Feature picture side", () => {
   it.each([["left"], ["right"], ["both"], [""], [1], [null]])("theme.layout.panelSide rejects %j", async (value) => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelSide: value } } })).status).toBe(400);
   });
+
+  it("theme.layout.panelSplit accepts 20 to 80 and the public read returns it", async () => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSplit: 35 } } })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme.layout.panelSplit).toBe(35);
+  });
+
+  it.each([[19], [81], [40.5], ["40"], [null]])("theme.layout.panelSplit rejects %j", async (value) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelSplit: value } } })).status).toBe(400);
+  });
+});
+
+describe("buttons and details (theme.buttons, labels, progress, footer)", () => {
+  const WHOLE = {
+    v: 1,
+    buttons: { size: "large", width: "auto", hover: "lift" },
+    labels: { submit: "Send it", next: "Continue", back: "Go back" },
+    progress: { style: "dots" },
+    footer: { note: "Questions? Write to hello@example.com" },
+  };
+
+  it("stores all of it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["buttons.size", { buttons: { size: "huge" } }],
+    ["buttons.width", { buttons: { width: "half" } }],
+    ["buttons.hover", { buttons: { hover: "spin" } }],
+    ["progress.style", { progress: { style: "wheel" } }],
+    ["a button text over 30 characters", { labels: { submit: "x".repeat(31) } }],
+    ["an empty button text", { labels: { next: "" } }],
+    ["a button text with markup", { labels: { back: "<b>Back</b>" } }],
+    ["a button text with a control character", { labels: { submit: "Send\u0007" } }],
+    ["a footer note over 200 characters", { footer: { note: "x".repeat(201) } }],
+    ["a footer note with markup", { footer: { note: "<script>alert(1)</script>" } }],
+    ["labels as a string", { labels: "Send" }],
+    ["a number as a button text", { labels: { submit: 5 } }],
+  ])("refuses %s", async (_name, group) => {
+    expect((await patchBranding({ theme: { v: 1, ...group } })).status).toBe(400);
+  });
+
+  it("trims the text and drops keys it does not know", async () => {
+    const res = await patchBranding({ theme: { v: 1, labels: { submit: "  Send  ", shout: "HEY" }, footer: { note: " Hi ", size: 9 } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.labels).toEqual({ submit: "Send" });
+    expect(brandingOf(res.body).theme.footer).toEqual({ note: "Hi" });
+  });
+
+  it("keeps the whole thing when the form is patched by an older client that sends no theme", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme).toEqual(WHOLE);
+  });
+});
+
+describe("the thank-you screen (theme.success)", () => {
+  const WHOLE = {
+    v: 1,
+    success: {
+      headline: "You're in!",
+      colour: "#16A34A",
+      picture: "/form-pictures/aurora-mint.jpg",
+      confetti: true,
+      redirect: { url: "https://example.com/welcome?from=form", seconds: 8 },
+    },
+  };
+
+  it("stores all of it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["a headline over 60 characters", { headline: "x".repeat(61) }],
+    ["a headline with markup", { headline: "<b>Hi</b>" }],
+    ["an empty headline", { headline: "" }],
+    ["a colour that is not a hex", { colour: "green" }],
+    ["a picture with a bad scheme", { picture: "javascript:alert(1)" }],
+    ["confetti that is not a boolean", { confetti: "yes" }],
+    ["a redirect over http", { redirect: { url: "http://example.com" } }],
+    ["a redirect to javascript:", { redirect: { url: "javascript:alert(1)" } }],
+    ["a redirect with credentials", { redirect: { url: "https://user:pass@example.com" } }],
+    ["a redirect with a space", { redirect: { url: "https://example.com/a b" } }],
+    ["a redirect with a quote", { redirect: { url: "https://example.com/\"onload=1" } }],
+    ["a redirect to a bare host name", { redirect: { url: "https://localhost" } }],
+    ["a redirect over 500 characters", { redirect: { url: `https://example.com/${"a".repeat(500)}` } }],
+    ["a redirect with no address", { redirect: { seconds: 5 } }],
+    ["redirect seconds under 3", { redirect: { url: "https://example.com", seconds: 2 } }],
+    ["redirect seconds over 30", { redirect: { url: "https://example.com", seconds: 31 } }],
+    ["redirect seconds that are not whole", { redirect: { url: "https://example.com", seconds: 4.5 } }],
+    ["success as a string", "yes"],
+  ])("refuses %s", async (_name, success) => {
+    expect((await patchBranding({ theme: { v: 1, success } })).status).toBe(400);
+  });
+
+  it("accepts a redirect with no seconds, trims the headline, and drops keys it does not know", async () => {
+    const res = await patchBranding({ theme: { v: 1, success: { headline: "  Done  ", redirect: { url: "https://example.com", track: 1 }, shout: 1 } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.success).toEqual({ headline: "Done", redirect: { url: "https://example.com" } });
+  });
+
+  it("keeps it when the form is patched by an older client that sends no theme", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme).toEqual(WHOLE);
+  });
+});
+
+describe("backgrounds and the cover height (theme.background, theme.cover)", () => {
+  const WHOLE = { v: 1, background: { from: "#1D4ED8", to: "#9333EA", angle: 45, darken: 35, blur: 8 }, cover: { height: 280 } };
+
+  it("stores all of it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["a gradient colour that is not a hex", { background: { from: "blue" } }],
+    ["a gradient colour with a url()", { background: { to: "url(javascript:1)" } }],
+    ["an angle over 360", { background: { angle: 361 } }],
+    ["a negative angle", { background: { angle: -1 } }],
+    ["an angle that is not whole", { background: { angle: 45.5 } }],
+    ["darken over 80", { background: { darken: 81 } }],
+    ["a negative darken", { background: { darken: -5 } }],
+    ["blur over 20", { background: { blur: 21 } }],
+    ["a blur that is not a number", { background: { blur: "8px" } }],
+    ["a cover under 120 pixels", { cover: { height: 119 } }],
+    ["a cover over 480 pixels", { cover: { height: 481 } }],
+    ["a cover height that is not whole", { cover: { height: 200.5 } }],
+    ["background as a string", { background: "dark" }],
+    ["cover as a list", { cover: [] }],
+  ])("refuses %s", async (_name, group) => {
+    expect((await patchBranding({ theme: { v: 1, ...group } })).status).toBe(400);
+  });
+
+  it("accepts the edges, and drops keys it does not know", async () => {
+    const res = await patchBranding({ theme: { v: 1, background: { angle: 0, darken: 0, blur: 0, size: 9 }, cover: { height: 120, fit: "x" } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.background).toEqual({ angle: 0, darken: 0, blur: 0 });
+    expect(brandingOf(res.body).theme.cover).toEqual({ height: 120 });
+  });
+
+  it("keeps it when the form is patched by an older client that sends no theme", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme).toEqual(WHOLE);
+  });
+});
+
+describe("a remembered crop (theme.crop)", () => {
+  const MEMO = { from: "/api/upload/file/u1/f1/brand/original.png", result: "/api/upload/file/u1/f1/brand/cropped.jpg", aspect: 3.2, fx: 0.42, fy: 0.5, zoom: 1.8 };
+  const WHOLE = { v: 1, crop: { cover: MEMO, background: { ...MEMO, from: "/form-pictures/aurora-mint.jpg", aspect: 1.7778 }, logo: { ...MEMO, aspect: 1, zoom: 1.78 } } };
+
+  it("stores it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["an original that is not an image address", { cover: { ...MEMO, from: "javascript:alert(1)" } }],
+    ["a result with a quote in it", { cover: { ...MEMO, result: "https://x.test/a\"b.jpg" } }],
+    ["no original", { cover: { ...MEMO, from: "" } }],
+    ["a missing result", { cover: { from: MEMO.from, aspect: 2, fx: 0.5, fy: 0.5, zoom: 1 } }],
+    ["a shape under 0.2", { cover: { ...MEMO, aspect: 0.1 } }],
+    ["a shape over 10", { cover: { ...MEMO, aspect: 11 } }],
+    ["a centre outside the picture", { cover: { ...MEMO, fx: 1.2 } }],
+    ["a negative centre", { background: { ...MEMO, fy: -0.1 } }],
+    ["a zoom under 1", { cover: { ...MEMO, zoom: 0.5 } }],
+    ["a zoom over 4", { cover: { ...MEMO, zoom: 5 } }],
+    ["a number given as text", { cover: { ...MEMO, zoom: "2" } }],
+    ["crop as a string", "yes"],
+  ])("refuses %s", async (_name, crop) => {
+    expect((await patchBranding({ theme: { v: 1, crop } })).status).toBe(400);
+  });
+
+  it("drops keys it does not know, and keeps it when an older client sends no theme", async () => {
+    const res = await patchBranding({ theme: { v: 1, crop: { cover: { ...MEMO, extra: 1 }, avatar: MEMO } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.crop).toEqual({ cover: MEMO });
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme.crop).toEqual({ cover: MEMO });
+  });
 });

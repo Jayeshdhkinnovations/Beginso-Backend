@@ -148,6 +148,48 @@ describe("what a style keeps", () => {
   });
 });
 
+describe("a style is a look, not a form's own words", () => {
+  it("keeps the button look and the progress style, and drops the button text and the note under the form", async () => {
+    const theme = { v: 1, buttons: { size: "large", width: "auto", hover: "darken" }, progress: { style: "steps" }, labels: { submit: "Send it" }, footer: { note: "Thanks" }, card: { radius: 12 } };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual({ v: 1, buttons: theme.buttons, progress: theme.progress, card: theme.card });
+    const onlyWords = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, name: "Words", branding: { theme: { v: 1, labels: { next: "Go" }, footer: { note: "Hi" } } } }), owner);
+    expect(onlyWords.status).toBe(201);
+    expect(onlyWords.body.data.branding.theme).toBeUndefined();
+  });
+});
+
+describe("a style keeps the look of the thank-you screen, not the form's own words", () => {
+  it("keeps the accent colour and the confetti, and drops the headline, the picture and the redirect", async () => {
+    const success = { headline: "You're in!", colour: "#16A34A", picture: "/form-pictures/aurora-mint.jpg", confetti: true, redirect: { url: "https://example.com" } };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme: { v: 1, card: { radius: 12 }, success } } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual({ v: 1, card: { radius: 12 }, success: { colour: "#16A34A", confetti: true } });
+    const onlyWords = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, name: "Only words", branding: { theme: { v: 1, success: { headline: "Hi", redirect: { url: "https://example.com" } } } } }), owner);
+    expect(onlyWords.status).toBe(201);
+    expect(onlyWords.body.data.branding.theme).toBeUndefined();
+  });
+});
+
+describe("a style keeps the background and the cover height", () => {
+  it("they are looks, so they travel with a style", async () => {
+    const theme = { v: 1, background: { from: "#1D4ED8", to: "#9333EA", angle: 45, darken: 35, blur: 8 }, cover: { height: 280 }, card: { radius: 12 } };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual(theme);
+  });
+});
+
+describe("a style never keeps a remembered crop", () => {
+  it("it belongs to one form's own pictures", async () => {
+    const memo = { from: "/form-pictures/aurora-mint.jpg", result: "/api/upload/file/u1/f1/brand/c.jpg", aspect: 3.2, fx: 0.5, fy: 0.5, zoom: 1 };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme: { v: 1, card: { radius: 12 }, crop: { cover: memo } } } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual({ v: 1, card: { radius: 12 } });
+  });
+});
+
 describe("hostile input", () => {
   it.each([
     ["no name", { ...STYLE, name: undefined }],

@@ -51,10 +51,14 @@ export const createFormStyle = async (req: Request, res: Response): Promise<void
       res.status(409).json({ success: false, message: `You can keep up to ${MAX_STYLES_PER_SCOPE} saved styles. Delete one to save another.`, error: { code: "STYLE_LIMIT" } });
       return;
     }
-    // A photographer's credit belongs to a photo, and a style never keeps an uploaded or outside photo: it keeps no credit either.
+    // A style is a look, not a form's own content: a photographer's credit belongs to a photo (and a style never keeps an outside photo), and the
+    // button text and the note under the form are that one form's words. None of them travel in a style.
     const branding: Record<string, any> = { ...parsed.data.branding };
-    if (branding.theme?.credit) {
-      const { credit: _credit, ...theme } = branding.theme;
+    if (branding.theme) {
+      const { credit: _credit, labels: _labels, footer: _footer, crop: _crop, success, ...theme } = branding.theme;
+      // of the thank-you screen a style keeps the look (the accent colour and the confetti), not the form's own headline, picture or redirect
+      const look = { ...(success?.colour ? { colour: success.colour } : {}), ...(success?.confetti !== undefined ? { confetti: success.confetti } : {}) };
+      if (Object.keys(look).length) (theme as Record<string, unknown>).success = look;
       if (Object.keys(theme).length > 1) branding.theme = theme;
       else delete branding.theme;
     }

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
 import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
-import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FIELD_STYLES, LABEL_POSITIONS, CHOICE_STYLES, THEME_VERSION, PANEL_SIDES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FIELD_STYLES, LABEL_POSITIONS, CHOICE_STYLES, BUTTON_SIZES, BUTTON_WIDTHS, BUTTON_HOVERS, PROGRESS_STYLES, THEME_VERSION, PANEL_SIDES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -260,14 +260,69 @@ const themeCredit = z.object({
   url: z.string().max(300).regex(/^https:\/\/unsplash\.com\/(@[A-Za-z0-9_.-]{1,60})?(\?[A-Za-z0-9_=&%.-]{0,120})?$/, "must be an unsplash.com profile address"),
 });
 
+// A short line of the owner's own words (a button's text, the note under the form): plain text, no control characters or markup.
+const themeText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
+    .regex(/^[^\u0000-\u001f\u007f<>]+$/, "has characters that are not allowed")
+    .optional();
+
+// Where the thank-you screen may send a respondent on: an https address, no credentials, nothing that could break out of an attribute.
+const themeRedirectUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => {
+    if (/["'<>\\\s]/.test(v)) return false;
+    try {
+      const u = new URL(v);
+      return u.protocol === "https:" && !u.username && !u.password && u.hostname.includes(".");
+    } catch {
+      return false;
+    }
+  }, "must be an https address");
+
+// A remembered crop: both pictures are image addresses (an upload, a built-in picture or an https address), and the frame is numbers in range.
+const cropPicture = safeImageUrl.unwrap().refine((v) => v.length > 0, "a picture is required");
+const cropMemo = z.object({
+  from: cropPicture,
+  result: cropPicture,
+  aspect: z.number().min(0.2).max(10),
+  fx: z.number().min(0).max(1),
+  fy: z.number().min(0).max(1),
+  zoom: z.number().min(1).max(4),
+});
+
 // branding.theme: versioned. A key this version does not know is dropped (zod strips it); a wrong type, an out-of-range number or another version is a 400.
 const themeSchema = z.object({
   v: z.literal(THEME_VERSION),
   colors: z.object({ text: themeHex, heading: themeHex, card: themeHex, field: themeHex, fieldBorder: themeHex, buttonText: themeHex }).optional(),
   fields: z.object({ style: z.enum(FIELD_STYLES).optional(), radius: themeInt(0, 32), label: z.enum(LABEL_POSITIONS).optional(), choice: z.enum(CHOICE_STYLES).optional() }).optional(),
   card: z.object({ radius: themeInt(0, 40), shadow: themeInt(0, 100) }).optional(),
-  layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64), panelSide: z.enum(PANEL_SIDES).optional() }).optional(),
+  layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64), panelSide: z.enum(PANEL_SIDES).optional(), panelSplit: themeInt(20, 80) }).optional(),
   fonts: z.object({ heading: z.enum(FORM_FONTS).optional() }).optional(),
+  buttons: z.object({ size: z.enum(BUTTON_SIZES).optional(), width: z.enum(BUTTON_WIDTHS).optional(), hover: z.enum(BUTTON_HOVERS).optional() }).optional(),
+  labels: z.object({ submit: themeText(30), next: themeText(30), back: themeText(30) }).optional(),
+  progress: z.object({ style: z.enum(PROGRESS_STYLES).optional() }).optional(),
+  footer: z.object({ note: themeText(200) }).optional(),
+  // The page behind the form (gradient colours and angle; darken and blur for a picture) and the cover banner's height.
+  background: z.object({ from: themeHex, to: themeHex, angle: themeInt(0, 360), darken: themeInt(0, 80), blur: themeInt(0, 20) }).optional(),
+  cover: z.object({ height: themeInt(120, 480) }).optional(),
+  crop: z.object({ cover: cropMemo.optional(), background: cropMemo.optional(), logo: cropMemo.optional() }).optional(),
+  // The thank-you screen. The redirect is an https address only (no credentials, no spaces or quotes), and gives the respondent 3 to 30 seconds to stay.
+  success: z
+    .object({
+      headline: themeText(60),
+      colour: themeHex,
+      picture: safeImageUrl,
+      confetti: z.boolean().optional(),
+      redirect: z.object({ url: themeRedirectUrl, seconds: themeInt(3, 30) }).optional(),
+    })
+    .optional(),
   // Who took the Unsplash photo: a name (no control characters) and their unsplash.com profile address, nothing else.
   credit: z
     .object({ cover: themeCredit.optional(), background: themeCredit.optional() })

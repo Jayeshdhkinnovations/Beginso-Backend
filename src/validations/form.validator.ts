@@ -303,7 +303,7 @@ const themeSchema = z.object({
   colors: z.object({ text: themeHex, heading: themeHex, card: themeHex, field: themeHex, fieldBorder: themeHex, buttonText: themeHex }).optional(),
   fields: z.object({ style: z.enum(FIELD_STYLES).optional(), radius: themeInt(0, 32), label: z.enum(LABEL_POSITIONS).optional(), choice: z.enum(CHOICE_STYLES).optional() }).optional(),
   card: z.object({ radius: themeInt(0, 40), shadow: themeInt(0, 100) }).optional(),
-  layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64), panelSide: z.enum(PANEL_SIDES).optional() }).optional(),
+  layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64), panelSide: z.enum(PANEL_SIDES).optional(), panelSplit: themeInt(20, 80) }).optional(),
   fonts: z.object({ heading: z.enum(FORM_FONTS).optional() }).optional(),
   buttons: z.object({ size: z.enum(BUTTON_SIZES).optional(), width: z.enum(BUTTON_WIDTHS).optional(), hover: z.enum(BUTTON_HOVERS).optional() }).optional(),
   labels: z.object({ submit: themeText(30), next: themeText(30), back: themeText(30) }).optional(),

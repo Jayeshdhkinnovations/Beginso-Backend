@@ -333,3 +333,59 @@ describe("buttons and details (theme.buttons, labels, progress, footer)", () => 
     expect(brandingOf(got.body).theme).toEqual(WHOLE);
   });
 });
+
+describe("the thank-you screen (theme.success)", () => {
+  const WHOLE = {
+    v: 1,
+    success: {
+      headline: "You're in!",
+      colour: "#16A34A",
+      picture: "/form-pictures/aurora-mint.jpg",
+      confetti: true,
+      redirect: { url: "https://example.com/welcome?from=form", seconds: 8 },
+    },
+  };
+
+  it("stores all of it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["a headline over 60 characters", { headline: "x".repeat(61) }],
+    ["a headline with markup", { headline: "<b>Hi</b>" }],
+    ["an empty headline", { headline: "" }],
+    ["a colour that is not a hex", { colour: "green" }],
+    ["a picture with a bad scheme", { picture: "javascript:alert(1)" }],
+    ["confetti that is not a boolean", { confetti: "yes" }],
+    ["a redirect over http", { redirect: { url: "http://example.com" } }],
+    ["a redirect to javascript:", { redirect: { url: "javascript:alert(1)" } }],
+    ["a redirect with credentials", { redirect: { url: "https://user:pass@example.com" } }],
+    ["a redirect with a space", { redirect: { url: "https://example.com/a b" } }],
+    ["a redirect with a quote", { redirect: { url: "https://example.com/\"onload=1" } }],
+    ["a redirect to a bare host name", { redirect: { url: "https://localhost" } }],
+    ["a redirect over 500 characters", { redirect: { url: `https://example.com/${"a".repeat(500)}` } }],
+    ["a redirect with no address", { redirect: { seconds: 5 } }],
+    ["redirect seconds under 3", { redirect: { url: "https://example.com", seconds: 2 } }],
+    ["redirect seconds over 30", { redirect: { url: "https://example.com", seconds: 31 } }],
+    ["redirect seconds that are not whole", { redirect: { url: "https://example.com", seconds: 4.5 } }],
+    ["success as a string", "yes"],
+  ])("refuses %s", async (_name, success) => {
+    expect((await patchBranding({ theme: { v: 1, success } })).status).toBe(400);
+  });
+
+  it("accepts a redirect with no seconds, trims the headline, and drops keys it does not know", async () => {
+    const res = await patchBranding({ theme: { v: 1, success: { headline: "  Done  ", redirect: { url: "https://example.com", track: 1 }, shout: 1 } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.success).toEqual({ headline: "Done", redirect: { url: "https://example.com" } });
+  });
+
+  it("keeps it when the form is patched by an older client that sends no theme", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme).toEqual(WHOLE);
+  });
+});

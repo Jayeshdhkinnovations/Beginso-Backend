@@ -271,6 +271,21 @@ const themeText = (max: number) =>
     .regex(/^[^\u0000-\u001f\u007f<>]+$/, "has characters that are not allowed")
     .optional();
 
+// Where the thank-you screen may send a respondent on: an https address, no credentials, nothing that could break out of an attribute.
+const themeRedirectUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => {
+    if (/["'<>\\\s]/.test(v)) return false;
+    try {
+      const u = new URL(v);
+      return u.protocol === "https:" && !u.username && !u.password && u.hostname.includes(".");
+    } catch {
+      return false;
+    }
+  }, "must be an https address");
+
 // branding.theme: versioned. A key this version does not know is dropped (zod strips it); a wrong type, an out-of-range number or another version is a 400.
 const themeSchema = z.object({
   v: z.literal(THEME_VERSION),
@@ -283,6 +298,16 @@ const themeSchema = z.object({
   labels: z.object({ submit: themeText(30), next: themeText(30), back: themeText(30) }).optional(),
   progress: z.object({ style: z.enum(PROGRESS_STYLES).optional() }).optional(),
   footer: z.object({ note: themeText(200) }).optional(),
+  // The thank-you screen. The redirect is an https address only (no credentials, no spaces or quotes), and gives the respondent 3 to 30 seconds to stay.
+  success: z
+    .object({
+      headline: themeText(60),
+      colour: themeHex,
+      picture: safeImageUrl,
+      confetti: z.boolean().optional(),
+      redirect: z.object({ url: themeRedirectUrl, seconds: themeInt(3, 30) }).optional(),
+    })
+    .optional(),
   // Who took the Unsplash photo: a name (no control characters) and their unsplash.com profile address, nothing else.
   credit: z
     .object({ cover: themeCredit.optional(), background: themeCredit.optional() })

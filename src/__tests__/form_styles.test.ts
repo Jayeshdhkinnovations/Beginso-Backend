@@ -160,6 +160,18 @@ describe("a style is a look, not a form's own words", () => {
   });
 });
 
+describe("a style keeps the look of the thank-you screen, not the form's own words", () => {
+  it("keeps the accent colour and the confetti, and drops the headline, the picture and the redirect", async () => {
+    const success = { headline: "You're in!", colour: "#16A34A", picture: "/form-pictures/aurora-mint.jpg", confetti: true, redirect: { url: "https://example.com" } };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme: { v: 1, card: { radius: 12 }, success } } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual({ v: 1, card: { radius: 12 }, success: { colour: "#16A34A", confetti: true } });
+    const onlyWords = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, name: "Only words", branding: { theme: { v: 1, success: { headline: "Hi", redirect: { url: "https://example.com" } } } } }), owner);
+    expect(onlyWords.status).toBe(201);
+    expect(onlyWords.body.data.branding.theme).toBeUndefined();
+  });
+});
+
 describe("hostile input", () => {
   it.each([
     ["no name", { ...STYLE, name: undefined }],

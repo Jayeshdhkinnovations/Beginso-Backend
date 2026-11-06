@@ -130,6 +130,16 @@ export const BUTTON_HOVERS = ["none", "lift", "darken"] as const;
 export const PROGRESS_STYLES = ["bar", "dots", "steps"] as const;
 export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid", "image"] as const;
 
+/** A crop that can be opened again: the original, the picture it made, and the frame (shape, centre as a share of the picture, zoom). */
+export interface ICropMemo {
+  from: string;
+  result: string;
+  aspect: number;
+  fx: number;
+  fy: number;
+  zoom: number;
+}
+
 export interface IFormTheme {
   v: number;
   colors?: { text?: string; heading?: string; card?: string; field?: string; fieldBorder?: string; buttonText?: string };
@@ -151,6 +161,8 @@ export interface IFormTheme {
   background?: { from?: string; to?: string; angle?: number; darken?: number; blur?: number };
   // How tall the cover banner is, in pixels (absent = as it has always been).
   cover?: { height?: number };
+  // For the cover and the page background picture: the original it was cropped from and how it was framed, so the crop can be adjusted later.
+  crop?: { cover?: ICropMemo; background?: ICropMemo; logo?: ICropMemo };
 }
 
 export interface IBranding {
@@ -361,6 +373,14 @@ const ThemeSchema = new Schema<IFormTheme>(
     footer: new Schema({ note: String }, { _id: false }),
     background: new Schema({ from: String, to: String, angle: Number, darken: Number, blur: Number }, { _id: false }),
     cover: new Schema({ height: Number }, { _id: false }),
+    crop: new Schema(
+      {
+        cover: new Schema({ from: String, result: String, aspect: Number, fx: Number, fy: Number, zoom: Number }, { _id: false }),
+        background: new Schema({ from: String, result: String, aspect: Number, fx: Number, fy: Number, zoom: Number }, { _id: false }),
+        logo: new Schema({ from: String, result: String, aspect: Number, fx: Number, fy: Number, zoom: Number }, { _id: false }),
+      },
+      { _id: false },
+    ),
     success: new Schema({ headline: String, colour: String, picture: String, confetti: Boolean, redirect: new Schema({ url: String, seconds: Number }, { _id: false }) }, { _id: false }),
     credit: new Schema({ cover: new Schema({ name: String, url: String }, { _id: false }), background: new Schema({ name: String, url: String }, { _id: false }) }, { _id: false }),
   },

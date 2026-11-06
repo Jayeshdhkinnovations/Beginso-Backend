@@ -433,3 +433,41 @@ describe("backgrounds and the cover height (theme.background, theme.cover)", () 
     expect(brandingOf(got.body).theme).toEqual(WHOLE);
   });
 });
+
+describe("a remembered crop (theme.crop)", () => {
+  const MEMO = { from: "/api/upload/file/u1/f1/brand/original.png", result: "/api/upload/file/u1/f1/brand/cropped.jpg", aspect: 3.2, fx: 0.42, fy: 0.5, zoom: 1.8 };
+  const WHOLE = { v: 1, crop: { cover: MEMO, background: { ...MEMO, from: "/form-pictures/aurora-mint.jpg", aspect: 1.7778 }, logo: { ...MEMO, aspect: 1, zoom: 1.78 } } };
+
+  it("stores it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["an original that is not an image address", { cover: { ...MEMO, from: "javascript:alert(1)" } }],
+    ["a result with a quote in it", { cover: { ...MEMO, result: "https://x.test/a\"b.jpg" } }],
+    ["no original", { cover: { ...MEMO, from: "" } }],
+    ["a missing result", { cover: { from: MEMO.from, aspect: 2, fx: 0.5, fy: 0.5, zoom: 1 } }],
+    ["a shape under 0.2", { cover: { ...MEMO, aspect: 0.1 } }],
+    ["a shape over 10", { cover: { ...MEMO, aspect: 11 } }],
+    ["a centre outside the picture", { cover: { ...MEMO, fx: 1.2 } }],
+    ["a negative centre", { background: { ...MEMO, fy: -0.1 } }],
+    ["a zoom under 1", { cover: { ...MEMO, zoom: 0.5 } }],
+    ["a zoom over 4", { cover: { ...MEMO, zoom: 5 } }],
+    ["a number given as text", { cover: { ...MEMO, zoom: "2" } }],
+    ["crop as a string", "yes"],
+  ])("refuses %s", async (_name, crop) => {
+    expect((await patchBranding({ theme: { v: 1, crop } })).status).toBe(400);
+  });
+
+  it("drops keys it does not know, and keeps it when an older client sends no theme", async () => {
+    const res = await patchBranding({ theme: { v: 1, crop: { cover: { ...MEMO, extra: 1 }, avatar: MEMO } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.crop).toEqual({ cover: MEMO });
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme.crop).toEqual({ cover: MEMO });
+  });
+});

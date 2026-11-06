@@ -181,6 +181,15 @@ describe("a style keeps the background and the cover height", () => {
   });
 });
 
+describe("a style never keeps a remembered crop", () => {
+  it("it belongs to one form's own pictures", async () => {
+    const memo = { from: "/form-pictures/aurora-mint.jpg", result: "/api/upload/file/u1/f1/brand/c.jpg", aspect: 3.2, fx: 0.5, fy: 0.5, zoom: 1 };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme: { v: 1, card: { radius: 12 }, crop: { cover: memo } } } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual({ v: 1, card: { radius: 12 } });
+  });
+});
+
 describe("hostile input", () => {
   it.each([
     ["no name", { ...STYLE, name: undefined }],

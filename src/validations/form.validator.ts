@@ -286,6 +286,17 @@ const themeRedirectUrl = z
     }
   }, "must be an https address");
 
+// A remembered crop: both pictures are image addresses (an upload, a built-in picture or an https address), and the frame is numbers in range.
+const cropPicture = safeImageUrl.unwrap().refine((v) => v.length > 0, "a picture is required");
+const cropMemo = z.object({
+  from: cropPicture,
+  result: cropPicture,
+  aspect: z.number().min(0.2).max(10),
+  fx: z.number().min(0).max(1),
+  fy: z.number().min(0).max(1),
+  zoom: z.number().min(1).max(4),
+});
+
 // branding.theme: versioned. A key this version does not know is dropped (zod strips it); a wrong type, an out-of-range number or another version is a 400.
 const themeSchema = z.object({
   v: z.literal(THEME_VERSION),
@@ -301,6 +312,7 @@ const themeSchema = z.object({
   // The page behind the form (gradient colours and angle; darken and blur for a picture) and the cover banner's height.
   background: z.object({ from: themeHex, to: themeHex, angle: themeInt(0, 360), darken: themeInt(0, 80), blur: themeInt(0, 20) }).optional(),
   cover: z.object({ height: themeInt(120, 480) }).optional(),
+  crop: z.object({ cover: cropMemo.optional(), background: cropMemo.optional(), logo: cropMemo.optional() }).optional(),
   // The thank-you screen. The redirect is an https address only (no credentials, no spaces or quotes), and gives the respondent 3 to 30 seconds to stay.
   success: z
     .object({

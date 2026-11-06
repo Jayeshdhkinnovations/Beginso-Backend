@@ -123,6 +123,11 @@ export const PANEL_SIDES = ["start", "end"] as const;
 export const FIELD_STYLES = ["outlined", "filled", "underline"] as const;
 export const LABEL_POSITIONS = ["above", "start"] as const;
 export const CHOICE_STYLES = ["plain", "tiles"] as const;
+// Buttons and details of the respondent form: how big and wide the buttons are, how they react to the pointer, and how the multi-page progress is drawn.
+export const BUTTON_SIZES = ["small", "default", "large"] as const;
+export const BUTTON_WIDTHS = ["fill", "auto"] as const;
+export const BUTTON_HOVERS = ["none", "lift", "darken"] as const;
+export const PROGRESS_STYLES = ["bar", "dots", "steps"] as const;
 export const PAGE_BACKGROUNDS = ["wash", "plain", "solid", "gradient", "mesh", "dots", "grid", "image"] as const;
 
 export interface IFormTheme {
@@ -135,6 +140,11 @@ export interface IFormTheme {
   fonts?: { heading?: (typeof FORM_FONTS)[number] };
   // The photographer of an Unsplash photo used as the cover and/or the page background, one credit for each picture: shown on the form (Unsplash's rule). Only an unsplash.com profile address.
   credit?: { cover?: { name: string; url: string }; background?: { name: string; url: string } };
+  buttons?: { size?: (typeof BUTTON_SIZES)[number]; width?: (typeof BUTTON_WIDTHS)[number]; hover?: (typeof BUTTON_HOVERS)[number] };
+  // The owner's own words on the buttons (absent = Submit, Next, Back), a short line under the form, and the style of the multi-page progress.
+  labels?: { submit?: string; next?: string; back?: string };
+  progress?: { style?: (typeof PROGRESS_STYLES)[number] };
+  footer?: { note?: string };
 }
 
 export interface IBranding {
@@ -339,6 +349,10 @@ const ThemeSchema = new Schema<IFormTheme>(
     card: new Schema({ radius: Number, shadow: Number }, { _id: false }),
     layout: new Schema({ maxWidth: Number, fieldGap: Number, panelSide: { type: String, enum: PANEL_SIDES } }, { _id: false }),
     fonts: new Schema({ heading: { type: String, enum: FORM_FONTS } }, { _id: false }),
+    buttons: new Schema({ size: { type: String, enum: BUTTON_SIZES }, width: { type: String, enum: BUTTON_WIDTHS }, hover: { type: String, enum: BUTTON_HOVERS } }, { _id: false }),
+    labels: new Schema({ submit: String, next: String, back: String }, { _id: false }),
+    progress: new Schema({ style: { type: String, enum: PROGRESS_STYLES } }, { _id: false }),
+    footer: new Schema({ note: String }, { _id: false }),
     credit: new Schema({ cover: new Schema({ name: String, url: String }, { _id: false }), background: new Schema({ name: String, url: String }, { _id: false }) }, { _id: false }),
   },
   { _id: false }

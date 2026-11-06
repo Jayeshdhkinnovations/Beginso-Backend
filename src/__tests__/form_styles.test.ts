@@ -148,6 +148,18 @@ describe("what a style keeps", () => {
   });
 });
 
+describe("a style is a look, not a form's own words", () => {
+  it("keeps the button look and the progress style, and drops the button text and the note under the form", async () => {
+    const theme = { v: 1, buttons: { size: "large", width: "auto", hover: "darken" }, progress: { style: "steps" }, labels: { submit: "Send it" }, footer: { note: "Thanks" }, card: { radius: 12 } };
+    const res = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, branding: { ...STYLE.branding, theme } }), owner);
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding.theme).toEqual({ v: 1, buttons: theme.buttons, progress: theme.progress, card: theme.card });
+    const onlyWords = await inWs(request(app).post("/api/form-styles").send({ ...STYLE, name: "Words", branding: { theme: { v: 1, labels: { next: "Go" }, footer: { note: "Hi" } } } }), owner);
+    expect(onlyWords.status).toBe(201);
+    expect(onlyWords.body.data.branding.theme).toBeUndefined();
+  });
+});
+
 describe("hostile input", () => {
   it.each([
     ["no name", { ...STYLE, name: undefined }],

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isSafePattern } from "../utils/uploadLimits";
 import { buildAnswerKeyMap, readFieldAnswer } from "../utils/answerKeys";
-import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FIELD_STYLES, LABEL_POSITIONS, CHOICE_STYLES, THEME_VERSION, PANEL_SIDES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
+import { ACCESS_MODE_VALUES, AccessMode, ASPECT_RATIOS, BUTTON_RADII, CURRENCIES, MAX_IMAGES_PER_FIELD, PREVIEW_POSITIONS, PREVIEW_SIZES, URL_DISPLAYS, URL_PREVIEW_STYLES, BUTTON_STYLES, COVER_POSITIONS, FORM_SPACINGS, FORM_FONTS, TYPE_SCALES, CARD_STYLES, PANEL_TREATMENTS, FIELD_GROUPINGS, PAGE_BACKGROUNDS, FORM_WIDTHS, COVER_FITS, LOGO_SIZES, FIELD_STYLES, LABEL_POSITIONS, CHOICE_STYLES, BUTTON_SIZES, BUTTON_WIDTHS, BUTTON_HOVERS, PROGRESS_STYLES, THEME_VERSION, PANEL_SIDES, FORM_LAYOUT_VALUES, FormLayout, IFormField, IFormPage } from "../models/Form";
 
 const conditionSchema = z.object({
   fieldId: z.string().trim().min(1, "fieldId is required"),
@@ -260,6 +260,17 @@ const themeCredit = z.object({
   url: z.string().max(300).regex(/^https:\/\/unsplash\.com\/(@[A-Za-z0-9_.-]{1,60})?(\?[A-Za-z0-9_=&%.-]{0,120})?$/, "must be an unsplash.com profile address"),
 });
 
+// A short line of the owner's own words (a button's text, the note under the form): plain text, no control characters or markup.
+const themeText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
+    .regex(/^[^\u0000-\u001f\u007f<>]+$/, "has characters that are not allowed")
+    .optional();
+
 // branding.theme: versioned. A key this version does not know is dropped (zod strips it); a wrong type, an out-of-range number or another version is a 400.
 const themeSchema = z.object({
   v: z.literal(THEME_VERSION),
@@ -268,6 +279,10 @@ const themeSchema = z.object({
   card: z.object({ radius: themeInt(0, 40), shadow: themeInt(0, 100) }).optional(),
   layout: z.object({ maxWidth: themeInt(360, 1400), fieldGap: themeInt(4, 64), panelSide: z.enum(PANEL_SIDES).optional() }).optional(),
   fonts: z.object({ heading: z.enum(FORM_FONTS).optional() }).optional(),
+  buttons: z.object({ size: z.enum(BUTTON_SIZES).optional(), width: z.enum(BUTTON_WIDTHS).optional(), hover: z.enum(BUTTON_HOVERS).optional() }).optional(),
+  labels: z.object({ submit: themeText(30), next: themeText(30), back: themeText(30) }).optional(),
+  progress: z.object({ style: z.enum(PROGRESS_STYLES).optional() }).optional(),
+  footer: z.object({ note: themeText(200) }).optional(),
   // Who took the Unsplash photo: a name (no control characters) and their unsplash.com profile address, nothing else.
   credit: z
     .object({ cover: themeCredit.optional(), background: themeCredit.optional() })

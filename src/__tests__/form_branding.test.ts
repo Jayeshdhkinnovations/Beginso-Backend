@@ -285,3 +285,51 @@ describe("new layouts and the Split Feature picture side", () => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelSide: value } } })).status).toBe(400);
   });
 });
+
+describe("buttons and details (theme.buttons, labels, progress, footer)", () => {
+  const WHOLE = {
+    v: 1,
+    buttons: { size: "large", width: "auto", hover: "lift" },
+    labels: { submit: "Send it", next: "Continue", back: "Go back" },
+    progress: { style: "dots" },
+    footer: { note: "Questions? Write to hello@example.com" },
+  };
+
+  it("stores all of it and returns it on the public form read", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
+  });
+
+  it.each([
+    ["buttons.size", { buttons: { size: "huge" } }],
+    ["buttons.width", { buttons: { width: "half" } }],
+    ["buttons.hover", { buttons: { hover: "spin" } }],
+    ["progress.style", { progress: { style: "wheel" } }],
+    ["a button text over 30 characters", { labels: { submit: "x".repeat(31) } }],
+    ["an empty button text", { labels: { next: "" } }],
+    ["a button text with markup", { labels: { back: "<b>Back</b>" } }],
+    ["a button text with a control character", { labels: { submit: "Send\u0007" } }],
+    ["a footer note over 200 characters", { footer: { note: "x".repeat(201) } }],
+    ["a footer note with markup", { footer: { note: "<script>alert(1)</script>" } }],
+    ["labels as a string", { labels: "Send" }],
+    ["a number as a button text", { labels: { submit: 5 } }],
+  ])("refuses %s", async (_name, group) => {
+    expect((await patchBranding({ theme: { v: 1, ...group } })).status).toBe(400);
+  });
+
+  it("trims the text and drops keys it does not know", async () => {
+    const res = await patchBranding({ theme: { v: 1, labels: { submit: "  Send  ", shout: "HEY" }, footer: { note: " Hi ", size: 9 } } });
+    expect(res.status).toBe(200);
+    expect(brandingOf(res.body).theme.labels).toEqual({ submit: "Send" });
+    expect(brandingOf(res.body).theme.footer).toEqual({ note: "Hi" });
+  });
+
+  it("keeps the whole thing when the form is patched by an older client that sends no theme", async () => {
+    expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
+    expect((await patchBranding({ primaryColor: "#112233" })).status).toBe(200);
+    const got = await request(app).get(`/api/forms/${formId}`).set(headers());
+    expect(brandingOf(got.body).theme).toEqual(WHOLE);
+  });
+});

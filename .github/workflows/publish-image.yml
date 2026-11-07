@@ -73,10 +73,10 @@ jobs:
       # The default Docker driver cannot export a build cache ("Cache export is not supported for the docker driver"). This sets up a buildx
       # builder that can, which the cache-from/cache-to lines below need.
       - name: Set up the image builder
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true

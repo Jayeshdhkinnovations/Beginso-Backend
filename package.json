@@ -46,7 +46,7 @@
     "mongoose": "^9.7.3",
     "morgan": "^1.11.0",
     "multer": "^2.4.0",
-    "nanoid": "^3.3.19",
+    "nanoid": "^6.0.2",
     "nodemailer": "^10.1.0",
     "pdfkit": "^0.19.1",
     "zod": "^4.4.3"

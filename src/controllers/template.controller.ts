@@ -8,7 +8,7 @@ import Membership from "../models/Membership";
 import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
-import { getTemplateDescription, getTemplateSettings } from "../utils/templateDefaults";
+import { getTemplateDescription, getTemplateSettings, slugify, slugifyWithId } from "../utils/templateDefaults";
 
 const formService = new FormService();
 
@@ -28,6 +28,11 @@ const fetchActiveTemplates = async (workspaceId?: string | null, publicGallery =
     _id: t._id.toString(),
     id: t._id.toString(),
     name: t.name,
+    // /discover-templates/:slug — a readable URL instead of the raw id. Older rows inserted before
+    // this field existed (the schema default only applies to a NEW document, never backfills one
+    // already in the database) fall back to computing it on the fly, same defensive pattern as
+    // description/settings above.
+    slug: t.slug || slugify(t.name),
     description: t.description?.trim() || getTemplateDescription(t.name),
     settings: { ...getTemplateSettings(), ...t.toObject().settings },
     category: t.category,
@@ -301,8 +306,15 @@ export const publishTemplate = async (req: Request, res: Response): Promise<void
     const settings = { ...(formObj.settings || {}) };
     delete settings.closeDate; // a date belongs to one form's run, not to a reusable starting point
 
+    const templateName = String(name || form.title).trim().slice(0, 100) || form.title;
+    // The schema's own slug default (slugify(name) alone) would collide the moment two workspaces
+    // ever publish a template with the same name — "Feedback", "Contact Form" are plausible everywhere.
+    // Pre-generating the id lets the slug carry a disambiguator without a second round-trip.
+    const templateId = new mongoose.Types.ObjectId();
     const template = await Template.create({
-      name: String(name || form.title).trim().slice(0, 100) || form.title,
+      _id: templateId,
+      name: templateName,
+      slug: slugifyWithId(templateName, templateId.toString()),
       description: typeof description === "string" ? description.trim().slice(0, 500) : form.description || "",
       category: typeof category === "string" && category.trim() ? category.trim() : "Workspace",
       theme: "workspace",

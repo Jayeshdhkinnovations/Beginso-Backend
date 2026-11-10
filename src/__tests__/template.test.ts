@@ -233,6 +233,35 @@ describe("Templates API Integration Tests", () => {
     expect(res.body.data.branding).toBeUndefined();
   });
 
+  it("gives every built-in template a readable slug on the public endpoint, computed from its name", async () => {
+    const res = await request(app).get("/api/templates/public");
+    const active = res.body.data.find((t: any) => t._id === activeTemplateId);
+    expect(active.slug).toBe("active-test-template");
+  });
+
+  it("gives two workspace templates published with the same name two different slugs, not a collision", async () => {
+    const ws = await Workspace.create({ name: "Slug Test Workspace", owner: mockUserId });
+    await Membership.create({ userId: mockUserId, workspaceId: ws._id, role: "admin" });
+
+    const makeForm = async (title: string) =>
+      Form.create({ title, workspaceId: ws._id, status: "draft", fields: [{ fieldId: "f1", label: "Name", type: "short_text", required: false }] });
+
+    const formA = await makeForm("Form A");
+    const formB = await makeForm("Form B");
+
+    const headers = { Authorization: `Bearer ${authToken}`, "x-workspace-slug": ws.slug ?? ws._id.toString() };
+    const resA = await request(app).post("/api/templates").set(headers).send({ formId: formA._id.toString(), name: "Feedback" });
+    const resB = await request(app).post("/api/templates").set(headers).send({ formId: formB._id.toString(), name: "Feedback" });
+
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+    const savedA = await Template.findById(resA.body.data._id);
+    const savedB = await Template.findById(resB.body.data._id);
+    expect(savedA!.slug).toMatch(/^feedback-[0-9a-f]{6}$/);
+    expect(savedB!.slug).toMatch(/^feedback-[0-9a-f]{6}$/);
+    expect(savedA!.slug).not.toBe(savedB!.slug);
+  });
+
   it("creates a personal form owned by the caller despite an ambient workspace header", async () => {
     const res = await request(app).post(`/api/templates/${activeTemplateId}/use`)
       .set("Authorization", `Bearer ${authToken}`).set("x-workspace-id", mockWorkspaceId)

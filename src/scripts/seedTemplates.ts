@@ -33,6 +33,7 @@ const seedTemplates = async () => {
       kalaChasmaTemplate,
       {
         name: "Pitch Plan",
+        slug: "pitch-plan",
         category: "advanced",
         theme: "classic-light",
         isActive: true,
@@ -42,6 +43,7 @@ const seedTemplates = async () => {
       // ─── Lead Generation (indigo, Manrope) ──────────────────────────────────
       {
         name: "Free Trial Request",
+        slug: "free-trial-request",
         category: "Lead Generation",
         description: "Capture a qualified lead before they start a free trial of your product.",
         theme: "free-trial-request",
@@ -61,6 +63,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Newsletter Signup",
+        slug: "newsletter-signup",
         category: "Lead Generation",
         description: "A one-field-at-a-time signup for a product newsletter or mailing list.",
         theme: "newsletter-signup",
@@ -78,6 +81,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Contact Sales",
+        slug: "contact-sales",
         category: "Lead Generation",
         description: "Route a high-intent visitor straight to your sales team with the context they need.",
         theme: "contact-sales",
@@ -100,6 +104,7 @@ const seedTemplates = async () => {
       // ─── E-commerce (orange, Poppins) ───────────────────────────────────────
       {
         name: "Product Order Form",
+        slug: "product-order-form",
         category: "E-commerce",
         description: "Take a direct product order with shipping details, built for a small catalog.",
         theme: "product-order-form",
@@ -120,6 +125,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Return & Exchange Request",
+        slug: "return-exchange-request",
         category: "E-commerce",
         description: "Let a customer start a return or exchange with a photo of the item's condition.",
         theme: "return-exchange-request",
@@ -140,6 +146,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Product Waitlist",
+        slug: "product-waitlist",
         category: "E-commerce",
         description: "A quick signup for a sold-out or upcoming product restock.",
         theme: "product-waitlist",
@@ -159,6 +166,7 @@ const seedTemplates = async () => {
       // ─── Feedback & Surveys (teal, Inter) ───────────────────────────────────
       {
         name: "Customer Satisfaction Survey",
+        slug: "customer-satisfaction-survey",
         category: "Feedback",
         description: "A short post-purchase survey covering overall rating and open feedback.",
         theme: "customer-satisfaction-survey",
@@ -178,6 +186,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Net Promoter Score",
+        slug: "net-promoter-score",
         category: "Feedback",
         description: "A single-question NPS survey with an optional follow-up.",
         theme: "net-promoter-score",
@@ -195,6 +204,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Website Feedback",
+        slug: "website-feedback",
         category: "Feedback",
         description: "A lightweight form for visitors to flag issues or suggest improvements to your site.",
         theme: "website-feedback",
@@ -215,6 +225,7 @@ const seedTemplates = async () => {
       // ─── HR & Hiring (sky blue, Work Sans) ───────────────────────────────────
       {
         name: "Job Application",
+        slug: "job-application",
         category: "HR",
         description: "Collect a candidate's details, resume and portfolio for an open role.",
         theme: "job-application",
@@ -237,6 +248,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Employee Onboarding",
+        slug: "employee-onboarding",
         category: "HR",
         description: "Collect the details a new hire needs to confirm before their first day.",
         theme: "employee-onboarding",
@@ -257,6 +269,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Exit Interview",
+        slug: "exit-interview",
         category: "HR",
         description: "A structured departure survey to understand why an employee is leaving.",
         theme: "exit-interview",
@@ -278,6 +291,7 @@ const seedTemplates = async () => {
       // ─── Events & RSVP (violet, Nunito) ──────────────────────────────────────
       {
         name: "Event Registration",
+        slug: "event-registration",
         category: "Events",
         description: "Register attendees for a conference or ticketed event, with dietary needs.",
         theme: "event-registration",
@@ -299,6 +313,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Wedding RSVP",
+        slug: "wedding-rsvp",
         category: "Events",
         description: "A warm, personal RSVP for a wedding, with meal choice and a song request.",
         theme: "wedding-rsvp",
@@ -318,6 +333,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Webinar Signup",
+        slug: "webinar-signup",
         category: "Events",
         description: "A fast signup form for a free webinar or online event.",
         theme: "webinar-signup",
@@ -338,6 +354,7 @@ const seedTemplates = async () => {
       // ─── Contact Us (blue, DM Sans) ──────────────────────────────────────────
       {
         name: "General Contact Form",
+        slug: "general-contact-form",
         category: "Contact us",
         description: "A simple, general-purpose contact form for any website.",
         theme: "general-contact-form",
@@ -359,6 +376,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Support Request",
+        slug: "support-request",
         category: "Contact us",
         description: "A structured support ticket form with priority and a screenshot upload.",
         theme: "support-request",
@@ -382,6 +400,7 @@ const seedTemplates = async () => {
       // ─── Booking & Reservation (rose, Outfit) ────────────────────────────────
       {
         name: "Appointment Booking",
+        slug: "appointment-booking",
         category: "Reservation/Booking",
         description: "Let a client request a specific service at a preferred date and time.",
         theme: "appointment-booking",
@@ -402,6 +421,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Table Reservation",
+        slug: "table-reservation",
         category: "Reservation/Booking",
         description: "A restaurant-style reservation form with party size and special requests.",
         theme: "table-reservation",
@@ -422,6 +442,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Venue / Room Booking",
+        slug: "venue-room-booking",
         category: "Reservation/Booking",
         description: "Request a meeting room or event venue for a specific date and time window.",
         theme: "venue-room-booking",
@@ -447,6 +468,7 @@ const seedTemplates = async () => {
       // ─── Education (emerald, Space Grotesk) ──────────────────────────────────
       {
         name: "Course Enrollment",
+        slug: "course-enrollment",
         category: "Education",
         description: "Enroll a student in a course, with their education level and how they found you.",
         theme: "course-enrollment",
@@ -468,6 +490,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Scholarship Application",
+        slug: "scholarship-application",
         category: "Education",
         description: "Collect an applicant's academic record and essay for a scholarship.",
         theme: "scholarship-application",
@@ -489,6 +512,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Student Feedback Survey",
+        slug: "student-feedback-survey",
         category: "Education",
         description: "Gather end-of-course feedback on the instructor and material.",
         theme: "student-feedback-survey",
@@ -509,6 +533,7 @@ const seedTemplates = async () => {
       // ─── Real Estate (amber-brown, Merriweather) ─────────────────────────────
       {
         name: "Property Inquiry",
+        slug: "property-inquiry",
         category: "Real Estate",
         description: "Let a prospective buyer or renter ask about a specific listing.",
         theme: "property-inquiry",
@@ -529,6 +554,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Schedule a Viewing",
+        slug: "schedule-a-viewing",
         category: "Real Estate",
         description: "Let a prospective buyer book a time to tour a property.",
         theme: "schedule-a-viewing",
@@ -549,6 +575,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Rental Application",
+        slug: "rental-application",
         category: "Real Estate",
         description: "Collect a prospective tenant's income, move-in date and references.",
         theme: "rental-application",
@@ -574,6 +601,7 @@ const seedTemplates = async () => {
       // ─── Non-profit (green, Quicksand) ───────────────────────────────────────
       {
         name: "Volunteer Signup",
+        slug: "volunteer-signup",
         category: "Non-profit",
         description: "Recruit volunteers and learn about their interests and availability.",
         theme: "volunteer-signup",
@@ -595,6 +623,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Donation Form",
+        slug: "donation-form",
         category: "Non-profit",
         description: "A simple one-time or recurring donation form, with an optional dedication.",
         theme: "donation-form",
@@ -614,6 +643,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Fundraising Event Registration",
+        slug: "fundraising-event-registration",
         category: "Non-profit",
         description: "Register attendees and sponsors for a fundraising gala or charity run.",
         theme: "fundraising-event-registration",
@@ -637,6 +667,7 @@ const seedTemplates = async () => {
       // ─── Healthcare (cyan, Inter) ────────────────────────────────────────────
       {
         name: "Patient Intake Form",
+        slug: "patient-intake-form",
         category: "Medicine",
         description: "Collect a new patient's contact details, reason for visit and insurance.",
         theme: "patient-intake-form",
@@ -659,6 +690,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Appointment Request",
+        slug: "appointment-request",
         category: "Medicine",
         description: "Let a patient request a preferred date, time and department for a visit.",
         theme: "appointment-request",
@@ -680,6 +712,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Telehealth Consultation",
+        slug: "telehealth-consultation",
         category: "Medicine",
         description: "Collect symptoms and medications before a remote video consultation.",
         theme: "telehealth-consultation",
@@ -703,6 +736,7 @@ const seedTemplates = async () => {
       // ─── Personal (fuchsia, Fredoka) ─────────────────────────────────────────
       {
         name: "Party RSVP",
+        slug: "party-rsvp",
         category: "Personal",
         description: "A cheerful RSVP for a birthday, housewarming or any personal get-together.",
         theme: "party-rsvp",
@@ -721,6 +755,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Roommate Application",
+        slug: "roommate-application",
         category: "Personal",
         description: "A friendly questionnaire for someone applying to share your home.",
         theme: "roommate-application",
@@ -744,6 +779,7 @@ const seedTemplates = async () => {
       // ─── Business (slate, Inter) ──────────────────────────────────────────────
       {
         name: "Partnership Inquiry",
+        slug: "partnership-inquiry",
         category: "Business",
         description: "Collect a proposed partnership's details and timeline before a first call.",
         theme: "partnership-inquiry",
@@ -768,6 +804,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Vendor Onboarding",
+        slug: "vendor-onboarding",
         category: "Business",
         description: "Collect a new supplier's business details and paperwork before adding them as a vendor.",
         theme: "vendor-onboarding",
@@ -794,6 +831,7 @@ const seedTemplates = async () => {
       // ─── Order (burnt orange, Poppins) ───────────────────────────────────────
       {
         name: "Food Delivery Order",
+        slug: "food-delivery-order",
         category: "Order",
         description: "Take a direct food order with delivery details, for a restaurant or home kitchen.",
         theme: "food-delivery-order",
@@ -819,6 +857,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Service Order Request",
+        slug: "service-order-request",
         category: "Order",
         description: "Let a business customer order a recurring service with a purchase order reference.",
         theme: "service-order-request",
@@ -846,6 +885,7 @@ const seedTemplates = async () => {
       // ─── Working Forms (slate grey, Work Sans) ───────────────────────────────
       {
         name: "Timesheet Submission",
+        slug: "timesheet-submission",
         category: "Working Forms",
         description: "A weekly timesheet, with hours by project and manager sign-off.",
         theme: "timesheet-submission",
@@ -870,6 +910,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Expense Reimbursement Request",
+        slug: "expense-reimbursement-request",
         category: "Working Forms",
         description: "Submit a work expense for reimbursement, with a receipt and manager approval.",
         theme: "expense-reimbursement-request",
@@ -897,6 +938,7 @@ const seedTemplates = async () => {
       // ─── Requests (violet, Manrope) ──────────────────────────────────────────
       {
         name: "IT Support Request",
+        slug: "it-support-request",
         category: "Requests",
         description: "A structured IT ticket with priority, asset tag and an optional screenshot.",
         theme: "it-support-request",
@@ -920,6 +962,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Equipment Request",
+        slug: "equipment-request",
         category: "Requests",
         description: "Request new or replacement equipment, with manager approval routed by email.",
         theme: "equipment-request",
@@ -944,6 +987,7 @@ const seedTemplates = async () => {
       // ─── Registration (blue, Outfit) ─────────────────────────────────────────
       {
         name: "Member Registration",
+        slug: "member-registration",
         category: "Registration",
         description: "Register a new member with their details, emergency contact and agreement to terms.",
         theme: "member-registration",
@@ -969,6 +1013,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Vendor Registration",
+        slug: "vendor-registration",
         category: "Registration",
         description: "Register a new vendor or supplier for an upcoming market or marketplace.",
         theme: "vendor-registration",
@@ -994,6 +1039,7 @@ const seedTemplates = async () => {
       // ─── Membership (magenta, Montserrat) ────────────────────────────────────
       {
         name: "Gym Membership Application",
+        slug: "gym-membership-application",
         category: "Membership",
         description: "Sign up a new member, with a health note and waiver acknowledgement.",
         theme: "gym-membership-application",
@@ -1020,6 +1066,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Club Membership Renewal",
+        slug: "club-membership-renewal",
         category: "Membership",
         description: "A short renewal form for an existing club or association member.",
         theme: "club-membership-renewal",
@@ -1044,6 +1091,7 @@ const seedTemplates = async () => {
       // ─── Consent (teal, Source Serif) ────────────────────────────────────────
       {
         name: "Photo & Video Consent Form",
+        slug: "photo-video-consent-form",
         category: "Consent",
         description: "Get a signed consent to photograph or film someone, with an option for promotional use.",
         theme: "photo-video-consent-form",
@@ -1067,6 +1115,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Medical Treatment Consent",
+        slug: "medical-treatment-consent",
         category: "Consent",
         description: "A signed consent to a specific medical treatment or procedure, with risks acknowledged.",
         theme: "medical-treatment-consent",
@@ -1094,6 +1143,7 @@ const seedTemplates = async () => {
       // ─── Inspection Forms (amber, Space Grotesk) ─────────────────────────────
       {
         name: "Vehicle Inspection Checklist",
+        slug: "vehicle-inspection-checklist",
         category: "Inspection Forms",
         description: "A structured pre-trip or rental vehicle inspection, with a photo of any damage.",
         theme: "vehicle-inspection-checklist",
@@ -1120,6 +1170,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Property Inspection Report",
+        slug: "property-inspection-report",
         category: "Inspection Forms",
         description: "Record a property's condition, issues found and an estimated repair cost.",
         theme: "property-inspection-report",
@@ -1144,6 +1195,7 @@ const seedTemplates = async () => {
       },
       {
         name: "Master Comprehensive Template",
+        slug: "master-comprehensive-template",
         category: "General",
         theme: "classic-light",
         isActive: true,

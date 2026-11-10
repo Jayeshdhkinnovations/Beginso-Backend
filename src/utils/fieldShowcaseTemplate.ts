@@ -12,6 +12,7 @@ const f = (pageId: string, label: string, type: IFormField["type"], extra: Parti
 
 export const fieldShowcaseTemplate = {
   name: "Field Showcase (All Field Types)",
+  slug: "field-showcase-all-field-types",
   category: "General",
   theme: "classic-light",
   isActive: true,

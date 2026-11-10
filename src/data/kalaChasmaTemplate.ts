@@ -25,6 +25,7 @@ export const kalaChasmaCsvLabelOverrides: Record<string, string> = {
 
 export const kalaChasmaTemplate = {
   name: "Kala Chasma Content Acquisition",
+  slug: "kala-chasma-content-acquisition",
   category: "advanced",
   theme: "classic-light",
   isActive: true,

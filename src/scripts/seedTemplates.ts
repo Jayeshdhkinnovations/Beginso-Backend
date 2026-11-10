@@ -94,7 +94,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "What are you looking to solve?", type: "long_text" as const, required: true, placeholder: "Tell us a bit about your use case...", helpText: "A few sentences is plenty." },
         ],
         settings: { layout: "sidebar", successMessage: "Thanks — a member of our sales team will reach out within one business day." },
-        branding: { typeScale: "default", primaryColor: "#6366f1", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "wide", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "default", primaryColor: "#6366f1", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "wide", spacing: "comfortable" },
       },
 
       // ─── E-commerce (orange, Poppins) ───────────────────────────────────────
@@ -116,7 +116,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Special Instructions", type: "long_text" as const, required: false, placeholder: "Gate code, delivery window, etc...", helpText: "Anything the courier should know." },
         ],
         settings: { layout: "classic", successMessage: "Order received! You'll get a confirmation email with tracking shortly." },
-        branding: { fieldGrouping: "single", typeScale: "default", primaryColor: "#ea580c", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=640&h=360&fit=crop&q=70&auto=format", fieldGrouping: "single", typeScale: "default", primaryColor: "#ea580c", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Return & Exchange Request",
@@ -253,7 +253,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "T-Shirt Size", type: "dropdown" as const, required: false, options: ["XS", "S", "M", "L", "XL", "XXL"], placeholder: "Select size...", helpText: "For your welcome kit." },
         ],
         settings: { layout: "card_stack", successMessage: "Thanks! Your details are on file — see you on your first day." },
-        branding: { typeScale: "large", primaryColor: "#075985", fontFamily: "dm_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "spacious" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "large", primaryColor: "#075985", fontFamily: "dm_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "spacious" },
       },
       {
         name: "Exit Interview",
@@ -295,7 +295,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Number of Guests", type: "number" as const, required: false, min: 0, max: 5, placeholder: "e.g. 1", helpText: "Guests joining you, if any." },
         ],
         settings: { layout: "split_feature", successMessage: "You're registered! Your ticket is on its way by email." },
-        branding: { bannerText: "Limited seats available", typeScale: "large", primaryColor: "#7c3aed", fontFamily: "bebas_neue", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "wide", spacing: "spacious" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=640&h=360&fit=crop&q=70&auto=format", bannerText: "Limited seats available", typeScale: "large", primaryColor: "#7c3aed", fontFamily: "bebas_neue", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "wide", spacing: "spacious" },
       },
       {
         name: "Wedding RSVP",
@@ -376,7 +376,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Attach a Screenshot", type: "image_upload" as const, required: false, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png"], placeholder: "Upload a screenshot...", helpText: "Optional, but often clarifies things fast." },
         ],
         settings: { layout: "steps", successMessage: "Your ticket is in — our support team will follow up by email." },
-        branding: { typeScale: "compact", primaryColor: "#1d4ed8", fontFamily: "montserrat", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
+        branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=1600&h=1000&fit=crop&q=70&auto=format", typeScale: "compact", primaryColor: "#1d4ed8", fontFamily: "montserrat", panelTreatment: "pattern", backgroundStyle: "image", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
       },
 
       // ─── Booking & Reservation (rose, Outfit) ────────────────────────────────
@@ -398,7 +398,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Preferred Time", type: "time" as const, required: true, placeholder: "Select a time...", helpText: "Your ideal appointment time." },
         ],
         settings: { layout: "compact", successMessage: "Request received — we'll confirm your appointment by email." },
-        branding: { typeScale: "compact", primaryColor: "#e11d48", fontFamily: "montserrat", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "narrow", spacing: "compact" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "compact", primaryColor: "#e11d48", fontFamily: "montserrat", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "narrow", spacing: "compact" },
       },
       {
         name: "Table Reservation",
@@ -485,7 +485,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Transcript", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload your transcript...", helpText: "PDF, up to 10MB." },
         ],
         settings: { layout: "steps", successMessage: "Your application is submitted — good luck!" },
-        branding: { typeScale: "default", primaryColor: "#047857", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "default", primaryColor: "#047857", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
       },
       {
         name: "Student Feedback Survey",
@@ -655,7 +655,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Emergency Contact", type: "short_text" as const, required: true, placeholder: "e.g. Grace Okoro, +1 214 555 0199", helpText: "Name and phone number." },
         ],
         settings: { layout: "steps", successMessage: "Thank you — your intake is complete. We'll see you at your appointment." },
-        branding: { typeScale: "default", primaryColor: "#0891b2", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "default", primaryColor: "#0891b2", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Appointment Request",
@@ -676,7 +676,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Reason for Visit", type: "long_text" as const, required: false, placeholder: "Briefly describe why you're visiting...", helpText: "Optional, but helpful." },
         ],
         settings: { layout: "compact", successMessage: "Request received — our front desk will confirm your appointment." },
-        branding: { typeScale: "default", primaryColor: "#0e7490", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1631217868264-e5b90bb7e133?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "default", primaryColor: "#0e7490", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Telehealth Consultation",
@@ -717,7 +717,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Bringing a Dish?", type: "short_text" as const, required: false, placeholder: "e.g. my famous guacamole", helpText: "Optional — totally not required!" },
         ],
         settings: { layout: "chat", successMessage: "Got it — can't wait to see you there!" },
-        branding: { typeScale: "default", primaryColor: "#9333ea", fontFamily: "pacifico", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1484712401471-05c7215830eb?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "default", primaryColor: "#9333ea", fontFamily: "pacifico", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "comfortable" },
       },
       {
         name: "Roommate Application",
@@ -891,7 +891,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Manager's Email", type: "email" as const, required: true, placeholder: "e.g. manager@company.com", helpText: "For approval." },
         ],
         settings: { layout: "steps", successMessage: "Request submitted — your manager will review it for approval." },
-        branding: { typeScale: "compact", primaryColor: "#334155", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "compact" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "compact", primaryColor: "#334155", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "compact" },
       },
 
       // ─── Requests (violet, Manrope) ──────────────────────────────────────────
@@ -916,7 +916,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Preferred Contact Time", type: "dropdown" as const, required: false, options: ["Morning", "Afternoon", "Evening", "Anytime"], placeholder: "Select a time...", helpText: "Optional." },
         ],
         settings: { layout: "guided", successMessage: "Your ticket is in — IT will follow up by email." },
-        branding: { typeScale: "compact", primaryColor: "#6d28d9", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
+        branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1573164713988-8665fc963095?w=1600&h=1000&fit=crop&q=70&auto=format", typeScale: "compact", primaryColor: "#6d28d9", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "image", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
       },
       {
         name: "Equipment Request",
@@ -965,7 +965,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "I Agree to the Terms", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to complete registration." },
         ],
         settings: { layout: "split_feature", successMessage: "You're registered! A confirmation email is on its way." },
-        branding: { fieldGrouping: "single", typeScale: "default", primaryColor: "#1e40af", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=640&h=360&fit=crop&q=70&auto=format", fieldGrouping: "single", typeScale: "default", primaryColor: "#1e40af", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Vendor Registration",
@@ -1088,7 +1088,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Signature", type: "signature" as const, required: true, placeholder: "Sign here", helpText: "Your signature confirms the above." },
         ],
         settings: { layout: "guided", successMessage: "Thank you — your consent has been recorded." },
-        branding: { fieldGrouping: "single", typeScale: "default", primaryColor: "#0f766e", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1521791055366-0d553872125f?w=640&h=360&fit=crop&q=70&auto=format", fieldGrouping: "single", typeScale: "default", primaryColor: "#0f766e", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
       },
 
       // ─── Inspection Forms (amber, Space Grotesk) ─────────────────────────────
@@ -1116,7 +1116,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Additional Notes", type: "long_text" as const, required: false, placeholder: "Anything else worth noting...", helpText: "Optional." },
         ],
         settings: { layout: "steps", successMessage: "Inspection recorded — thank you." },
-        branding: { typeScale: "compact", primaryColor: "#ca8a04", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=640&h=360&fit=crop&q=70&auto=format", typeScale: "compact", primaryColor: "#ca8a04", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
       },
       {
         name: "Property Inspection Report",

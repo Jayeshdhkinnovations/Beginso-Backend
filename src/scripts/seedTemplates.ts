@@ -56,7 +56,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Company Size", type: "dropdown" as const, required: true, options: ["1-10", "11-50", "51-200", "201-1000", "1000+"], placeholder: "Select size...", helpText: "Approximate number of employees." },
           { pageId: "page-1", label: "Phone Number", type: "phone" as const, required: false, placeholder: "e.g. +1 415 555 0100", helpText: "Optional, in case we need to reach you." },
         ],
-        settings: { layout: "compact", successMessage: "Your trial is on its way — check your inbox for setup instructions." },
+        settings: { layout: "split_feature", successMessage: "Your trial is on its way — check your inbox for setup instructions." },
         branding: { primaryColor: "#4f46e5", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -93,7 +93,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Budget Range", type: "dropdown" as const, required: false, options: ["Under $5k", "$5k-$20k", "$20k-$100k", "Over $100k"], placeholder: "Select range...", helpText: "Helps us recommend the right plan." },
           { pageId: "page-2", label: "What are you looking to solve?", type: "long_text" as const, required: true, placeholder: "Tell us a bit about your use case...", helpText: "A few sentences is plenty." },
         ],
-        settings: { layout: "split_feature", successMessage: "Thanks — a member of our sales team will reach out within one business day." },
+        settings: { layout: "sidebar", successMessage: "Thanks — a member of our sales team will reach out within one business day." },
         branding: { primaryColor: "#6366f1", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
       },
 
@@ -152,7 +152,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Product Interested In", type: "dropdown" as const, required: true, options: ["Classic Tee", "Hoodie", "Cap", "Tote Bag"], placeholder: "Select product...", helpText: "Which item you're waiting for." },
           { pageId: "page-1", label: "Notify Me By", type: "multiple_choice" as const, required: false, options: ["Email", "SMS"], placeholder: "Select option...", helpText: "How you'd like to hear from us." },
         ],
-        settings: { layout: "compact", successMessage: "You're on the list — we'll email you the moment it's back in stock." },
+        settings: { layout: "focus", successMessage: "You're on the list — we'll email you the moment it's back in stock." },
         branding: { primaryColor: "#f97316", fontFamily: "poppins", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
       },
 
@@ -190,7 +190,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "What's the main reason for your score?", type: "long_text" as const, required: false, placeholder: "A sentence or two is plenty...", helpText: "Optional." },
           { pageId: "page-1", label: "Email", type: "email" as const, required: false, placeholder: "e.g. you@example.com", helpText: "Only if you'd like us to follow up." },
         ],
-        settings: { layout: "compact", successMessage: "Thank you for the score — we read every response." },
+        settings: { layout: "focus", successMessage: "Thank you for the score — we read every response." },
         branding: { primaryColor: "#0f766e", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "compact" },
       },
       {
@@ -208,7 +208,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Suggestions", type: "long_text" as const, required: false, placeholder: "What should we fix or add?", helpText: "Optional, but welcome." },
           { pageId: "page-1", label: "Email", type: "email" as const, required: false, placeholder: "e.g. you@example.com", helpText: "Only if you'd like a reply." },
         ],
-        settings: { layout: "classic", successMessage: "Thanks for the feedback — we'll put it to good use." },
+        settings: { layout: "open", successMessage: "Thanks for the feedback — we'll put it to good use." },
         branding: { primaryColor: "#14b8a6", fontFamily: "inter", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
 
@@ -232,7 +232,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Portfolio or LinkedIn URL", type: "url" as const, required: false, placeholder: "e.g. https://linkedin.com/in/you", helpText: "Optional, but helpful." },
           { pageId: "page-2", label: "Why do you want to work here?", type: "long_text" as const, required: false, placeholder: "A short cover note...", helpText: "Optional." },
         ],
-        settings: { layout: "steps", successMessage: "Your application is in — our hiring team will review it and be in touch." },
+        settings: { layout: "sidebar", successMessage: "Your application is in — our hiring team will review it and be in touch." },
         branding: { coverImageUrl: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#0369a1", fontFamily: "work_sans", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -252,7 +252,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Emergency Contact Phone", type: "phone" as const, required: true, placeholder: "e.g. +91 98765 43210", helpText: "A number for that contact." },
           { pageId: "page-1", label: "T-Shirt Size", type: "dropdown" as const, required: false, options: ["XS", "S", "M", "L", "XL", "XXL"], placeholder: "Select size...", helpText: "For your welcome kit." },
         ],
-        settings: { layout: "classic", successMessage: "Thanks! Your details are on file — see you on your first day." },
+        settings: { layout: "card_stack", successMessage: "Thanks! Your details are on file — see you on your first day." },
         branding: { primaryColor: "#075985", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -331,7 +331,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Job Title", type: "short_text" as const, required: false, placeholder: "e.g. Marketing Lead", helpText: "Optional." },
           { pageId: "page-1", label: "How did you hear about this?", type: "dropdown" as const, required: false, options: ["Social media", "Email", "A colleague", "Search engine", "Other"], placeholder: "Select one...", helpText: "Helps us plan future events." },
         ],
-        settings: { layout: "compact", successMessage: "You're registered! We'll email your join link before the event." },
+        settings: { layout: "chat", successMessage: "You're registered! We'll email your join link before the event." },
         branding: { primaryColor: "#8b5cf6", fontFamily: "nunito", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "compact" },
       },
 
@@ -375,7 +375,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Describe the Issue", type: "long_text" as const, required: true, placeholder: "What happened, and what did you expect?", helpText: "Steps to reproduce are especially helpful." },
           { pageId: "page-1", label: "Attach a Screenshot", type: "image_upload" as const, required: false, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png"], placeholder: "Upload a screenshot...", helpText: "Optional, but often clarifies things fast." },
         ],
-        settings: { layout: "guided", successMessage: "Your ticket is in — our support team will follow up by email." },
+        settings: { layout: "steps", successMessage: "Your ticket is in — our support team will follow up by email." },
         branding: { primaryColor: "#1d4ed8", fontFamily: "dm_sans", panelTreatment: "pattern", backgroundStyle: "grid", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
       },
 
@@ -417,7 +417,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Time", type: "time" as const, required: true, placeholder: "Select a time...", helpText: "Your preferred arrival time." },
           { pageId: "page-1", label: "Special Requests", type: "long_text" as const, required: false, placeholder: "Allergies, celebrations, seating preference...", helpText: "Optional." },
         ],
-        settings: { layout: "classic", successMessage: "Table booked — see you soon!" },
+        settings: { layout: "open", successMessage: "Table booked — see you soon!" },
         branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#be123c", fontFamily: "outfit", panelTreatment: "gradient", backgroundStyle: "image", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -440,7 +440,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Room / Venue", type: "dropdown" as const, required: true, options: ["Small meeting room", "Large meeting room", "Event hall"], placeholder: "Select space...", helpText: "Choose the space you need." },
           { pageId: "page-2", label: "Expected Attendees", type: "number" as const, required: false, min: 1, max: 500, placeholder: "e.g. 20", helpText: "Approximate headcount." },
         ],
-        settings: { layout: "steps", successMessage: "Booking request received — we'll confirm availability shortly." },
+        settings: { layout: "sidebar", successMessage: "Booking request received — we'll confirm availability shortly." },
         branding: { primaryColor: "#f43f5e", fontFamily: "outfit", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
       },
 
@@ -463,7 +463,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Education Level", type: "dropdown" as const, required: false, options: ["High school", "Undergraduate", "Graduate", "Other"], placeholder: "Select level...", helpText: "Your current or highest level of study." },
           { pageId: "page-2", label: "How did you hear about this course?", type: "dropdown" as const, required: false, options: ["Social media", "A friend", "Search engine", "Other"], placeholder: "Select one...", helpText: "Optional." },
         ],
-        settings: { layout: "steps", successMessage: "You're enrolled! Course details are on their way to your inbox." },
+        settings: { layout: "split_feature", successMessage: "You're enrolled! Course details are on their way to your inbox." },
         branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#059669", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "image", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -484,7 +484,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Why do you deserve this scholarship?", type: "long_text" as const, required: true, placeholder: "Tell us about your goals and circumstances...", helpText: "There's no strict word limit." },
           { pageId: "page-2", label: "Transcript", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload your transcript...", helpText: "PDF, up to 10MB." },
         ],
-        settings: { layout: "guided", successMessage: "Your application is submitted — good luck!" },
+        settings: { layout: "steps", successMessage: "Your application is submitted — good luck!" },
         branding: { primaryColor: "#047857", fontFamily: "space_grotesk", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
       },
       {
@@ -502,7 +502,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "What worked well?", type: "long_text" as const, required: false, placeholder: "Pacing, materials, teaching style...", helpText: "Optional." },
           { pageId: "page-1", label: "Suggestions for Improvement", type: "long_text" as const, required: false, placeholder: "What would you change?", helpText: "Optional." },
         ],
-        settings: { layout: "compact", successMessage: "Thanks for the feedback — it genuinely shapes future courses." },
+        settings: { layout: "focus", successMessage: "Thanks for the feedback — it genuinely shapes future courses." },
         branding: { primaryColor: "#10b981", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
       },
 
@@ -567,7 +567,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Do you have pets?", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Let us know up front." },
           { pageId: "page-2", label: "Proof of Income", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload a document...", helpText: "A recent pay stub or offer letter, PDF." },
         ],
-        settings: { layout: "steps", successMessage: "Application received — we'll review it and follow up within a few days." },
+        settings: { layout: "sidebar", successMessage: "Application received — we'll review it and follow up within a few days." },
         branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#d97706", fontFamily: "merriweather", panelTreatment: "pattern", backgroundStyle: "image", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
       },
 
@@ -609,7 +609,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Frequency", type: "multiple_choice" as const, required: true, options: ["One-time", "Monthly"], placeholder: "Select frequency...", helpText: "How often you'd like to give." },
           { pageId: "page-1", label: "In Honor or Memory Of", type: "short_text" as const, required: false, placeholder: "e.g. In memory of Grandma Rose", helpText: "Optional dedication." },
         ],
-        settings: { layout: "compact", successMessage: "Thank you for your generosity — your receipt is on its way." },
+        settings: { layout: "open", successMessage: "Thank you for your generosity — your receipt is on its way." },
         branding: { primaryColor: "#15803d", fontFamily: "quicksand", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "comfortable" },
       },
       {
@@ -675,7 +675,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Preferred Time", type: "time" as const, required: true, placeholder: "Select a time...", helpText: "Your ideal appointment time." },
           { pageId: "page-1", label: "Reason for Visit", type: "long_text" as const, required: false, placeholder: "Briefly describe why you're visiting...", helpText: "Optional, but helpful." },
         ],
-        settings: { layout: "classic", successMessage: "Request received — our front desk will confirm your appointment." },
+        settings: { layout: "compact", successMessage: "Request received — our front desk will confirm your appointment." },
         branding: { primaryColor: "#0e7490", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -696,7 +696,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Current Medications", type: "long_text" as const, required: false, placeholder: "List any medications you're taking...", helpText: "Optional." },
           { pageId: "page-1", label: "Preferred Consultation Time", type: "datetime" as const, required: true, placeholder: "Select date and time...", helpText: "When you'd like the call to happen." },
         ],
-        settings: { layout: "guided", successMessage: "You're all set — your video link will arrive by email shortly." },
+        settings: { layout: "card_stack", successMessage: "You're all set — your video link will arrive by email shortly." },
         branding: { coverImageUrl: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#06b6d4", fontFamily: "inter", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
       },
 
@@ -716,7 +716,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Number of Guests", type: "number" as const, required: false, min: 1, max: 6, placeholder: "e.g. 2", helpText: "Including yourself." },
           { pageId: "page-1", label: "Bringing a Dish?", type: "short_text" as const, required: false, placeholder: "e.g. my famous guacamole", helpText: "Optional — totally not required!" },
         ],
-        settings: { layout: "card_stack", successMessage: "Got it — can't wait to see you there!" },
+        settings: { layout: "chat", successMessage: "Got it — can't wait to see you there!" },
         branding: { primaryColor: "#9333ea", fontFamily: "fredoka", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "comfortable" },
       },
       {
@@ -763,7 +763,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Proposed Collaboration", type: "long_text" as const, required: true, placeholder: "Describe what you have in mind...", helpText: "The more detail, the better we can evaluate it." },
           { pageId: "page-2", label: "Timeline", type: "dropdown" as const, required: false, options: ["Immediate", "This quarter", "Next quarter", "Just exploring"], placeholder: "Select timeline...", helpText: "Helps us prioritize." },
         ],
-        settings: { layout: "classic", successMessage: "Thanks — our partnerships team will review this and be in touch." },
+        settings: { layout: "open", successMessage: "Thanks — our partnerships team will review this and be in touch." },
         branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1556761175-4b46a572b786?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#334155", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "image", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -814,7 +814,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Payment Method", type: "multiple_choice" as const, required: true, options: ["Cash on delivery", "Card on delivery", "Already paid online"], placeholder: "Select method...", helpText: "How you'll pay." },
           { pageId: "page-2", label: "Special Instructions", type: "long_text" as const, required: false, placeholder: "Allergies, gate code, etc...", helpText: "Optional." },
         ],
-        settings: { layout: "steps", successMessage: "Order received! Your food is being prepared." },
+        settings: { layout: "chat", successMessage: "Order received! Your food is being prepared." },
         branding: { primaryColor: "#c2410c", fontFamily: "poppins", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -865,7 +865,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Tasks Completed", type: "long_text" as const, required: false, placeholder: "A brief summary of the week's work...", helpText: "Optional." },
           { pageId: "page-2", label: "Manager's Email", type: "email" as const, required: true, placeholder: "e.g. manager@company.com", helpText: "For approval." },
         ],
-        settings: { layout: "classic", successMessage: "Timesheet submitted — your manager will review it shortly." },
+        settings: { layout: "compact", successMessage: "Timesheet submitted — your manager will review it shortly." },
         branding: { primaryColor: "#475569", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -964,7 +964,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Emergency Contact Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 651 555 0188", helpText: "A number for that contact." },
           { pageId: "page-2", label: "I Agree to the Terms", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to complete registration." },
         ],
-        settings: { layout: "steps", successMessage: "You're registered! A confirmation email is on its way." },
+        settings: { layout: "split_feature", successMessage: "You're registered! A confirmation email is on its way." },
         branding: { primaryColor: "#1e40af", fontFamily: "outfit", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -1015,7 +1015,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Health Conditions We Should Know About", type: "long_text" as const, required: false, placeholder: "Injuries, conditions, medications...", helpText: "Optional, kept confidential." },
           { pageId: "page-2", label: "I Acknowledge the Liability Waiver", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to complete your membership." },
         ],
-        settings: { layout: "steps", successMessage: "Welcome aboard! Your membership starts on your chosen date." },
+        settings: { layout: "card_stack", successMessage: "Welcome aboard! Your membership starts on your chosen date." },
         branding: { primaryColor: "#a21caf", fontFamily: "montserrat", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
@@ -1139,7 +1139,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Follow-up Required", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Does this need a second visit?" },
           { pageId: "page-2", label: "Estimated Repair Cost", type: "currency" as const, required: false, min: 0, placeholder: "e.g. 1500", helpText: "Optional, your best estimate." },
         ],
-        settings: { layout: "guided", successMessage: "Report submitted — thank you." },
+        settings: { layout: "compact", successMessage: "Report submitted — thank you." },
         branding: { primaryColor: "#a16207", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
       },
       {

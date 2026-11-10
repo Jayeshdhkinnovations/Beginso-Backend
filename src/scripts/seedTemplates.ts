@@ -74,7 +74,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Topics of Interest", type: "checkbox" as const, required: false, options: ["Product updates", "Industry news", "Events & webinars", "Tips & tutorials"], placeholder: "Select topics...", helpText: "Pick as many as you like." },
         ],
         settings: { layout: "chat", successMessage: "You're subscribed! Look out for our next issue." },
-        branding: { primaryColor: "#4f46e5", fontFamily: "manrope", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
+        branding: { primaryColor: "#4338ca", fontFamily: "manrope", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
       },
       {
         name: "Contact Sales",
@@ -94,7 +94,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "What are you looking to solve?", type: "long_text" as const, required: true, placeholder: "Tell us a bit about your use case...", helpText: "A few sentences is plenty." },
         ],
         settings: { layout: "split_feature", successMessage: "Thanks — a member of our sales team will reach out within one business day." },
-        branding: { primaryColor: "#4f46e5", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
+        branding: { primaryColor: "#6366f1", fontFamily: "manrope", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
       },
 
       // ─── E-commerce (orange, Poppins) ───────────────────────────────────────
@@ -136,7 +136,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Photo of the Item", type: "image_upload" as const, required: false, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png"], placeholder: "Upload a photo...", helpText: "Especially helpful for damaged items." },
         ],
         settings: { layout: "steps", successMessage: "Your return request is in — we'll email your return label shortly." },
-        branding: { primaryColor: "#ea580c", fontFamily: "poppins", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
+        branding: { primaryColor: "#c2410c", fontFamily: "poppins", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Product Waitlist",
@@ -153,7 +153,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Notify Me By", type: "multiple_choice" as const, required: false, options: ["Email", "SMS"], placeholder: "Select option...", helpText: "How you'd like to hear from us." },
         ],
         settings: { layout: "compact", successMessage: "You're on the list — we'll email you the moment it's back in stock." },
-        branding: { primaryColor: "#ea580c", fontFamily: "poppins", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
+        branding: { primaryColor: "#f97316", fontFamily: "poppins", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
       },
 
       // ─── Feedback & Surveys (teal, Inter) ───────────────────────────────────
@@ -174,7 +174,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Would you recommend us?", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "To a friend or colleague." },
         ],
         settings: { layout: "guided", successMessage: "Thanks for the feedback — it genuinely helps us improve." },
-        branding: { primaryColor: "#0d9488", fontFamily: "inter", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#0d9488", fontFamily: "inter", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Net Promoter Score",
@@ -191,7 +191,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Email", type: "email" as const, required: false, placeholder: "e.g. you@example.com", helpText: "Only if you'd like us to follow up." },
         ],
         settings: { layout: "compact", successMessage: "Thank you for the score — we read every response." },
-        branding: { primaryColor: "#0d9488", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "compact" },
+        branding: { primaryColor: "#0f766e", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "compact" },
       },
       {
         name: "Website Feedback",
@@ -209,7 +209,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Email", type: "email" as const, required: false, placeholder: "e.g. you@example.com", helpText: "Only if you'd like a reply." },
         ],
         settings: { layout: "classic", successMessage: "Thanks for the feedback — we'll put it to good use." },
-        branding: { primaryColor: "#0d9488", fontFamily: "inter", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { primaryColor: "#14b8a6", fontFamily: "inter", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
 
       // ─── HR & Hiring (sky blue, Work Sans) ───────────────────────────────────
@@ -233,7 +233,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Why do you want to work here?", type: "long_text" as const, required: false, placeholder: "A short cover note...", helpText: "Optional." },
         ],
         settings: { layout: "steps", successMessage: "Your application is in — our hiring team will review it and be in touch." },
-        branding: { primaryColor: "#0369a1", fontFamily: "work_sans", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#0369a1", fontFamily: "work_sans", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Employee Onboarding",
@@ -253,7 +253,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "T-Shirt Size", type: "dropdown" as const, required: false, options: ["XS", "S", "M", "L", "XL", "XXL"], placeholder: "Select size...", helpText: "For your welcome kit." },
         ],
         settings: { layout: "classic", successMessage: "Thanks! Your details are on file — see you on your first day." },
-        branding: { primaryColor: "#0369a1", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { primaryColor: "#075985", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Exit Interview",
@@ -272,7 +272,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "What could we have done better?", type: "long_text" as const, required: false, placeholder: "Be as candid as you'd like...", helpText: "This stays with HR." },
         ],
         settings: { layout: "guided", successMessage: "Thank you for your honesty — and for your time with us." },
-        branding: { primaryColor: "#0369a1", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
+        branding: { primaryColor: "#0284c7", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
       },
 
       // ─── Events & RSVP (violet, Nunito) ──────────────────────────────────────
@@ -314,7 +314,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Song Request", type: "short_text" as const, required: false, placeholder: "e.g. anything by Stevie Wonder", helpText: "We'll try to make it happen." },
         ],
         settings: { layout: "card_stack", successMessage: "Thank you — we can't wait to celebrate with you!" },
-        branding: { primaryColor: "#7c3aed", fontFamily: "playfair_display", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "spacious" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1519741497674-611481863552?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#6d28d9", fontFamily: "playfair_display", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "spacious" },
       },
       {
         name: "Webinar Signup",
@@ -332,7 +332,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "How did you hear about this?", type: "dropdown" as const, required: false, options: ["Social media", "Email", "A colleague", "Search engine", "Other"], placeholder: "Select one...", helpText: "Helps us plan future events." },
         ],
         settings: { layout: "compact", successMessage: "You're registered! We'll email your join link before the event." },
-        branding: { primaryColor: "#7c3aed", fontFamily: "nunito", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "compact" },
+        branding: { primaryColor: "#8b5cf6", fontFamily: "nunito", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "compact" },
       },
 
       // ─── Contact Us (blue, DM Sans) ──────────────────────────────────────────
@@ -348,7 +348,10 @@ const seedTemplates = async () => {
         fields: [
           { pageId: "page-1", label: "Name", type: "short_text" as const, required: true, placeholder: "e.g. Jordan Lee", helpText: "Your first and last name." },
           { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. jordan@example.com", helpText: "We'll reply here." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: false, placeholder: "e.g. +1 503 555 0121", helpText: "Optional, if you'd rather we call." },
+          { pageId: "page-1", label: "Company", type: "short_text" as const, required: false, placeholder: "e.g. Acme Inc.", helpText: "Optional." },
           { pageId: "page-1", label: "Subject", type: "dropdown" as const, required: true, options: ["General question", "Partnership", "Press", "Other"], placeholder: "Select subject...", helpText: "Helps route your message." },
+          { pageId: "page-1", label: "Preferred Contact Method", type: "multiple_choice" as const, required: false, options: ["Email", "Phone"], placeholder: "Select method...", helpText: "How you'd like us to follow up." },
           { pageId: "page-1", label: "Message", type: "long_text" as const, required: true, placeholder: "How can we help?", helpText: "Share as much detail as you'd like." },
         ],
         settings: { layout: "classic", successMessage: "Thanks for reaching out — we'll be in touch soon." },
@@ -373,7 +376,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Attach a Screenshot", type: "image_upload" as const, required: false, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png"], placeholder: "Upload a screenshot...", helpText: "Optional, but often clarifies things fast." },
         ],
         settings: { layout: "guided", successMessage: "Your ticket is in — our support team will follow up by email." },
-        branding: { primaryColor: "#2563eb", fontFamily: "dm_sans", panelTreatment: "pattern", backgroundStyle: "grid", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
+        branding: { primaryColor: "#1d4ed8", fontFamily: "dm_sans", panelTreatment: "pattern", backgroundStyle: "grid", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
       },
 
       // ─── Booking & Reservation (rose, Outfit) ────────────────────────────────
@@ -415,7 +418,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Special Requests", type: "long_text" as const, required: false, placeholder: "Allergies, celebrations, seating preference...", helpText: "Optional." },
         ],
         settings: { layout: "classic", successMessage: "Table booked — see you soon!" },
-        branding: { primaryColor: "#e11d48", fontFamily: "outfit", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+        branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#be123c", fontFamily: "outfit", panelTreatment: "gradient", backgroundStyle: "image", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Venue / Room Booking",
@@ -438,7 +441,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Expected Attendees", type: "number" as const, required: false, min: 1, max: 500, placeholder: "e.g. 20", helpText: "Approximate headcount." },
         ],
         settings: { layout: "steps", successMessage: "Booking request received — we'll confirm availability shortly." },
-        branding: { primaryColor: "#e11d48", fontFamily: "outfit", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
+        branding: { primaryColor: "#f43f5e", fontFamily: "outfit", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
       },
 
       // ─── Education (emerald, Space Grotesk) ──────────────────────────────────
@@ -461,7 +464,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "How did you hear about this course?", type: "dropdown" as const, required: false, options: ["Social media", "A friend", "Search engine", "Other"], placeholder: "Select one...", helpText: "Optional." },
         ],
         settings: { layout: "steps", successMessage: "You're enrolled! Course details are on their way to your inbox." },
-        branding: { primaryColor: "#059669", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1529070538774-1843cb3265df?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#059669", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "image", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Scholarship Application",
@@ -482,7 +485,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Transcript", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload your transcript...", helpText: "PDF, up to 10MB." },
         ],
         settings: { layout: "guided", successMessage: "Your application is submitted — good luck!" },
-        branding: { primaryColor: "#059669", fontFamily: "space_grotesk", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
+        branding: { primaryColor: "#047857", fontFamily: "space_grotesk", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
       },
       {
         name: "Student Feedback Survey",
@@ -500,7 +503,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Suggestions for Improvement", type: "long_text" as const, required: false, placeholder: "What would you change?", helpText: "Optional." },
         ],
         settings: { layout: "compact", successMessage: "Thanks for the feedback — it genuinely shapes future courses." },
-        branding: { primaryColor: "#059669", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
+        branding: { primaryColor: "#10b981", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "compact" },
       },
 
       // ─── Real Estate (amber-brown, Merriweather) ─────────────────────────────
@@ -522,7 +525,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Your Message", type: "long_text" as const, required: true, placeholder: "What would you like to know?", helpText: "Ask away." },
         ],
         settings: { layout: "classic", successMessage: "Thanks for your interest — an agent will be in touch shortly." },
-        branding: { primaryColor: "#b45309", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#b45309", fontFamily: "merriweather", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Schedule a Viewing",
@@ -542,7 +545,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Preferred Time", type: "time" as const, required: true, placeholder: "Select a time...", helpText: "Your preferred viewing time." },
         ],
         settings: { layout: "compact", successMessage: "Viewing requested — your agent will confirm the time shortly." },
-        branding: { primaryColor: "#b45309", fontFamily: "merriweather", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "comfortable" },
+        branding: { primaryColor: "#92400e", fontFamily: "merriweather", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "comfortable" },
       },
       {
         name: "Rental Application",
@@ -565,7 +568,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Proof of Income", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload a document...", helpText: "A recent pay stub or offer letter, PDF." },
         ],
         settings: { layout: "steps", successMessage: "Application received — we'll review it and follow up within a few days." },
-        branding: { primaryColor: "#b45309", fontFamily: "merriweather", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
+        branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#d97706", fontFamily: "merriweather", panelTreatment: "pattern", backgroundStyle: "image", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
       },
 
       // ─── Non-profit (green, Quicksand) ───────────────────────────────────────
@@ -588,7 +591,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Previous Volunteer Experience", type: "long_text" as const, required: false, placeholder: "Tell us a little about it...", helpText: "Optional." },
         ],
         settings: { layout: "guided", successMessage: "Thank you for signing up — we'll be in touch with next steps." },
-        branding: { primaryColor: "#16a34a", fontFamily: "quicksand", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#16a34a", fontFamily: "quicksand", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Donation Form",
@@ -607,7 +610,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "In Honor or Memory Of", type: "short_text" as const, required: false, placeholder: "e.g. In memory of Grandma Rose", helpText: "Optional dedication." },
         ],
         settings: { layout: "compact", successMessage: "Thank you for your generosity — your receipt is on its way." },
-        branding: { primaryColor: "#16a34a", fontFamily: "quicksand", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "comfortable" },
+        branding: { primaryColor: "#15803d", fontFamily: "quicksand", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "comfortable" },
       },
       {
         name: "Fundraising Event Registration",
@@ -628,7 +631,7 @@ const seedTemplates = async () => {
           { pageId: "page-2", label: "Dietary Restrictions", type: "checkbox" as const, required: false, options: ["Vegetarian", "Vegan", "Gluten-Free"], placeholder: "Select restrictions...", helpText: "Select all that apply." },
         ],
         settings: { layout: "split_feature", successMessage: "You're registered — thank you for supporting the cause." },
-        branding: { primaryColor: "#16a34a", fontFamily: "quicksand", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "wide", spacing: "comfortable" },
+        branding: { primaryColor: "#22c55e", fontFamily: "quicksand", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "wide", spacing: "comfortable" },
       },
 
       // ─── Healthcare (cyan, Inter) ────────────────────────────────────────────
@@ -673,7 +676,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Reason for Visit", type: "long_text" as const, required: false, placeholder: "Briefly describe why you're visiting...", helpText: "Optional, but helpful." },
         ],
         settings: { layout: "classic", successMessage: "Request received — our front desk will confirm your appointment." },
-        branding: { primaryColor: "#0891b2", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { primaryColor: "#0e7490", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Telehealth Consultation",
@@ -694,7 +697,7 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Preferred Consultation Time", type: "datetime" as const, required: true, placeholder: "Select date and time...", helpText: "When you'd like the call to happen." },
         ],
         settings: { layout: "guided", successMessage: "You're all set — your video link will arrive by email shortly." },
-        branding: { primaryColor: "#0891b2", fontFamily: "inter", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
+        branding: { coverImageUrl: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#06b6d4", fontFamily: "inter", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
       },
 
       // ─── Personal (fuchsia, Fredoka) ─────────────────────────────────────────
@@ -735,9 +738,410 @@ const seedTemplates = async () => {
           { pageId: "page-1", label: "Tell Us About Yourself", type: "long_text" as const, required: true, placeholder: "Lifestyle, habits, what you're looking for...", helpText: "A few sentences is great." },
         ],
         settings: { layout: "guided", successMessage: "Thanks! We'll review your application and reach out soon." },
-        branding: { primaryColor: "#9333ea", fontFamily: "fredoka", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        branding: { primaryColor: "#7e22ce", fontFamily: "fredoka", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
 
+      // ─── Business (slate, Inter) ──────────────────────────────────────────────
+      {
+        name: "Partnership Inquiry",
+        category: "Business",
+        description: "Collect a proposed partnership's details and timeline before a first call.",
+        theme: "partnership-inquiry",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "About your company", description: "Who you are." },
+          { id: "page-2", order: 1, title: "The proposal", description: "What you have in mind." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Morgan Reid", helpText: "Your first and last name." },
+          { pageId: "page-1", label: "Work Email", type: "email" as const, required: true, placeholder: "e.g. morgan@company.com", helpText: "We'll reply here." },
+          { pageId: "page-1", label: "Company Name", type: "short_text" as const, required: true, placeholder: "e.g. Acme Inc.", helpText: "The company you represent." },
+          { pageId: "page-1", label: "Company Website", type: "url" as const, required: false, placeholder: "e.g. https://acme.com", helpText: "Optional." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: false, placeholder: "e.g. +1 312 555 0190", helpText: "Optional." },
+          { pageId: "page-2", label: "Partnership Type", type: "dropdown" as const, required: true, options: ["Reseller", "Technology integration", "Co-marketing", "Other"], placeholder: "Select type...", helpText: "Closest match is fine." },
+          { pageId: "page-2", label: "Company Size", type: "dropdown" as const, required: false, options: ["1-10", "11-50", "51-200", "201-1000", "1000+"], placeholder: "Select size...", helpText: "Approximate number of employees." },
+          { pageId: "page-2", label: "Proposed Collaboration", type: "long_text" as const, required: true, placeholder: "Describe what you have in mind...", helpText: "The more detail, the better we can evaluate it." },
+          { pageId: "page-2", label: "Timeline", type: "dropdown" as const, required: false, options: ["Immediate", "This quarter", "Next quarter", "Just exploring"], placeholder: "Select timeline...", helpText: "Helps us prioritize." },
+        ],
+        settings: { layout: "classic", successMessage: "Thanks — our partnerships team will review this and be in touch." },
+        branding: { backgroundImageUrl: "https://images.unsplash.com/photo-1556761175-4b46a572b786?w=1600&h=1000&fit=crop&q=70&auto=format", primaryColor: "#334155", fontFamily: "inter", panelTreatment: "solid", backgroundStyle: "image", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Vendor Onboarding",
+        category: "Business",
+        description: "Collect a new supplier's business details and paperwork before adding them as a vendor.",
+        theme: "vendor-onboarding",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Business details", description: "Who you are, and where to find you." },
+          { id: "page-2", order: 1, title: "What you provide", description: "Services and documentation." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Company Name", type: "short_text" as const, required: true, placeholder: "e.g. Acme Supplies Ltd.", helpText: "Your registered business name." },
+          { pageId: "page-1", label: "Contact Name", type: "short_text" as const, required: true, placeholder: "e.g. Priya Shah", helpText: "Our main point of contact." },
+          { pageId: "page-1", label: "Contact Email", type: "email" as const, required: true, placeholder: "e.g. priya@acmesupplies.com", helpText: "We'll send onboarding details here." },
+          { pageId: "page-1", label: "Contact Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 404 555 0133", helpText: "A number we can reach you on." },
+          { pageId: "page-1", label: "Business Address", type: "address" as const, required: true, placeholder: "Street, city, postal code, country", helpText: "Your registered business address." },
+          { pageId: "page-2", label: "Tax ID / Registration Number", type: "short_text" as const, required: true, placeholder: "e.g. EIN or VAT number", helpText: "Required for our accounting records." },
+          { pageId: "page-2", label: "Services or Products Provided", type: "long_text" as const, required: true, placeholder: "Describe what you supply...", helpText: "A few sentences is plenty." },
+          { pageId: "page-2", label: "Payment Terms Note", type: "long_text" as const, required: false, placeholder: "Net 30, early-payment discount, etc...", helpText: "Optional — never include card or account numbers here." },
+          { pageId: "page-2", label: "W-9 or Equivalent Document", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload a document...", helpText: "PDF, up to 10MB." },
+        ],
+        settings: { layout: "steps", successMessage: "Thanks — our procurement team will review this and follow up." },
+        branding: { primaryColor: "#1e293b", fontFamily: "inter", panelTreatment: "pattern", backgroundStyle: "grid", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
+      },
+
+      // ─── Order (burnt orange, Poppins) ───────────────────────────────────────
+      {
+        name: "Food Delivery Order",
+        category: "Order",
+        description: "Take a direct food order with delivery details, for a restaurant or home kitchen.",
+        theme: "food-delivery-order",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Your order", description: "What would you like?" },
+          { id: "page-2", order: 1, title: "Delivery details", description: "Where and when." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Daniela Cruz", helpText: "Name for the order." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 619 555 0144", helpText: "In case the courier needs to reach you." },
+          { pageId: "page-1", label: "Menu Item", type: "dropdown" as const, required: true, options: ["Margherita Pizza", "Butter Chicken", "Veggie Burrito Bowl", "Pad Thai"], placeholder: "Select item...", helpText: "Choose your main order." },
+          { pageId: "page-1", label: "Quantity", type: "number" as const, required: true, min: 1, max: 10, placeholder: "e.g. 2", helpText: "How many of this item." },
+          { pageId: "page-1", label: "Spice Level", type: "multiple_choice" as const, required: false, options: ["Mild", "Medium", "Hot"], placeholder: "Select spice level...", helpText: "If applicable." },
+          { pageId: "page-2", label: "Delivery Address", type: "address" as const, required: true, placeholder: "Street, city, postal code, country", helpText: "Where we should deliver." },
+          { pageId: "page-2", label: "Delivery Time", type: "multiple_choice" as const, required: true, options: ["As soon as possible", "Schedule for later"], placeholder: "Select timing...", helpText: "Choose when you'd like it." },
+          { pageId: "page-2", label: "Scheduled Time", type: "time" as const, required: false, placeholder: "Select a time...", helpText: "Only if scheduling for later." },
+          { pageId: "page-2", label: "Payment Method", type: "multiple_choice" as const, required: true, options: ["Cash on delivery", "Card on delivery", "Already paid online"], placeholder: "Select method...", helpText: "How you'll pay." },
+          { pageId: "page-2", label: "Special Instructions", type: "long_text" as const, required: false, placeholder: "Allergies, gate code, etc...", helpText: "Optional." },
+        ],
+        settings: { layout: "steps", successMessage: "Order received! Your food is being prepared." },
+        branding: { primaryColor: "#c2410c", fontFamily: "poppins", panelTreatment: "gradient", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Service Order Request",
+        category: "Order",
+        description: "Let a business customer order a recurring service with a purchase order reference.",
+        theme: "service-order-request",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Your details", description: "Who the order is for." },
+          { id: "page-2", order: 1, title: "Order details", description: "What, how much, and when." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Tomás Herrera", helpText: "Your first and last name." },
+          { pageId: "page-1", label: "Company", type: "short_text" as const, required: false, placeholder: "e.g. Acme Inc.", helpText: "Optional." },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. tomas@example.com", helpText: "We'll send confirmation here." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: false, placeholder: "e.g. +1 786 555 0115", helpText: "Optional." },
+          { pageId: "page-2", label: "Service Requested", type: "dropdown" as const, required: true, options: ["Cleaning", "Landscaping", "IT support", "Maintenance", "Other"], placeholder: "Select service...", helpText: "Closest match is fine." },
+          { pageId: "page-2", label: "Quantity / Units", type: "number" as const, required: true, min: 1, placeholder: "e.g. 1", helpText: "How many units or visits." },
+          { pageId: "page-2", label: "Preferred Start Date", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "When you'd like it to begin." },
+          { pageId: "page-2", label: "Billing Address", type: "address" as const, required: true, placeholder: "Street, city, postal code, country", helpText: "Where the invoice should go." },
+          { pageId: "page-2", label: "Purchase Order Number", type: "short_text" as const, required: false, placeholder: "e.g. PO-10452", helpText: "Optional, if your company requires one." },
+          { pageId: "page-2", label: "Notes", type: "long_text" as const, required: false, placeholder: "Anything else we should know...", helpText: "Optional." },
+        ],
+        settings: { layout: "classic", successMessage: "Order received — we'll confirm scheduling shortly." },
+        branding: { primaryColor: "#9a3412", fontFamily: "poppins", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "8px", formWidth: "wide", spacing: "comfortable" },
+      },
+
+      // ─── Working Forms (slate grey, Work Sans) ───────────────────────────────
+      {
+        name: "Timesheet Submission",
+        category: "Working Forms",
+        description: "A weekly timesheet, with hours by project and manager sign-off.",
+        theme: "timesheet-submission",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Who and when", description: "Your details and the week." },
+          { id: "page-2", order: 1, title: "Hours", description: "What you worked." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Employee Name", type: "short_text" as const, required: true, placeholder: "e.g. Keisha Brown", helpText: "Your full name." },
+          { pageId: "page-1", label: "Employee ID", type: "short_text" as const, required: true, placeholder: "e.g. EMP-1042", helpText: "Found on your employee card." },
+          { pageId: "page-1", label: "Department", type: "dropdown" as const, required: true, options: ["Engineering", "Sales", "Marketing", "Operations", "Support"], placeholder: "Select department...", helpText: "The team you're part of." },
+          { pageId: "page-1", label: "Week Ending", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "The last day of the week you're reporting." },
+          { pageId: "page-2", label: "Regular Hours", type: "number" as const, required: true, min: 0, max: 80, placeholder: "e.g. 40", helpText: "Standard hours worked this week." },
+          { pageId: "page-2", label: "Overtime Hours", type: "number" as const, required: false, min: 0, max: 40, placeholder: "e.g. 3", helpText: "Any hours beyond your standard schedule." },
+          { pageId: "page-2", label: "Project / Client Code", type: "short_text" as const, required: false, placeholder: "e.g. PRJ-204", helpText: "Optional, if you bill time to a project." },
+          { pageId: "page-2", label: "Tasks Completed", type: "long_text" as const, required: false, placeholder: "A brief summary of the week's work...", helpText: "Optional." },
+          { pageId: "page-2", label: "Manager's Email", type: "email" as const, required: true, placeholder: "e.g. manager@company.com", helpText: "For approval." },
+        ],
+        settings: { layout: "classic", successMessage: "Timesheet submitted — your manager will review it shortly." },
+        branding: { primaryColor: "#475569", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Expense Reimbursement Request",
+        category: "Working Forms",
+        description: "Submit a work expense for reimbursement, with a receipt and manager approval.",
+        theme: "expense-reimbursement-request",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Who and what", description: "Your details and the expense." },
+          { id: "page-2", order: 1, title: "Proof and approval", description: "Receipt and sign-off." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Employee Name", type: "short_text" as const, required: true, placeholder: "e.g. Victor Lam", helpText: "Your full name." },
+          { pageId: "page-1", label: "Employee ID", type: "short_text" as const, required: true, placeholder: "e.g. EMP-2051", helpText: "Found on your employee card." },
+          { pageId: "page-1", label: "Department", type: "dropdown" as const, required: true, options: ["Engineering", "Sales", "Marketing", "Operations", "Support"], placeholder: "Select department...", helpText: "The team you're part of." },
+          { pageId: "page-1", label: "Expense Date", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "When the expense occurred." },
+          { pageId: "page-1", label: "Expense Category", type: "dropdown" as const, required: true, options: ["Travel", "Meals", "Supplies", "Software", "Other"], placeholder: "Select category...", helpText: "Closest match is fine." },
+          { pageId: "page-1", label: "Amount", type: "currency" as const, required: true, min: 0, placeholder: "e.g. 85.50", helpText: "The total you're claiming." },
+          { pageId: "page-2", label: "Payment Method Used", type: "multiple_choice" as const, required: true, options: ["Personal card", "Cash", "Company card"], placeholder: "Select method...", helpText: "How you originally paid." },
+          { pageId: "page-2", label: "Business Justification", type: "long_text" as const, required: true, placeholder: "Why this expense was necessary...", helpText: "A sentence or two is plenty." },
+          { pageId: "page-2", label: "Receipt", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png", "application/pdf"], placeholder: "Upload your receipt...", helpText: "Required for reimbursement." },
+          { pageId: "page-2", label: "Manager's Email", type: "email" as const, required: true, placeholder: "e.g. manager@company.com", helpText: "For approval." },
+        ],
+        settings: { layout: "steps", successMessage: "Request submitted — your manager will review it for approval." },
+        branding: { primaryColor: "#334155", fontFamily: "work_sans", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
+      },
+
+      // ─── Requests (violet, Manrope) ──────────────────────────────────────────
+      {
+        name: "IT Support Request",
+        category: "Requests",
+        description: "A structured IT ticket with priority, asset tag and an optional screenshot.",
+        theme: "it-support-request",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "What's going on?", description: "The more detail, the faster we can help." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Henry Osei", helpText: "Your first and last name." },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. henry@company.com", helpText: "We'll reply here." },
+          { pageId: "page-1", label: "Department", type: "dropdown" as const, required: false, options: ["Engineering", "Sales", "Marketing", "Operations", "Support"], placeholder: "Select department...", helpText: "Optional." },
+          { pageId: "page-1", label: "Issue Category", type: "dropdown" as const, required: true, options: ["Hardware", "Software", "Network", "Account access", "Other"], placeholder: "Select category...", helpText: "Closest match is fine." },
+          { pageId: "page-1", label: "Priority", type: "multiple_choice" as const, required: true, options: ["Low", "Normal", "High", "Urgent"], placeholder: "Select priority...", helpText: "How blocking is this for you?" },
+          { pageId: "page-1", label: "Device / Asset Tag", type: "short_text" as const, required: false, placeholder: "e.g. LAPTOP-0231", helpText: "Optional, if known." },
+          { pageId: "page-1", label: "Description", type: "long_text" as const, required: true, placeholder: "What happened, and what did you expect?", helpText: "Steps to reproduce are especially helpful." },
+          { pageId: "page-1", label: "Screenshot", type: "image_upload" as const, required: false, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png"], placeholder: "Upload a screenshot...", helpText: "Optional, but often clarifies things fast." },
+          { pageId: "page-1", label: "Preferred Contact Time", type: "dropdown" as const, required: false, options: ["Morning", "Afternoon", "Evening", "Anytime"], placeholder: "Select a time...", helpText: "Optional." },
+        ],
+        settings: { layout: "guided", successMessage: "Your ticket is in — IT will follow up by email." },
+        branding: { primaryColor: "#6d28d9", fontFamily: "manrope", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "bordered", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Equipment Request",
+        category: "Requests",
+        description: "Request new or replacement equipment, with manager approval routed by email.",
+        theme: "equipment-request",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "What do you need?", description: "Tell us what and why." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Lucia Fernandez", helpText: "Your first and last name." },
+          { pageId: "page-1", label: "Department", type: "dropdown" as const, required: true, options: ["Engineering", "Sales", "Marketing", "Operations", "Support"], placeholder: "Select department...", helpText: "The team you're part of." },
+          { pageId: "page-1", label: "Employee ID", type: "short_text" as const, required: false, placeholder: "e.g. EMP-0098", helpText: "Optional." },
+          { pageId: "page-1", label: "Equipment Requested", type: "dropdown" as const, required: true, options: ["Laptop", "Monitor", "Headset", "Office chair", "Other"], placeholder: "Select equipment...", helpText: "Closest match is fine." },
+          { pageId: "page-1", label: "Quantity", type: "number" as const, required: true, min: 1, max: 10, placeholder: "e.g. 1", helpText: "How many you need." },
+          { pageId: "page-1", label: "Reason for Request", type: "long_text" as const, required: true, placeholder: "Why you need this...", helpText: "A sentence or two is plenty." },
+          { pageId: "page-1", label: "Needed By", type: "date" as const, required: false, placeholder: "Select a date...", helpText: "Optional, if there's a deadline." },
+          { pageId: "page-1", label: "Manager's Email", type: "email" as const, required: true, placeholder: "e.g. manager@company.com", helpText: "For approval." },
+        ],
+        settings: { layout: "compact", successMessage: "Request submitted — your manager will review it for approval." },
+        branding: { primaryColor: "#5b21b6", fontFamily: "manrope", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+      },
+
+      // ─── Registration (blue, Outfit) ─────────────────────────────────────────
+      {
+        name: "Member Registration",
+        category: "Registration",
+        description: "Register a new member with their details, emergency contact and agreement to terms.",
+        theme: "member-registration",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Your details", description: "Basic contact information." },
+          { id: "page-2", order: 1, title: "A few more details", description: "Membership and emergency contact." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Ingrid Larsen", helpText: "Your legal full name." },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. ingrid@example.com", helpText: "We'll send confirmation here." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 651 555 0177", helpText: "A number we can reach you on." },
+          { pageId: "page-1", label: "Date of Birth", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "For your membership record." },
+          { pageId: "page-1", label: "Address", type: "address" as const, required: true, placeholder: "Street, city, postal code, country", helpText: "Your mailing address." },
+          { pageId: "page-2", label: "Membership Type", type: "dropdown" as const, required: true, options: ["Individual", "Family", "Student", "Senior"], placeholder: "Select type...", helpText: "Choose the plan that fits." },
+          { pageId: "page-2", label: "How did you hear about us?", type: "dropdown" as const, required: false, options: ["Social media", "A friend", "Search engine", "Other"], placeholder: "Select one...", helpText: "Optional." },
+          { pageId: "page-2", label: "Emergency Contact Name", type: "short_text" as const, required: true, placeholder: "e.g. Lars Larsen", helpText: "Who we should contact in an emergency." },
+          { pageId: "page-2", label: "Emergency Contact Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 651 555 0188", helpText: "A number for that contact." },
+          { pageId: "page-2", label: "I Agree to the Terms", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to complete registration." },
+        ],
+        settings: { layout: "steps", successMessage: "You're registered! A confirmation email is on its way." },
+        branding: { primaryColor: "#1e40af", fontFamily: "outfit", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Vendor Registration",
+        category: "Registration",
+        description: "Register a new vendor or supplier for an upcoming market or marketplace.",
+        theme: "vendor-registration",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Your business", description: "Tell us about what you offer." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Business Name", type: "short_text" as const, required: true, placeholder: "e.g. Riverside Crafts", helpText: "The name you trade under." },
+          { pageId: "page-1", label: "Contact Name", type: "short_text" as const, required: true, placeholder: "e.g. Sana Malik", helpText: "Our main point of contact." },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. sana@riversidecrafts.com", helpText: "We'll send confirmation here." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 971 555 0162", helpText: "A number we can reach you on." },
+          { pageId: "page-1", label: "Business Address", type: "address" as const, required: true, placeholder: "Street, city, postal code, country", helpText: "Where you're based." },
+          { pageId: "page-1", label: "Business Category", type: "dropdown" as const, required: true, options: ["Food & drink", "Crafts & art", "Clothing", "Services", "Other"], placeholder: "Select category...", helpText: "Closest match is fine." },
+          { pageId: "page-1", label: "Years in Business", type: "number" as const, required: false, min: 0, max: 100, placeholder: "e.g. 3", helpText: "Optional." },
+          { pageId: "page-1", label: "Website", type: "url" as const, required: false, placeholder: "e.g. https://riversidecrafts.com", helpText: "Optional." },
+          { pageId: "page-1", label: "Products or Services Offered", type: "long_text" as const, required: true, placeholder: "Describe what you'll be selling...", helpText: "A few sentences is plenty." },
+        ],
+        settings: { layout: "classic", successMessage: "Registration received — we'll confirm your spot shortly." },
+        branding: { primaryColor: "#2563eb", fontFamily: "outfit", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+      },
+
+      // ─── Membership (magenta, Montserrat) ────────────────────────────────────
+      {
+        name: "Gym Membership Application",
+        category: "Membership",
+        description: "Sign up a new member, with a health note and waiver acknowledgement.",
+        theme: "gym-membership-application",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Your details", description: "Basic contact information." },
+          { id: "page-2", order: 1, title: "Plan and health", description: "A few final details." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Derek Okafor", helpText: "Your legal full name." },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. derek@example.com", helpText: "We'll send confirmation here." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 614 555 0109", helpText: "A number we can reach you on." },
+          { pageId: "page-1", label: "Date of Birth", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "You must be 16 or older." },
+          { pageId: "page-1", label: "Address", type: "address" as const, required: true, placeholder: "Street, city, postal code, country", helpText: "Your mailing address." },
+          { pageId: "page-2", label: "Membership Plan", type: "dropdown" as const, required: true, options: ["Monthly", "Annual", "Student"], placeholder: "Select plan...", helpText: "Choose the plan that fits." },
+          { pageId: "page-2", label: "Preferred Start Date", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "When you'd like your membership to begin." },
+          { pageId: "page-2", label: "Emergency Contact Name", type: "short_text" as const, required: true, placeholder: "e.g. Amara Okafor", helpText: "Who we should contact in an emergency." },
+          { pageId: "page-2", label: "Emergency Contact Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 614 555 0120", helpText: "A number for that contact." },
+          { pageId: "page-2", label: "Health Conditions We Should Know About", type: "long_text" as const, required: false, placeholder: "Injuries, conditions, medications...", helpText: "Optional, kept confidential." },
+          { pageId: "page-2", label: "I Acknowledge the Liability Waiver", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to complete your membership." },
+        ],
+        settings: { layout: "steps", successMessage: "Welcome aboard! Your membership starts on your chosen date." },
+        branding: { primaryColor: "#a21caf", fontFamily: "montserrat", panelTreatment: "gradient", backgroundStyle: "gradient", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Club Membership Renewal",
+        category: "Membership",
+        description: "A short renewal form for an existing club or association member.",
+        theme: "club-membership-renewal",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Renew your membership", description: "Confirm your details to continue." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Robert Chan", helpText: "Your name on file." },
+          { pageId: "page-1", label: "Member ID", type: "short_text" as const, required: true, placeholder: "e.g. MBR-5521", helpText: "Found on your membership card." },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. robert@example.com", helpText: "We'll send confirmation here." },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: false, placeholder: "e.g. +1 312 555 0143", helpText: "Optional." },
+          { pageId: "page-1", label: "Membership Tier", type: "dropdown" as const, required: true, options: ["Standard", "Premium", "Lifetime"], placeholder: "Select tier...", helpText: "Your current or desired tier." },
+          { pageId: "page-1", label: "Renewal Term", type: "multiple_choice" as const, required: true, options: ["1 year", "2 years"], placeholder: "Select term...", helpText: "How long you'd like to renew for." },
+          { pageId: "page-1", label: "Updated Mailing Address", type: "address" as const, required: false, placeholder: "Street, city, postal code, country", helpText: "Only if it's changed." },
+          { pageId: "page-1", label: "Comments", type: "long_text" as const, required: false, placeholder: "Anything else we should know...", helpText: "Optional." },
+        ],
+        settings: { layout: "compact", successMessage: "Renewed! Your updated membership is active." },
+        branding: { primaryColor: "#86198f", fontFamily: "montserrat", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "16px", formWidth: "narrow", spacing: "comfortable" },
+      },
+
+      // ─── Consent (teal, Source Serif) ────────────────────────────────────────
+      {
+        name: "Photo & Video Consent Form",
+        category: "Consent",
+        description: "Get a signed consent to photograph or film someone, with an option for promotional use.",
+        theme: "photo-video-consent-form",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Consent to be photographed or filmed", description: "Please read carefully before signing." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Naomi Park", helpText: "Your legal full name." },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. naomi@example.com", helpText: "We'll send you a copy of this form." },
+          { pageId: "page-1", label: "Date", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "Today's date." },
+          { pageId: "page-1", label: "Event or Project Name", type: "short_text" as const, required: true, placeholder: "e.g. Spring Open House", helpText: "What you're being photographed or filmed for." },
+          { pageId: "page-1", label: "I Consent to Being Photographed or Filmed", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to proceed." },
+          { pageId: "page-1", label: "I Consent to Promotional Use", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Website, social media and print materials." },
+          { pageId: "page-1", label: "Signature", type: "signature" as const, required: true, placeholder: "Sign here", helpText: "Your signature confirms the above." },
+          { pageId: "page-1", label: "Parent / Guardian Name", type: "short_text" as const, required: false, placeholder: "e.g. required if under 18", helpText: "Only required if the subject is a minor." },
+          { pageId: "page-1", label: "Parent / Guardian Signature", type: "signature" as const, required: false, placeholder: "Sign here", helpText: "Only required if the subject is a minor." },
+        ],
+        settings: { layout: "classic", successMessage: "Thank you — your consent has been recorded." },
+        branding: { primaryColor: "#115e59", fontFamily: "source_serif_4", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Medical Treatment Consent",
+        category: "Consent",
+        description: "A signed consent to a specific medical treatment or procedure, with risks acknowledged.",
+        theme: "medical-treatment-consent",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Patient details", description: "Who this consent is for." },
+          { id: "page-2", order: 1, title: "The procedure", description: "What you're consenting to." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Patient Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Grace Nakamura", helpText: "The patient's legal full name." },
+          { pageId: "page-1", label: "Date of Birth", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "For the patient record." },
+          { pageId: "page-1", label: "Patient Email", type: "email" as const, required: true, placeholder: "e.g. grace@example.com", helpText: "We'll send a copy of this form." },
+          { pageId: "page-1", label: "Allergies", type: "long_text" as const, required: false, placeholder: "List any known allergies...", helpText: "Optional, but important if applicable." },
+          { pageId: "page-2", label: "Procedure / Treatment Description", type: "long_text" as const, required: true, placeholder: "What the patient is consenting to...", helpText: "As explained by the provider." },
+          { pageId: "page-2", label: "I Understand the Risks Involved", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to proceed." },
+          { pageId: "page-2", label: "I Consent to the Treatment", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Required to proceed." },
+          { pageId: "page-2", label: "Emergency Contact Name", type: "short_text" as const, required: true, placeholder: "e.g. Kenji Nakamura", helpText: "Who we should contact in an emergency." },
+          { pageId: "page-2", label: "Emergency Contact Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 206 555 0177", helpText: "A number for that contact." },
+          { pageId: "page-2", label: "Signature", type: "signature" as const, required: true, placeholder: "Sign here", helpText: "Your signature confirms the above." },
+        ],
+        settings: { layout: "guided", successMessage: "Thank you — your consent has been recorded." },
+        branding: { primaryColor: "#0f766e", fontFamily: "source_serif_4", panelTreatment: "pattern", backgroundStyle: "dots", cardStyle: "flat", buttonStyle: "outline", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
+      },
+
+      // ─── Inspection Forms (amber, Space Grotesk) ─────────────────────────────
+      {
+        name: "Vehicle Inspection Checklist",
+        category: "Inspection Forms",
+        description: "A structured pre-trip or rental vehicle inspection, with a photo of any damage.",
+        theme: "vehicle-inspection-checklist",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "The vehicle", description: "Which vehicle, and when." },
+          { id: "page-2", order: 1, title: "Condition", description: "What you found." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Inspector Name", type: "short_text" as const, required: true, placeholder: "e.g. Marcus Webb", helpText: "Your first and last name." },
+          { pageId: "page-1", label: "Date", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "The date of this inspection." },
+          { pageId: "page-1", label: "Vehicle Make & Model", type: "short_text" as const, required: true, placeholder: "e.g. Toyota Camry", helpText: "The vehicle being inspected." },
+          { pageId: "page-1", label: "License Plate", type: "short_text" as const, required: true, placeholder: "e.g. ABC-1234", helpText: "The vehicle's plate number." },
+          { pageId: "page-1", label: "Mileage", type: "number" as const, required: true, min: 0, placeholder: "e.g. 42,150", helpText: "Current odometer reading." },
+          { pageId: "page-2", label: "Exterior Condition", type: "dropdown" as const, required: true, options: ["Excellent", "Good", "Fair", "Poor"], placeholder: "Select condition...", helpText: "Overall exterior condition." },
+          { pageId: "page-2", label: "Tire Condition", type: "dropdown" as const, required: true, options: ["Excellent", "Good", "Fair", "Needs replacement"], placeholder: "Select condition...", helpText: "Overall tire condition." },
+          { pageId: "page-2", label: "Brakes Working Properly", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Tested before this inspection." },
+          { pageId: "page-2", label: "Lights Working Properly", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Headlights, brake lights and signals." },
+          { pageId: "page-2", label: "Photos of Any Damage", type: "image_upload" as const, required: false, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png"], placeholder: "Upload photos...", helpText: "Optional, but recommended for any damage found." },
+          { pageId: "page-2", label: "Additional Notes", type: "long_text" as const, required: false, placeholder: "Anything else worth noting...", helpText: "Optional." },
+        ],
+        settings: { layout: "steps", successMessage: "Inspection recorded — thank you." },
+        branding: { primaryColor: "#ca8a04", fontFamily: "space_grotesk", panelTreatment: "pattern", backgroundStyle: "grid", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "4px", formWidth: "standard", spacing: "comfortable" },
+      },
+      {
+        name: "Property Inspection Report",
+        category: "Inspection Forms",
+        description: "Record a property's condition, issues found and an estimated repair cost.",
+        theme: "property-inspection-report",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "The property", description: "Which property, and when." },
+          { id: "page-2", order: 1, title: "Findings", description: "What you found, and what it might cost." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Inspector Name", type: "short_text" as const, required: true, placeholder: "e.g. Paula Jensen", helpText: "Your first and last name." },
+          { pageId: "page-1", label: "Inspection Date", type: "date" as const, required: true, placeholder: "Select a date...", helpText: "The date of this inspection." },
+          { pageId: "page-1", label: "Property Address", type: "address" as const, required: true, placeholder: "Street, city, postal code, country", helpText: "The property being inspected." },
+          { pageId: "page-1", label: "Property Type", type: "dropdown" as const, required: true, options: ["House", "Apartment", "Commercial", "Land"], placeholder: "Select type...", helpText: "Closest match is fine." },
+          { pageId: "page-2", label: "Overall Condition", type: "dropdown" as const, required: true, options: ["Excellent", "Good", "Fair", "Poor"], placeholder: "Select condition...", helpText: "Your overall assessment." },
+          { pageId: "page-2", label: "Issues Found", type: "long_text" as const, required: true, placeholder: "Describe any issues found...", helpText: "Be as specific as possible." },
+          { pageId: "page-2", label: "Photos", type: "image_upload" as const, required: false, maxFileSize: 10, allowedMimeTypes: ["image/jpeg", "image/png"], placeholder: "Upload photos...", helpText: "Optional, but recommended." },
+          { pageId: "page-2", label: "Follow-up Required", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "Does this need a second visit?" },
+          { pageId: "page-2", label: "Estimated Repair Cost", type: "currency" as const, required: false, min: 0, placeholder: "e.g. 1500", helpText: "Optional, your best estimate." },
+        ],
+        settings: { layout: "guided", successMessage: "Report submitted — thank you." },
+        branding: { primaryColor: "#a16207", fontFamily: "space_grotesk", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "4px", formWidth: "wide", spacing: "comfortable" },
+      },
       {
         name: "Master Comprehensive Template",
         category: "General",

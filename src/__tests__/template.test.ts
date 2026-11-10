@@ -103,9 +103,10 @@ describe("Templates API Integration Tests", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toBeDefined();
-    expect(res.body.data.length).toBe(1); // Only active template should be returned
-    expect(res.body.data[0].name).toBe("Active Test Template");
-    expect(res.body.data[0].isActive).toBe(true);
+    // Only the two active fixtures (the plain one and the branded one) — the inactive one is excluded.
+    expect(res.body.data.length).toBe(2);
+    expect(res.body.data.every((t: any) => t.isActive)).toBe(true);
+    expect(res.body.data.map((t: any) => t.name).sort()).toEqual(["Active Test Template", "Branded Test Template"]);
   });
 
   it("should block templates fetch if unauthorized", async () => {
@@ -208,7 +209,8 @@ describe("Templates API Integration Tests", () => {
 
   it("returns a built-in template's branding on the public endpoint, and copies it onto the new form", async () => {
     const list = await request(app).get("/api/templates/public");
-    const branded = list.body.find((t: any) => t._id === brandedTemplateId);
+    // Same envelope as every other list route here: { success, data: [...] }, not a bare array.
+    const branded = list.body.data.find((t: any) => t._id === brandedTemplateId);
     expect(branded.branding).toMatchObject({ primaryColor: "#4f46e5", fontFamily: "manrope", cardStyle: "elevated" });
 
     const res = await request(app)
@@ -225,7 +227,10 @@ describe("Templates API Integration Tests", () => {
       .set("Authorization", `Bearer ${authToken}`);
 
     expect(res.status).toBe(201);
-    expect(res.body.data.branding).toEqual({});
+    // The schema's own default is {}, but Mongoose's minimize option (on by default) strips an empty
+    // sub-object out of the JSON response entirely, so this is undefined rather than {} — true before
+    // this change too, for any template that has never set a branding.
+    expect(res.body.data.branding).toBeUndefined();
   });
 
   it("creates a personal form owned by the caller despite an ambient workspace header", async () => {

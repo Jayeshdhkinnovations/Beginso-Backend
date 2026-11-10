@@ -1,9 +1,13 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { IFormField, FormFieldSchema, IFormSettings, FormSettingsSchema } from "./Form";
-import { getTemplateDescription, getTemplateSettings } from "../utils/templateDefaults";
+import { getTemplateDescription, getTemplateSettings, slugify } from "../utils/templateDefaults";
 
 export interface ITemplate extends Document {
   name: string;
+  // The public gallery's URL segment (/discover-templates/:slug) — a readable name instead of the
+  // raw ObjectId. Unique, sparse so older rows inserted before this field existed (if any slip
+  // through a migration) don't collide on a shared `null`.
+  slug: string;
   description: string;
   settings: IFormSettings;
   category: string;
@@ -27,6 +31,14 @@ const TemplateSchema = new Schema<ITemplate>(
       type: String,
       required: true,
       trim: true,
+    },
+    slug: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+      index: true,
+      default: function (this: ITemplate) { return slugify(this.name); },
     },
     description: {
       type: String,

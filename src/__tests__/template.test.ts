@@ -15,6 +15,7 @@ let mockUserId: string;
 let mockWorkspaceId: string;
 let activeTemplateId: string;
 let inactiveTemplateId: string;
+let brandedTemplateId: string;
 
 process.env.JWT_SECRET = "test-secret-key-1234567890-test-key-long-enough";
 
@@ -72,6 +73,18 @@ beforeAll(async () => {
     ],
   });
   inactiveTemplateId = inactiveT._id.toString();
+
+  // A built-in template with its own curated branding (template catalog expansion) — the other
+  // fixture above represents the older kind, which still has none.
+  const brandedT = await Template.create({
+    name: "Branded Test Template",
+    category: "Test",
+    theme: "branded-test-template",
+    isActive: true,
+    fields: [{ label: "Full Name", type: "short_text", required: true }],
+    branding: { primaryColor: "#4f46e5", fontFamily: "manrope", cardStyle: "elevated" },
+  });
+  brandedTemplateId = brandedT._id.toString();
 });
 
 afterAll(async () => {
@@ -191,6 +204,28 @@ describe("Templates API Integration Tests", () => {
     const dbForm = await Form.findById(res.body.data._id);
     expect(dbForm).not.toBeNull();
     expect(dbForm!.title).toBe("Active Test Template");
+  });
+
+  it("returns a built-in template's branding on the public endpoint, and copies it onto the new form", async () => {
+    const list = await request(app).get("/api/templates/public");
+    const branded = list.body.find((t: any) => t._id === brandedTemplateId);
+    expect(branded.branding).toMatchObject({ primaryColor: "#4f46e5", fontFamily: "manrope", cardStyle: "elevated" });
+
+    const res = await request(app)
+      .post(`/api/templates/${brandedTemplateId}/use`)
+      .set("Authorization", `Bearer ${authToken}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding).toMatchObject({ primaryColor: "#4f46e5", fontFamily: "manrope", cardStyle: "elevated" });
+  });
+
+  it("leaves a built-in template with no branding of its own creating a form with the default branding, unchanged from before", async () => {
+    const res = await request(app)
+      .post(`/api/templates/${activeTemplateId}/use`)
+      .set("Authorization", `Bearer ${authToken}`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.branding).toEqual({});
   });
 
   it("creates a personal form owned by the caller despite an ambient workspace header", async () => {

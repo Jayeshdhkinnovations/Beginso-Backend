@@ -34,6 +34,9 @@ const fetchActiveTemplates = async (workspaceId?: string | null, publicGallery =
     fields: t.fields,
     pages: t.pages,
     theme: t.theme,
+    // So the gallery and detail-page preview can show the template's own real look instead of a
+    // client-guessed one, and so Use Template (below) has something to copy onto the new form.
+    branding: t.branding,
     isActive: t.isActive,
     showInGallery: t.showInGallery !== false,
     source: t.workspaceId ? ("workspace" as const) : ("beginso" as const),
@@ -238,11 +241,13 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
       description: `Created from template: ${template.name}`,
       fields: formFields,
       pages: template.pages && template.pages.length > 0 ? template.pages : undefined,
-      // A workspace template was made from a real form: carry its settings and theme over (Sprint 13, B6.4).
-      // Built-in templates keep their long-standing behaviour of supplying fields and pages only.
-      ...(template.workspaceId
-        ? { settings: (template.toObject() as any).settings, branding: (template.toObject() as any).branding }
-        : {}),
+      // A workspace template was made from a real form, so its settings always carry over (Sprint 13, B6.4).
+      // A built-in template now carries its own curated branding too (template catalog expansion) — copied
+      // here whenever the template actually has one set, so the new form looks like the gallery preview
+      // immediately instead of starting blank. Older built-ins with no branding of their own are unaffected:
+      // `branding` is simply omitted and the form falls back to its usual default, exactly as before.
+      settings: (template.toObject() as any).settings,
+      ...((template.toObject() as any).branding ? { branding: (template.toObject() as any).branding } : {}),
       // Sprint 14 (B1.2): remember where the form came from so Insights can pick a template-shaped dashboard.
       templateId: template._id,
       templateCategory: template.category ?? null,

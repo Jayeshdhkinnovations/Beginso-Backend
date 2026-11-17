@@ -9,6 +9,7 @@ import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { getTemplateDescription, getTemplateSettings, slugify, slugifyWithId } from "../utils/templateDefaults";
+import { CATEGORY_GROUPS, estimateMinutes, resolveCategoryGroup } from "../utils/templateCatalog";
 
 const formService = new FormService();
 
@@ -23,8 +24,15 @@ const fetchActiveTemplates = async (workspaceId?: string | null, publicGallery =
     ? { isActive: true, $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }, { workspaceId }] }
     : { isActive: true, ...BUILT_IN };
   if (publicGallery) query.showInGallery = { $ne: false }; // internal/demo templates stay out of the public gallery
-  const templates = await Template.find(query);
-  return templates.map((t) => ({
+  // Featured first, then the catalogue's own order, then by name: the same order everywhere a list of templates is shown.
+  const templates = await Template.find(query).sort({ featured: -1, sortOrder: 1, name: 1 });
+  return templates.map((t) => serializeTemplate(t));
+};
+
+const serializeTemplate = (t: any) => {
+  const settings = { ...getTemplateSettings(), ...t.toObject().settings };
+  const live = (t.fields ?? []).filter((f: any) => !f.deleted);
+  return ({
     _id: t._id.toString(),
     id: t._id.toString(),
     name: t.name,
@@ -34,8 +42,16 @@ const fetchActiveTemplates = async (workspaceId?: string | null, publicGallery =
     // description/settings above.
     slug: t.slug || slugify(t.name),
     description: t.description?.trim() || getTemplateDescription(t.name),
-    settings: { ...getTemplateSettings(), ...t.toObject().settings },
+    settings,
     category: t.category,
+    // Gallery metadata: other groups and topics, the featured strip, the order, the time to fill, how many questions, the layout, a ready-made picture.
+    tags: t.tags ?? [],
+    featured: t.featured === true,
+    sortOrder: typeof t.sortOrder === "number" ? t.sortOrder : 1000,
+    estimatedMinutes: typeof t.estimatedMinutes === "number" ? t.estimatedMinutes : estimateMinutes(live),
+    fieldCount: live.length,
+    layout: (settings as any).layout ?? "classic",
+    thumbnail: t.thumbnail ?? null,
     fields: t.fields,
     pages: t.pages,
     theme: t.theme,
@@ -45,7 +61,7 @@ const fetchActiveTemplates = async (workspaceId?: string | null, publicGallery =
     isActive: t.isActive,
     showInGallery: t.showInGallery !== false,
     source: t.workspaceId ? ("workspace" as const) : ("beginso" as const),
-  }));
+  });
 };
 
 // GET /api/templates - Returns all active templates (authenticated)
@@ -76,6 +92,59 @@ export const getPublicTemplates = async (req: Request, res: Response): Promise<v
       success: false,
       message: "Error fetching templates",
     });
+  }
+};
+
+// The slim card for the gallery: what a card and the filters need, without the questions or the branding.
+const galleryCard = (t: ReturnType<typeof serializeTemplate>) => ({
+  slug: t.slug,
+  name: t.name,
+  description: t.description,
+  category: t.category,
+  tags: t.tags,
+  fieldCount: t.fieldCount,
+  estimatedMinutes: t.estimatedMinutes,
+  featured: t.featured,
+  sortOrder: t.sortOrder,
+  layout: t.layout,
+  thumbnail: t.thumbnail,
+});
+
+// GET /api/templates/gallery[?category=][&tag=] - the public gallery's cards (unauthenticated, rate-limited), featured first, with the groups and their counts.
+// `category` is a current group or an old category name (an old link keeps working).
+export const getPublicGallery = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const all = (await fetchActiveTemplates(undefined, true)).map(galleryCard);
+    const wantedGroup = req.query.category === undefined ? undefined : resolveCategoryGroup(req.query.category);
+    if (req.query.category !== undefined && !wantedGroup) {
+      res.status(400).json({ success: false, message: "Unknown category", error: { code: "UNKNOWN_CATEGORY", message: "Unknown category" } });
+      return;
+    }
+    const tag = typeof req.query.tag === "string" ? req.query.tag.trim().toLowerCase() : "";
+    const data = all.filter((c) => (!wantedGroup || c.category === wantedGroup) && (!tag || c.tags.some((x: string) => x.toLowerCase() === tag)));
+    // the groups always count the whole catalogue, so the list of groups does not shrink while one is chosen
+    const categories = CATEGORY_GROUPS.map((name) => ({ name, count: all.filter((c) => c.category === name).length })).filter((c) => c.count > 0);
+    res.status(200).json({ success: true, data, categories });
+  } catch (error: any) {
+    console.error("Error fetching the template gallery:", error);
+    res.status(500).json({ success: false, message: "Error fetching templates" });
+  }
+};
+
+// GET /api/templates/public/:slug - one template in full (unauthenticated, rate-limited): by its slug, or by its id for an old link.
+export const getPublicTemplate = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const key = String(req.params.slug ?? "").trim();
+    const all = await fetchActiveTemplates(undefined, true);
+    const found = all.find((t) => t.slug === key) ?? all.find((t) => t._id === key);
+    if (!found) {
+      res.status(404).json({ success: false, message: "Template not found" });
+      return;
+    }
+    res.status(200).json({ success: true, data: found });
+  } catch (error: any) {
+    console.error("Error fetching a public template:", error);
+    res.status(500).json({ success: false, message: "Error fetching templates" });
   }
 };
 

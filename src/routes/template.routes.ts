@@ -2,12 +2,18 @@ import { Router } from "express";
 import { protect, blockSuspended } from "../middleware/auth.middleware";
 import { requirePermission } from "../middleware/permission.middleware";
 import { publicTemplatesRateLimiter } from "../middleware/rateLimiter";
-import { getTemplates, getPublicTemplates, useTemplate, publishTemplate, removeTemplate } from "../controllers/template.controller";
+import { getTemplates, getPublicTemplates, getPublicGallery, getPublicTemplate, useTemplate, publishTemplate, removeTemplate } from "../controllers/template.controller";
 
 const router = Router();
 
 // GET /api/templates/public - Public template gallery (no auth, rate-limited)
 router.get("/public", publicTemplatesRateLimiter, getPublicTemplates);
+
+// GET /api/templates/gallery - the gallery's slim cards, featured first, with the groups and their counts (no auth, rate-limited)
+router.get("/gallery", publicTemplatesRateLimiter, getPublicGallery);
+
+// GET /api/templates/public/:slug - one template in full, by slug or by id (no auth, rate-limited)
+router.get("/public/:slug", publicTemplatesRateLimiter, getPublicTemplate);
 
 // GET /api/templates - Get all active templates (authenticated)
 router.get("/", protect as any, blockSuspended as any, requirePermission("templates:read") as any, getTemplates);

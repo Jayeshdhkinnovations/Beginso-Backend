@@ -1,0 +1,676 @@
+[
+  {
+    "id": "clean",
+    "name": "Clean",
+    "note": "White and blue, nothing in the way.",
+    "goodFor": "General forms",
+    "layout": "classic",
+    "branding": {
+      "primaryColor": "#1D4ED8",
+      "fontFamily": "dm_sans",
+      "cardStyle": "soft",
+      "panelTreatment": "solid",
+      "backgroundStyle": "plain",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        }
+      }
+    }
+  },
+  {
+    "id": "corporate",
+    "name": "Corporate",
+    "note": "Steady navy, a firm border, a grid behind.",
+    "goodFor": "Business forms",
+    "layout": "steps",
+    "branding": {
+      "primaryColor": "#0F4C81",
+      "fontFamily": "work_sans",
+      "cardStyle": "bordered",
+      "panelTreatment": "solid",
+      "backgroundStyle": "grid",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        },
+        "fields": {
+          "radius": 4
+        }
+      }
+    }
+  },
+  {
+    "id": "editorial",
+    "name": "Editorial",
+    "note": "A serif headline, underlined fields.",
+    "goodFor": "Writing and press",
+    "layout": "classic",
+    "branding": {
+      "primaryColor": "#111827",
+      "fontFamily": "source_serif_4",
+      "cardStyle": "flat",
+      "panelTreatment": "solid",
+      "backgroundStyle": "plain",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        },
+        "fields": {
+          "style": "underline"
+        },
+        "fonts": {
+          "heading": "dm_serif_display"
+        }
+      }
+    }
+  },
+  {
+    "id": "playful",
+    "name": "Playful",
+    "note": "Rounded, pink and bouncy, answers as tiles.",
+    "goodFor": "Parties and polls",
+    "layout": "guided",
+    "branding": {
+      "primaryColor": "#C2185B",
+      "fontFamily": "fredoka",
+      "cardStyle": "elevated",
+      "panelTreatment": "gradient",
+      "backgroundStyle": "mesh",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        },
+        "fields": {
+          "style": "filled",
+          "radius": 20,
+          "choice": "tiles"
+        }
+      }
+    }
+  },
+  {
+    "id": "midnight",
+    "name": "Midnight",
+    "note": "A dark card on a night sky.",
+    "goodFor": "Dark pages",
+    "layout": "card_stack",
+    "branding": {
+      "primaryColor": "#8AB4FF",
+      "fontFamily": "manrope",
+      "cardStyle": "soft",
+      "panelTreatment": "solid",
+      "backgroundStyle": "image",
+      "backgroundImageUrl": "/form-pictures/midnight-glow.jpg",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#F3F4F6",
+          "card": "#111827",
+          "field": "#1F2937",
+          "fieldBorder": "#8A93A6",
+          "buttonText": "#0B1020"
+        }
+      }
+    }
+  },
+  {
+    "id": "sunset",
+    "name": "Sunset",
+    "note": "Warm orange, a picture beside the form.",
+    "goodFor": "Events and offers",
+    "layout": "split_feature",
+    "branding": {
+      "primaryColor": "#B93815",
+      "fontFamily": "poppins",
+      "cardStyle": "elevated",
+      "panelTreatment": "gradient",
+      "backgroundStyle": "gradient",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        }
+      }
+    }
+  },
+  {
+    "id": "mint",
+    "name": "Mint",
+    "note": "Fresh green, pill-shaped fields.",
+    "goodFor": "Wellness",
+    "layout": "classic",
+    "branding": {
+      "primaryColor": "#0F766E",
+      "fontFamily": "quicksand",
+      "cardStyle": "bordered",
+      "panelTreatment": "solid",
+      "backgroundStyle": "image",
+      "backgroundImageUrl": "/form-pictures/aurora-mint.jpg",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#0F2A2A",
+          "fieldBorder": "#7B8498"
+        },
+        "fields": {
+          "radius": 20
+        }
+      }
+    }
+  },
+  {
+    "id": "paper",
+    "name": "Warm paper",
+    "note": "Cream card, brown ink, a serif.",
+    "goodFor": "Personal notes",
+    "layout": "card_stack",
+    "branding": {
+      "primaryColor": "#9A4A06",
+      "fontFamily": "merriweather",
+      "cardStyle": "soft",
+      "panelTreatment": "solid",
+      "backgroundStyle": "plain",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#3B2F2F",
+          "card": "#FFFBF2",
+          "fieldBorder": "#8C7B6A"
+        }
+      }
+    }
+  },
+  {
+    "id": "tech",
+    "name": "Tech",
+    "note": "Indigo, tight and flat, filled fields.",
+    "goodFor": "Software",
+    "layout": "compact",
+    "branding": {
+      "primaryColor": "#4338CA",
+      "fontFamily": "space_grotesk",
+      "cardStyle": "flat",
+      "panelTreatment": "solid",
+      "backgroundStyle": "dots",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        },
+        "fields": {
+          "style": "filled",
+          "radius": 6
+        }
+      }
+    }
+  },
+  {
+    "id": "calm",
+    "name": "Calm waves",
+    "note": "Soft blue waves behind a quiet form.",
+    "goodFor": "Quiet forms",
+    "layout": "classic",
+    "branding": {
+      "primaryColor": "#1D4ED8",
+      "fontFamily": "outfit",
+      "cardStyle": "soft",
+      "panelTreatment": "solid",
+      "backgroundStyle": "image",
+      "backgroundImageUrl": "/form-pictures/calm-waves.jpg",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        }
+      }
+    }
+  },
+  {
+    "id": "bold",
+    "name": "Bold",
+    "note": "Black on yellow, big type.",
+    "goodFor": "Loud announcements",
+    "layout": "steps",
+    "branding": {
+      "primaryColor": "#111111",
+      "fontFamily": "montserrat",
+      "typeScale": "large",
+      "cardStyle": "flat",
+      "panelTreatment": "solid",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#FACC15",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#6B7280"
+        },
+        "fields": {
+          "style": "underline"
+        },
+        "fonts": {
+          "heading": "bebas_neue"
+        }
+      }
+    }
+  },
+  {
+    "id": "handwritten",
+    "name": "Handwritten",
+    "note": "A friendly hand for the title, lavender around.",
+    "goodFor": "Friendly invitations",
+    "layout": "guided",
+    "branding": {
+      "primaryColor": "#6D28D9",
+      "fontFamily": "nunito",
+      "cardStyle": "elevated",
+      "panelTreatment": "solid",
+      "backgroundStyle": "image",
+      "backgroundImageUrl": "/form-pictures/lavender-haze.jpg",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "fieldBorder": "#7B8498"
+        },
+        "fields": {
+          "radius": 14
+        },
+        "fonts": {
+          "heading": "caveat"
+        }
+      }
+    }
+  },
+  {
+    "id": "clean-corporate",
+    "name": "Clean Corporate",
+    "note": "Pale blue page, white card, calm blue button.",
+    "goodFor": "HR, business, internal forms",
+    "layout": "classic",
+    "branding": {
+      "primaryColor": "#2457D6",
+      "fontFamily": "work_sans",
+      "cardStyle": "elevated",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#F4F6FB",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#1B2433",
+          "card": "#FFFFFF",
+          "field": "#FFFFFF",
+          "fieldBorder": "#7B8498"
+        },
+        "fields": {
+          "style": "outlined",
+          "radius": 8
+        },
+        "card": {
+          "radius": 12,
+          "shadow": 20
+        },
+        "fonts": {
+          "heading": "manrope"
+        },
+        "cover": {
+          "height": 120
+        }
+      }
+    }
+  },
+  {
+    "id": "warm-friendly",
+    "name": "Warm Friendly",
+    "note": "Cream page, brick button, rounded answers as tiles.",
+    "goodFor": "Community, education, volunteers",
+    "layout": "guided",
+    "branding": {
+      "primaryColor": "#C4491C",
+      "fontFamily": "dm_sans",
+      "cardStyle": "soft",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#FFF8F1",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#2B2118",
+          "card": "#FFFFFF",
+          "field": "#FBF1E8",
+          "fieldBorder": "#8C7B6A"
+        },
+        "fields": {
+          "style": "filled",
+          "radius": 14,
+          "choice": "tiles"
+        },
+        "card": {
+          "radius": 24,
+          "shadow": 12
+        },
+        "fonts": {
+          "heading": "fraunces"
+        },
+        "cover": {
+          "height": 120
+        }
+      }
+    }
+  },
+  {
+    "id": "elegant-serif",
+    "name": "Elegant Serif",
+    "note": "Ivory page, taupe accent, square underlined fields.",
+    "goodFor": "Weddings, premium, formal events",
+    "layout": "card_stack",
+    "branding": {
+      "primaryColor": "#7A5C3E",
+      "fontFamily": "dm_sans",
+      "cardStyle": "flat",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#FBF7F2",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#2A211B",
+          "card": "#FFFFFF",
+          "field": "#FFFFFF",
+          "fieldBorder": "#8C7B6A"
+        },
+        "fields": {
+          "style": "underline",
+          "radius": 0
+        },
+        "card": {
+          "radius": 6,
+          "shadow": 10
+        },
+        "fonts": {
+          "heading": "dm_serif_display"
+        },
+        "cover": {
+          "height": 120
+        }
+      }
+    }
+  },
+  {
+    "id": "bold-event",
+    "name": "Bold Event",
+    "note": "Dark page, gold button, big condensed headings.",
+    "goodFor": "Conferences, launches, webinars",
+    "layout": "split_feature",
+    "branding": {
+      "primaryColor": "#F0B429",
+      "fontFamily": "dm_sans",
+      "cardStyle": "flat",
+      "panelTreatment": "image",
+      "coverImageUrl": "/form-pictures/carbon.jpg",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#16130F",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#F7F2E8",
+          "card": "#211C17",
+          "field": "#2B251F",
+          "fieldBorder": "#8F8577",
+          "buttonText": "#16130F"
+        },
+        "fields": {
+          "style": "filled",
+          "radius": 6
+        },
+        "card": {
+          "radius": 8,
+          "shadow": 0
+        },
+        "fonts": {
+          "heading": "bebas_neue"
+        }
+      }
+    }
+  },
+  {
+    "id": "playful-bright",
+    "name": "Playful Bright",
+    "note": "Butter page, red-orange button, tiles and confetti.",
+    "goodFor": "Parties, polls, kids, quizzes",
+    "layout": "guided",
+    "branding": {
+      "primaryColor": "#C93A21",
+      "fontFamily": "quicksand",
+      "cardStyle": "elevated",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#FFF1C9",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#2A1A14",
+          "card": "#FFFFFF",
+          "field": "#FFF7E0",
+          "fieldBorder": "#8A7355"
+        },
+        "fields": {
+          "style": "filled",
+          "radius": 16,
+          "choice": "tiles"
+        },
+        "card": {
+          "radius": 20,
+          "shadow": 30
+        },
+        "fonts": {
+          "heading": "fredoka"
+        },
+        "success": {
+          "confetti": true
+        },
+        "cover": {
+          "height": 120
+        }
+      }
+    }
+  },
+  {
+    "id": "calm-care",
+    "name": "Calm Care",
+    "note": "Pale teal page, teal button, large readable type.",
+    "goodFor": "Healthcare, wellness, consent",
+    "layout": "steps",
+    "branding": {
+      "primaryColor": "#0E7C86",
+      "fontFamily": "work_sans",
+      "typeScale": "large",
+      "cardStyle": "soft",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#F2F8F8",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#14302F",
+          "card": "#FFFFFF",
+          "field": "#FFFFFF",
+          "fieldBorder": "#6F8A8A"
+        },
+        "fields": {
+          "style": "outlined",
+          "radius": 10
+        },
+        "card": {
+          "radius": 14,
+          "shadow": 14
+        },
+        "fonts": {
+          "heading": "dm_sans"
+        },
+        "cover": {
+          "height": 120
+        }
+      }
+    }
+  },
+  {
+    "id": "minimal-paper",
+    "name": "Minimal Paper",
+    "note": "White and black, underlined fields, no shadow.",
+    "goodFor": "Contact, newsletter, simple forms",
+    "layout": "open",
+    "branding": {
+      "primaryColor": "#111111",
+      "fontFamily": "dm_sans",
+      "cardStyle": "flat",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#FFFFFF",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#111111",
+          "card": "#FFFFFF",
+          "field": "#FFFFFF",
+          "fieldBorder": "#767676"
+        },
+        "fields": {
+          "style": "underline",
+          "radius": 0
+        },
+        "card": {
+          "radius": 0,
+          "shadow": 0
+        },
+        "fonts": {
+          "heading": "space_grotesk"
+        }
+      }
+    }
+  },
+  {
+    "id": "dark-tech",
+    "name": "Dark Tech",
+    "note": "Near-black page, soft blue button, filled fields.",
+    "goodFor": "SaaS, waitlists, bug reports, IT",
+    "layout": "focus",
+    "branding": {
+      "primaryColor": "#5B8DEF",
+      "fontFamily": "dm_sans",
+      "cardStyle": "flat",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#101418",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#E8EAED",
+          "card": "#181E24",
+          "field": "#222A33",
+          "fieldBorder": "#7F8A99",
+          "buttonText": "#0B1020"
+        },
+        "fields": {
+          "style": "filled",
+          "radius": 8
+        },
+        "card": {
+          "radius": 10,
+          "shadow": 0
+        },
+        "fonts": {
+          "heading": "space_grotesk"
+        }
+      }
+    }
+  },
+  {
+    "id": "editorial-split",
+    "name": "Editorial Split",
+    "note": "Warm paper, rust accent, a picture beside underlined fields.",
+    "goodFor": "Creative, portfolio, press",
+    "layout": "split_feature",
+    "branding": {
+      "primaryColor": "#B93A12",
+      "fontFamily": "work_sans",
+      "cardStyle": "flat",
+      "panelTreatment": "image",
+      "fieldGrouping": "single",
+      "backgroundStyle": "solid",
+      "backgroundColor": "#FAF7F2",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#1D1A17",
+          "card": "#FFFFFF",
+          "field": "#FFFFFF",
+          "fieldBorder": "#8C7B6A"
+        },
+        "fields": {
+          "style": "underline",
+          "radius": 0
+        },
+        "card": {
+          "radius": 0,
+          "shadow": 0
+        },
+        "fonts": {
+          "heading": "fraunces"
+        }
+      },
+      "coverImageUrl": "/form-pictures/coral-waves.jpg"
+    }
+  },
+  {
+    "id": "appetite",
+    "name": "Appetite",
+    "note": "A darkened photo behind a warm card, brick button.",
+    "goodFor": "Restaurants, food orders, hospitality",
+    "layout": "card_stack",
+    "branding": {
+      "primaryColor": "#B3261E",
+      "fontFamily": "quicksand",
+      "cardStyle": "elevated",
+      "panelTreatment": "solid",
+      "fieldGrouping": "single",
+      "backgroundStyle": "image",
+      "backgroundImageUrl": "/form-pictures/sand-dunes.jpg",
+      "theme": {
+        "v": 1,
+        "colors": {
+          "text": "#2A1A14",
+          "card": "#FFFDF8",
+          "field": "#F6EFE3",
+          "fieldBorder": "#8C7B6A"
+        },
+        "fields": {
+          "style": "filled",
+          "radius": 12
+        },
+        "card": {
+          "radius": 20,
+          "shadow": 40
+        },
+        "fonts": {
+          "heading": "dm_serif_display"
+        },
+        "background": {
+          "darken": 55
+        }
+      }
+    }
+  }
+]

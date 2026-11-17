@@ -4,6 +4,14 @@
 import { fieldShowcaseTemplate } from "../utils/fieldShowcaseTemplate";
 import { kalaChasmaTemplate } from "./kalaChasmaTemplate";
 import { applyCatalogMeta } from "../utils/templateCatalog";
+import { lookBranding } from "../utils/formLooks";
+
+/** A template's look, taken from the Look it uses (src/data/formLooks.json): its layout and branding, with the template's own button words and settings on top. */
+const fromLook = (lookId: string, own: { settings?: Record<string, unknown>; labels?: Record<string, string> } = {}) => {
+  const { layout, branding } = lookBranding(lookId);
+  const theme = { ...(branding.theme ?? { v: 1 }), ...(own.labels ? { labels: own.labels } : {}) };
+  return { settings: { layout, ...own.settings }, branding: { ...branding, theme } };
+};
 
 /** What seeds.json holds for the Pitch Plan template (read by the script that calls this). */
 export interface PitchSeedData {
@@ -145,6 +153,23 @@ export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
         settings: { layout: "focus", successMessage: "You're on the list — we'll email you the moment it's back in stock." },
         branding: { typeScale: "large", primaryColor: "#f97316", fontFamily: "dm_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "flat", buttonStyle: "solid", buttonRadius: "8px", formWidth: "narrow", spacing: "spacious" },
       },
+      {
+        name: "Waitlist",
+        slug: "waitlist",
+        category: "Leads & Contact",
+        description: "Collect emails before a launch, with two optional questions about how people found you and what they will use it for.",
+        theme: "waitlist",
+        isActive: true,
+        pages: [
+          { id: "page-1", order: 0, title: "Be first in line", description: "Join the list and we'll email you when there's room." },
+        ],
+        fields: [
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "" },
+          { pageId: "page-1", label: "What would you use it for?", type: "multiple_choice" as const, required: false, options: ["Personal projects", "My team at work", "Client work", "Just curious"] },
+          { pageId: "page-1", label: "How did you hear about us?", type: "multiple_choice" as const, required: false, options: ["Search", "A friend or colleague", "Social media", "Newsletter", "Somewhere else"] },
+        ],
+        ...fromLook("dark-tech", { settings: { successMessage: "You're on the list. We'll email you when your spot opens." }, labels: { submit: "Join the waitlist" } }),
+      },
 
       // ─── Feedback & Surveys (teal, Inter) ───────────────────────────────────
       {
@@ -210,24 +235,27 @@ export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
         name: "Job Application",
         slug: "job-application",
         category: "HR",
-        description: "Collect a candidate's details, resume and portfolio for an open role.",
+        description: "Collect a candidate's details, resume and portfolio for an open role, in three short steps.",
         theme: "job-application",
         isActive: true,
         pages: [
-          { id: "page-1", order: 0, title: "Your details", description: "Basic contact information." },
-          { id: "page-2", order: 1, title: "Experience", description: "Tell us about your background." },
+          { id: "page-1", order: 0, title: "About you", description: "Where we can reach you." },
+          { id: "page-2", order: 1, title: "Your work", description: "What you do and what you have done." },
+          { id: "page-3", order: 2, title: "One last thing", description: "Optional, but it helps us get to know you." },
         ],
         fields: [
-          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Noah Williams", helpText: "Your legal full name." },
-          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. noah@example.com", helpText: "We'll use this to contact you." },
-          { pageId: "page-1", label: "Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 212 555 0138", helpText: "A number we can reach you on." },
-          { pageId: "page-1", label: "Position Applying For", type: "dropdown" as const, required: true, options: ["Software Engineer", "Product Designer", "Marketing Manager", "Customer Support"], placeholder: "Select role...", helpText: "The role you're applying to." },
-          { pageId: "page-2", label: "Resume / CV", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload your resume...", helpText: "PDF, up to 10MB." },
-          { pageId: "page-2", label: "Portfolio or LinkedIn URL", type: "url" as const, required: false, placeholder: "e.g. https://linkedin.com/in/you", helpText: "Optional, but helpful." },
-          { pageId: "page-2", label: "Why do you want to work here?", type: "long_text" as const, required: false, placeholder: "A short cover note...", helpText: "Optional." },
+          { pageId: "page-1", label: "Full name", type: "short_text" as const, required: true, placeholder: "" },
+          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "" },
+          { pageId: "page-1", label: "Phone", type: "phone" as const, required: true, placeholder: "" },
+          { pageId: "page-1", label: "City", type: "short_text" as const, required: false, placeholder: "" },
+          { pageId: "page-2", label: "Role you are applying for", type: "multiple_choice" as const, required: true, options: ["Software Engineer", "Product Designer", "Marketing Manager", "Customer Support"] },
+          { pageId: "page-2", label: "Resume", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], helpText: "PDF, up to 10 MB." },
+          { pageId: "page-2", label: "Portfolio or LinkedIn", type: "url" as const, required: false, placeholder: "https://" },
+          { pageId: "page-2", label: "Years of experience", type: "multiple_choice" as const, required: true, options: ["0 to 1 years", "2 to 4 years", "5 to 9 years", "10 or more years"] },
+          { pageId: "page-3", label: "Why this role?", type: "long_text" as const, required: false, placeholder: "A few lines are enough." },
+          { pageId: "page-3", label: "Earliest start date", type: "date" as const, required: false, placeholder: "" },
         ],
-        settings: { layout: "sidebar", successMessage: "Your application is in — our hiring team will review it and be in touch." },
-        branding: { coverFit: "original", typeScale: "compact", coverImageUrl: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#0369a1", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
+        ...fromLook("clean-corporate", { settings: { layout: "steps", successMessage: "Application received. Our team reads every one and replies by email, usually within a week." }, labels: { next: "Next", back: "Back", submit: "Send application" } }),
       },
       {
         name: "Employee Onboarding",
@@ -302,17 +330,30 @@ export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
         theme: "wedding-rsvp",
         isActive: true,
         pages: [
-          { id: "page-1", order: 0, title: "Will you join us?", description: "We'd love to celebrate with you." },
+          { id: "page-1", order: 0, title: "We're getting married", description: "Saturday, 12 June 2027 · The Garden Pavilion. Please reply by 1 May." },
         ],
         fields: [
-          { pageId: "page-1", label: "Guest Name", type: "short_text" as const, required: true, placeholder: "e.g. Isabella Moreau", helpText: "Your full name, as on the invitation." },
-          { fieldId: "wedding-attend", logicRules: [{ targetFieldId: "wedding-guests", action: "show" as const, condition: { fieldId: "wedding-attend", operator: "equals" as const, value: "Yes" } }, { targetFieldId: "wedding-meal", action: "show" as const, condition: { fieldId: "wedding-attend", operator: "equals" as const, value: "Yes" } }], pageId: "page-1", label: "Will you attend?", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "We understand if you can't make it." },
-          { fieldId: "wedding-guests", pageId: "page-1", label: "Number of Guests", type: "number" as const, required: false, min: 1, max: 4, placeholder: "e.g. 2", helpText: "Including yourself." },
-          { fieldId: "wedding-meal", pageId: "page-1", label: "Meal Choice", type: "dropdown" as const, required: false, options: ["Chicken", "Fish", "Vegetarian", "Vegan"], placeholder: "Select meal...", helpText: "For the reception dinner." },
-          { pageId: "page-1", label: "Song Request", type: "short_text" as const, required: false, placeholder: "e.g. anything by Stevie Wonder", helpText: "We'll try to make it happen." },
+          { fieldId: "wedding-name", pageId: "page-1", label: "Your name", type: "short_text" as const, required: true, placeholder: "" },
+          {
+            fieldId: "wedding-attend",
+            logicRules: [
+              { targetFieldId: "wedding-guests", action: "show" as const, condition: { fieldId: "wedding-attend", operator: "equals" as const, value: "Yes" } },
+              { targetFieldId: "wedding-meal", action: "show" as const, condition: { fieldId: "wedding-attend", operator: "equals" as const, value: "Yes" } },
+            ],
+            pageId: "page-1",
+            label: "Will you be there?",
+            type: "yes_no" as const,
+            required: true,
+            yesLabel: "Joyfully accept",
+            noLabel: "Regretfully decline",
+          },
+          { fieldId: "wedding-guests", pageId: "page-1", label: "Number of guests", type: "number" as const, required: true, min: 1, max: 4, placeholder: "Including you", helpText: "" },
+          { fieldId: "wedding-meal", pageId: "page-1", label: "Meal", type: "multiple_choice" as const, required: true, options: ["Chicken", "Fish", "Vegetarian", "Vegan"] },
+          { fieldId: "wedding-diet", pageId: "page-1", label: "Dietary needs", type: "short_text" as const, required: false, placeholder: "Allergies or anything we should know" },
+          { fieldId: "wedding-song", pageId: "page-1", label: "A song for the dance floor", type: "short_text" as const, required: false, placeholder: "" },
+          { fieldId: "wedding-note", pageId: "page-1", label: "A note for the couple", type: "long_text" as const, required: false, placeholder: "" },
         ],
-        settings: { layout: "card_stack", successMessage: "Thank you — we can't wait to celebrate with you!" },
-        branding: { theme: { v: 1, success: { confetti: true } }, bannerText: "We can't wait to celebrate with you", typeScale: "default", coverImageUrl: "https://images.unsplash.com/photo-1519741497674-611481863552?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#6d28d9", fontFamily: "dm_serif_display", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
+        ...fromLook("elegant-serif", { settings: { successMessage: "Thank you. Your reply is with us, and we cannot wait to celebrate with you." }, labels: { submit: "Send my reply" } }),
       },
       {
         name: "Webinar Signup",

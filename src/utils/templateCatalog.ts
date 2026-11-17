@@ -71,6 +71,7 @@ export const CATALOG_META: Record<string, CatalogMeta> = {
   "support-request": { category: "Leads & Contact", tags: ["Support"] },
   "newsletter-signup": { category: "Leads & Contact", tags: ["Marketing"] },
   "product-waitlist": { category: "Leads & Contact", tags: ["Marketing", "Orders & Payments"] },
+  "waitlist": { category: "Leads & Contact", tags: ["SaaS", "Marketing"] },
   "partnership-inquiry": { category: "Leads & Contact", tags: ["Business"] },
   // Orders & Payments
   "product-order-form": { category: "Orders & Payments", tags: ["Shop"] },

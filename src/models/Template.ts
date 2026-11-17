@@ -23,6 +23,13 @@ export interface ITemplate extends Document {
   sourceFormId?: mongoose.Types.ObjectId | null;
   // Workspace templates carry the source form's theme (branding) so a form made from one looks the same.
   branding?: Record<string, any>;
+  // Gallery metadata (built-in templates): other groups and topics it belongs to, the featured strip, the order, and about how many minutes it takes to fill.
+  tags?: string[];
+  featured?: boolean;
+  sortOrder?: number;
+  estimatedMinutes?: number;
+  // A picture of the template for a card, when one has been made ahead of time (null: the card draws it from the template itself).
+  thumbnail?: string | null;
 }
 
 const TemplateSchema = new Schema<ITemplate>(
@@ -78,11 +85,20 @@ const TemplateSchema = new Schema<ITemplate>(
     createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     sourceFormId: { type: Schema.Types.ObjectId, ref: "Form", default: null },
     branding: { type: Schema.Types.Mixed, default: undefined },
+    tags: { type: [String], default: [] },
+    featured: { type: Boolean, default: false },
+    sortOrder: { type: Number, default: 1000 },
+    estimatedMinutes: { type: Number, default: undefined, min: 1, max: 120 },
+    thumbnail: { type: String, default: null },
   },
   {
     timestamps: true,
   }
 );
+
+// The public gallery lists active, built-in templates, featured first and then in the catalogue's order.
+TemplateSchema.index({ isActive: 1, workspaceId: 1, featured: -1, sortOrder: 1 });
+TemplateSchema.index({ tags: 1 });
 
 const Template = mongoose.model<ITemplate>("Template", TemplateSchema);
 export default Template;

@@ -28,6 +28,10 @@ export interface ITemplate extends Document {
   featured?: boolean;
   sortOrder?: number;
   estimatedMinutes?: number;
+  /** The release a built-in template belongs to (1, 2 or 3); none for the older catalogue. A wave is synced on its own. */
+  wave?: number;
+  /** Old slugs this template replaces: when its wave is synced those templates are switched off, and an old link opens this one. */
+  replaces?: string[];
   // A picture of the template for a card, when one has been made ahead of time (null: the card draws it from the template itself).
   thumbnail?: string | null;
 }
@@ -89,6 +93,8 @@ const TemplateSchema = new Schema<ITemplate>(
     featured: { type: Boolean, default: false },
     sortOrder: { type: Number, default: 1000 },
     estimatedMinutes: { type: Number, default: undefined, min: 1, max: 120 },
+    wave: { type: Number, min: 1, max: 3 },
+    replaces: { type: [String], default: [] },
     thumbnail: { type: String, default: null },
   },
   {

@@ -9,7 +9,7 @@ import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { getTemplateDescription, getTemplateSettings, slugify, slugifyWithId } from "../utils/templateDefaults";
-import { CATEGORY_GROUPS, estimateMinutes, resolveCategoryGroup } from "../utils/templateCatalog";
+import { estimateMinutes, galleryGroups, groupOfCategory, resolveCategoryGroup } from "../utils/templateCatalog";
 
 const formService = new FormService();
 
@@ -107,7 +107,8 @@ const galleryCard = (t: ReturnType<typeof serializeTemplate>) => ({
   slug: t.slug,
   name: t.name,
   description: t.description,
-  category: t.category,
+  // the group it belongs to, also for a template stored with an old category name
+  category: groupOfCategory(t.category),
   tags: t.tags,
   fieldCount: t.fieldCount,
   estimatedMinutes: t.estimatedMinutes,
@@ -130,7 +131,7 @@ export const getPublicGallery = async (req: Request, res: Response): Promise<voi
     const tag = typeof req.query.tag === "string" ? req.query.tag.trim().toLowerCase() : "";
     const data = all.filter((c) => (!wantedGroup || c.category === wantedGroup) && (!tag || c.tags.some((x: string) => x.toLowerCase() === tag)));
     // the groups always count the whole catalogue, so the list of groups does not shrink while one is chosen
-    const categories = CATEGORY_GROUPS.map((name) => ({ name, count: all.filter((c) => c.category === name).length })).filter((c) => c.count > 0);
+    const categories = galleryGroups(all.map((c) => c.category));
     res.status(200).json({ success: true, data, categories });
   } catch (error: any) {
     console.error("Error fetching the template gallery:", error);

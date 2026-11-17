@@ -241,3 +241,18 @@ export function findTemplateByKey<T extends { slug?: string; _id?: unknown; repl
   const successor = all.find((t) => Array.isArray(t.replaces) && t.replaces.includes(key));
   return successor ? { found: successor, redirectedFrom: key } : {};
 }
+
+/** The group a stored category belongs to: a current group as it is, an old category name through the old-name map (so a catalogue that has not been
+ * synced yet still lands in the right group), and anything else as written. */
+export const groupOfCategory = (category: unknown): string => resolveCategoryGroup(category) ?? (typeof category === "string" ? category : "");
+
+/** The groups of the gallery with their counts: the current groups in their order, then any other name that is in use. A group with no template is left out. */
+export function galleryGroups(categories: unknown[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const c of categories) {
+    const name = groupOfCategory(c);
+    if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const ordered: string[] = [...CATEGORY_GROUPS, ...[...counts.keys()].filter((n) => !(CATEGORY_GROUPS as readonly string[]).includes(n))];
+  return ordered.filter((n) => (counts.get(n) ?? 0) > 0).map((name) => ({ name, count: counts.get(name) as number }));
+}

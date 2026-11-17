@@ -10,14 +10,14 @@ import { builtInTemplates } from "../data/builtInTemplates";
 const catalogue = builtInTemplates({ pages: [], fields: [] });
 const bySlug = new Map(catalogue.map((t) => [t.slug, t]));
 const OLD = ["clean", "corporate", "editorial", "playful", "midnight", "sunset", "mint", "paper", "tech", "calm", "bold", "handwritten"];
-const NEW = ["clean-corporate", "warm-friendly", "elegant-serif", "bold-event", "playful-bright", "calm-care", "minimal-paper", "dark-tech", "editorial-split", "appetite"];
+const NEW_IDS = ["clean-corporate", "warm-friendly", "elegant-serif", "bold-event", "playful-bright", "calm-care", "minimal-paper", "dark-tech", "editorial-split", "appetite"];
 
 describe("the Looks data file", () => {
   it("keeps the twelve Looks that already existed, and adds the ten families", () => {
     const ids = FORM_LOOKS.map((l) => l.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const id of [...OLD, ...NEW]) expect(ids).toContain(id);
-    expect(ids).toHaveLength(OLD.length + NEW.length);
+    for (const id of [...OLD, ...NEW_IDS]) expect(ids).toContain(id);
+    expect(ids).toHaveLength(OLD.length + NEW_IDS.length);
   });
 
   it.each(FORM_LOOKS.map((l) => [l.id, l] as const))("%s is a branding the form validator accepts, with a real layout and fonts", (_id, look) => {
@@ -40,7 +40,7 @@ describe("the Looks data file", () => {
   });
 
   it("uses no gradient, mesh or pattern in the ten new families, and no icon mark anywhere", () => {
-    for (const look of FORM_LOOKS.filter((l) => NEW.includes(l.id))) {
+    for (const look of FORM_LOOKS.filter((l) => NEW_IDS.includes(l.id))) {
       expect(["gradient", "mesh", "dots", "grid"]).not.toContain(look.branding.backgroundStyle);
       expect(["gradient", "pattern"]).not.toContain(look.branding.panelTreatment);
     }
@@ -140,5 +140,28 @@ describe("the three rebuilt templates", () => {
     expect(t.fields.map((f: any) => [f.type, f.required])).toEqual([["email", true], ["multiple_choice", false], ["multiple_choice", false]]);
     expect(t.branding.theme.labels.submit).toBe("Join the waitlist");
     expect(t.category).toBe("Leads & Contact");
+  });
+});
+
+describe("what the form validator keeps", () => {
+  it("keeps the couple's own words on the Yes / No question (an unknown key would be dropped silently)", () => {
+    const attend = bySlug.get("wedding-rsvp")!.fields.find((f: any) => f.fieldId === "wedding-attend");
+    const r = fieldSchema.safeParse({ ...attend, deleted: false });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data).toMatchObject({ yesLabel: "Joyfully accept", noLabel: "Regretfully decline" });
+  });
+
+  it("keeps every colour, font and setting of each rebuilt template's branding", () => {
+    for (const slug of ["wedding-rsvp", "job-application", "waitlist"]) {
+      const branding = bySlug.get(slug)!.branding;
+      const r = brandingSchema.safeParse(branding);
+      expect(r.success).toBe(true);
+      if (r.success) expect(r.data).toEqual(branding);
+    }
+  });
+
+  it("asks one question per row in the ten new families, and puts no icon or logo on any template", () => {
+    for (const look of FORM_LOOKS.filter((l) => NEW_IDS.includes(l.id))) expect(look.branding.fieldGrouping).toBe("single");
+    for (const slug of ["wedding-rsvp", "job-application", "waitlist"]) expect(bySlug.get(slug)!.branding.fieldGrouping).toBe("single");
   });
 });

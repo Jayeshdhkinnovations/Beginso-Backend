@@ -296,6 +296,7 @@
       "fontFamily": "work_sans",
       "cardStyle": "elevated",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#F4F6FB",
       "theme": {
@@ -316,6 +317,9 @@
         },
         "fonts": {
           "heading": "manrope"
+        },
+        "cover": {
+          "height": 120
         }
       }
     }
@@ -331,6 +335,7 @@
       "fontFamily": "dm_sans",
       "cardStyle": "soft",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#FFF8F1",
       "theme": {
@@ -352,6 +357,9 @@
         },
         "fonts": {
           "heading": "fraunces"
+        },
+        "cover": {
+          "height": 120
         }
       }
     }
@@ -367,6 +375,7 @@
       "fontFamily": "dm_sans",
       "cardStyle": "flat",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#FBF7F2",
       "theme": {
@@ -387,6 +396,9 @@
         },
         "fonts": {
           "heading": "dm_serif_display"
+        },
+        "cover": {
+          "height": 120
         }
       }
     }
@@ -401,7 +413,9 @@
       "primaryColor": "#F0B429",
       "fontFamily": "dm_sans",
       "cardStyle": "flat",
-      "panelTreatment": "solid",
+      "panelTreatment": "image",
+      "coverImageUrl": "/form-pictures/carbon.jpg",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#16130F",
       "theme": {
@@ -438,6 +452,7 @@
       "fontFamily": "quicksand",
       "cardStyle": "elevated",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#FFF1C9",
       "theme": {
@@ -462,6 +477,9 @@
         },
         "success": {
           "confetti": true
+        },
+        "cover": {
+          "height": 120
         }
       }
     }
@@ -478,6 +496,7 @@
       "typeScale": "large",
       "cardStyle": "soft",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#F2F8F8",
       "theme": {
@@ -498,6 +517,9 @@
         },
         "fonts": {
           "heading": "dm_sans"
+        },
+        "cover": {
+          "height": 120
         }
       }
     }
@@ -513,6 +535,7 @@
       "fontFamily": "dm_sans",
       "cardStyle": "flat",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#FFFFFF",
       "theme": {
@@ -548,6 +571,7 @@
       "fontFamily": "dm_sans",
       "cardStyle": "flat",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#101418",
       "theme": {
@@ -584,6 +608,7 @@
       "fontFamily": "work_sans",
       "cardStyle": "flat",
       "panelTreatment": "image",
+      "fieldGrouping": "single",
       "backgroundStyle": "solid",
       "backgroundColor": "#FAF7F2",
       "theme": {
@@ -605,7 +630,8 @@
         "fonts": {
           "heading": "fraunces"
         }
-      }
+      },
+      "coverImageUrl": "/form-pictures/coral-waves.jpg"
     }
   },
   {
@@ -613,12 +639,13 @@
     "name": "Appetite",
     "note": "A darkened photo behind a warm card, brick button.",
     "goodFor": "Restaurants, food orders, hospitality",
-    "layout": "open",
+    "layout": "card_stack",
     "branding": {
       "primaryColor": "#B3261E",
       "fontFamily": "quicksand",
       "cardStyle": "elevated",
       "panelTreatment": "solid",
+      "fieldGrouping": "single",
       "backgroundStyle": "image",
       "backgroundImageUrl": "/form-pictures/sand-dunes.jpg",
       "theme": {

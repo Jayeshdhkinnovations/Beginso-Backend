@@ -4,7 +4,7 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import app from "../app";
 import { brandingSchema, fieldSchema } from "../validations/form.validator";
 import { FORM_FONTS, FORM_LAYOUT_VALUES } from "../models/Form";
-import { FORM_LOOKS, FORM_LOOKS_VERSION, lookBranding, readabilityChecks } from "../utils/formLooks";
+import { FORM_LOOKS, FORM_LOOKS_FILE_VERSION, FORM_LOOKS_VERSION, lookBranding, readabilityChecks } from "../utils/formLooks";
 import { builtInTemplates } from "../data/builtInTemplates";
 
 const catalogue = builtInTemplates({ pages: [], fields: [] });
@@ -47,6 +47,25 @@ describe("the Looks data file", () => {
     for (const look of FORM_LOOKS) expect(JSON.stringify(look)).not.toMatch(/iconName|logoUrl/);
   });
 
+  it("hides exactly four Looks from the gallery (Tech, Handwritten, Playful, Sunset) and deletes none", () => {
+    expect(FORM_LOOKS.filter((l) => l.retired).map((l) => l.id).sort()).toEqual(["handwritten", "playful", "sunset", "tech"]);
+    expect(FORM_LOOKS.filter((l) => OLD.includes(l.id))).toHaveLength(OLD.length);
+  });
+
+  it("has a version number that is a whole number from 2", () => {
+    expect(Number.isInteger(FORM_LOOKS_FILE_VERSION)).toBe(true);
+    expect(FORM_LOOKS_FILE_VERSION).toBeGreaterThanOrEqual(2);
+  });
+
+  it("gives the ten new families solid colours only: no picture on a split panel or behind the page", () => {
+    for (const look of FORM_LOOKS.filter((l) => NEW_IDS.includes(l.id))) {
+      expect(look.branding.coverImageUrl).toBeUndefined();
+      expect(look.branding.backgroundImageUrl).toBeUndefined();
+      expect(look.branding.backgroundStyle).toBe("solid");
+      expect(look.branding.panelTreatment).toBe("solid");
+    }
+  });
+
   it("lookBranding returns a copy, so a template cannot change a Look", () => {
     const a = lookBranding("elegant-serif");
     a.branding.primaryColor = "#000000";
@@ -70,7 +89,8 @@ describe("GET /api/form-looks", () => {
     const res = await request(app).get("/api/form-looks");
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(FORM_LOOKS.length);
-    expect(res.body.version).toBe(FORM_LOOKS_VERSION);
+    expect(res.body.version).toBe(FORM_LOOKS_FILE_VERSION);
+    expect(res.body.fingerprint).toBe(FORM_LOOKS_VERSION);
     expect(res.headers["cache-control"]).toMatch(/public, max-age=300/);
     const again = await request(app).get("/api/form-looks").set("If-None-Match", res.headers.etag);
     expect(again.status).toBe(304);

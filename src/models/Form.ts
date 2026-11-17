@@ -84,6 +84,8 @@ export interface IFormField {
   previewSize?: PreviewSize;
   urlPreviewStyle?: UrlPreviewStyle;
   urlDisplay?: UrlDisplay;
+  yesLabel?: string;
+  noLabel?: string;
   urlPreviewPosition?: PreviewPosition;
   urlAspectRatio?: AspectRatio;
   urlPreviewSize?: PreviewSize;
@@ -345,6 +347,8 @@ export const FormFieldSchema = new Schema<IFormField>({
   previewSize: { type: String, enum: PREVIEW_SIZES },
   urlPreviewStyle: { type: String, enum: URL_PREVIEW_STYLES },
   urlDisplay: { type: String, enum: URL_DISPLAYS },
+  yesLabel: { type: String, trim: true, maxlength: 30 },
+  noLabel: { type: String, trim: true, maxlength: 30 },
   urlPreviewPosition: { type: String, enum: PREVIEW_POSITIONS },
   urlAspectRatio: { type: String, enum: ASPECT_RATIOS },
   urlPreviewSize: { type: String, enum: PREVIEW_SIZES },

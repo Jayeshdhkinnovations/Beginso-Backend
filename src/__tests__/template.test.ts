@@ -228,9 +228,9 @@ describe("Templates API Integration Tests", () => {
 
     expect(res.status).toBe(201);
     // The schema's own default is {}, but Mongoose's minimize option (on by default) strips an empty
-    // sub-object out of the JSON response entirely, so this is undefined rather than {} — true before
+    // sub-object out of the JSON response entirely, so it was undefined before; now the form carries the owner-less choice "No icon" (iconNone) — true before
     // this change too, for any template that has never set a branding.
-    expect(res.body.data.branding).toBeUndefined();
+    expect(res.body.data.branding).toEqual({ iconNone: true });
   });
 
   it("gives every built-in template a readable slug on the public endpoint, computed from its name", async () => {

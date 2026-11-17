@@ -131,12 +131,13 @@ describe("the built-in catalogue: content", () => {
       );
     };
     expect(rulesOf("food-delivery-order")).toEqual([{ source: "Delivery Time", target: "Scheduled Time", when: "Schedule for later", action: "show" }]);
-    expect(rulesOf("wedding-rsvp").map((r: any) => r.target).sort()).toEqual(["Meal Choice", "Number of Guests"]);
-    expect(rulesOf("wedding-rsvp").every((r: any) => r.when === "Yes" && r.source === "Will you attend?")).toBe(true);
+    expect(rulesOf("wedding-rsvp").map((r: any) => r.target).sort()).toEqual(["Meal", "Number of guests"]);
+    expect(rulesOf("wedding-rsvp").every((r: any) => r.when === "Yes" && r.source === "Will you be there?")).toBe(true);
   });
 
-  it("gives the two RSVPs a thank-you screen with confetti", () => {
-    for (const slug of ["party-rsvp", "wedding-rsvp"]) expect(bySlug.get(slug)!.branding.theme.success.confetti).toBe(true);
+  it("gives the party RSVP a thank-you screen with confetti, and the wedding RSVP a quiet one", () => {
+    expect(bySlug.get("party-rsvp")!.branding.theme.success.confetti).toBe(true);
+    expect(bySlug.get("wedding-rsvp")!.branding.theme?.success?.confetti).toBeUndefined();
   });
 
   it("keeps the master template and the field showcase out of the public gallery", () => {

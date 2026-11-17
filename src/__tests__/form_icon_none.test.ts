@@ -53,6 +53,24 @@ describe("form icon report", () => {
   });
 });
 
+describe("an old form whose owner chose an icon", () => {
+  const snapshot = async () => JSON.stringify(await Form.collection.findOne({ title: "icon-old" }));
+
+  it("is not touched by the report, a dry run, or a migration whose dates leave it out", async () => {
+    const before = await snapshot();
+    await countFormIcons();
+    await applyFormIconMigration({}, { apply: false });
+    await applyFormIconMigration({ createdBefore: "2026-08-01" }, { apply: true }); // created in September: out of range
+    expect(await snapshot()).toBe(before);
+    const doc = await Form.collection.findOne({ title: "icon-old" });
+    expect(doc?.branding).toEqual({ iconName: "star" });
+  });
+
+  it("keeps its icon when a form made from a template gets the No icon default (that default is for new forms only)", () => {
+    expect(withIconChoice({ iconName: "star" })).toEqual({ iconName: "star" });
+  });
+});
+
 describe("form icon migration", () => {
   it("a dry run writes nothing", async () => {
     const r = await applyFormIconMigration({}, { apply: false });

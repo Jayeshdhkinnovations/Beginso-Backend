@@ -13,6 +13,13 @@ import { CATEGORY_GROUPS, estimateMinutes, resolveCategoryGroup } from "../utils
 
 const formService = new FormService();
 
+/** A template's branding for the new form: as it is, plus iconNone when the template shows no logo or icon of its own. */
+export const withIconChoice = (branding: Record<string, any> | undefined | null): Record<string, any> => {
+  const own = branding ?? {};
+  const hasMark = !!own.logoUrl || !!own.iconName;
+  return hasMark || own.iconNone === true ? { ...own } : { ...own, iconNone: true };
+};
+
 const BUILT_IN = { $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] };
 
 // Shared helper - single source of truth for "fetch active templates + serialize".
@@ -321,7 +328,9 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
       // immediately instead of starting blank. Older built-ins with no branding of their own are unaffected:
       // `branding` is simply omitted and the form falls back to its usual default, exactly as before.
       settings: (template.toObject() as any).settings,
-      ...((template.toObject() as any).branding ? { branding: (template.toObject() as any).branding } : {}),
+      // A form made from a template starts with NO icon (an explicit choice, so it is told apart from an older form that never chose): the
+      // template's own mark is kept when it has a logo or an icon of its own.
+      branding: withIconChoice((template.toObject() as any).branding),
       // Sprint 14 (B1.2): remember where the form came from so Insights can pick a template-shaped dashboard.
       templateId: template._id,
       templateCategory: template.category ?? null,

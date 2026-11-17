@@ -189,6 +189,8 @@ export interface IBranding {
   // The form's own icon when it has no uploaded logo: a name from the frontend's icon set (a slug, never rendered as markup) and a colour.
   iconName?: string;
   iconColor?: string;
+  /** The owner chose "No icon": true is a deliberate choice, absent is an older form that never chose. */
+  iconNone?: boolean;
   // A line of text and one link shown on the form's header, under the title.
   bannerText?: string;
   bannerLinks?: { label?: string; url: string }[];
@@ -411,6 +413,7 @@ const BrandingSchema = new Schema<IBranding>(
     logoSize: { type: String, enum: LOGO_SIZES },
     iconName: { type: String },
     iconColor: { type: String },
+    iconNone: { type: Boolean },
     bannerText: { type: String },
     bannerLinks: { type: [new Schema({ label: { type: String }, url: { type: String, required: true } }, { _id: false })], default: undefined },
   },

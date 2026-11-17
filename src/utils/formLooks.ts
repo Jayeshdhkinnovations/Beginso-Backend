@@ -12,10 +12,14 @@ export interface FormLook {
   /** What it suits, in a few words. */
   goodFor: string;
   layout: string;
+  /** Hidden from the Looks gallery. A form or template that already uses it keeps working: nothing is deleted. */
+  retired?: boolean;
   branding: Record<string, any>;
 }
 
-export const FORM_LOOKS: readonly FormLook[] = looksJson as FormLook[];
+/** The file's own version number: raise it by one whenever the Looks change, so a copy that is behind is easy to see. */
+export const FORM_LOOKS_FILE_VERSION: number = looksJson.version;
+export const FORM_LOOKS: readonly FormLook[] = looksJson.looks as FormLook[];
 
 /** A short fingerprint of the file's content: the frontend's copy records it, so a copy that is out of date is easy to see. */
 export const FORM_LOOKS_VERSION = createHash("sha256").update(JSON.stringify(looksJson)).digest("hex").slice(0, 12);

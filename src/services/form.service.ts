@@ -545,9 +545,19 @@ export class FormService {
       baseContentVersion: existingDraft?.baseContentVersion ?? versionOf(existing),
     };
 
+    // Only a live key whose VALUE actually changed counts as a live write. The autosave sends the whole settings object on every save, not only
+    // when something changed, so `liveSettings` has responseLimit/responseLimitEnabled on every single staged edit even when neither was touched —
+    // treating their mere presence as a change bumped the live form's version on every keystroke, so "Publish changes" always found the live form
+    // had "moved on" and refused with 409 after the very next edit. A value is live only once it differs from what is already stored.
+    const currentLiveSettings = this.plainOf(existing.settings) as Record<string, unknown>;
+    const changedLiveSettings: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(liveSettings)) {
+      if (JSON.stringify(currentLiveSettings?.[key] ?? null) !== JSON.stringify(value ?? null)) changedLiveSettings[key] = value;
+    }
+
     const updateDetails: Partial<IForm> = { draft };
-    if (Object.keys(liveSettings).length > 0) {
-      updateDetails.settings = { ...this.plainOf(existing.settings), ...liveSettings } as any;
+    if (Object.keys(changedLiveSettings).length > 0) {
+      updateDetails.settings = { ...currentLiveSettings, ...changedLiveSettings } as any;
     }
 
     const updated = await this.formRepository.update(formId, workspaceId, updateDetails);

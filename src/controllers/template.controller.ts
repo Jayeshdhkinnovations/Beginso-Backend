@@ -9,7 +9,7 @@ import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { getTemplateDescription, getTemplateSettings, slugify, slugifyWithId } from "../utils/templateDefaults";
-import { estimateMinutes, findTemplateByKey, galleryGroups, groupOfCategory, resolveCategoryGroup } from "../utils/templateCatalog";
+import { estimateMinutes, galleryGroups, groupOfCategory, resolveCategoryGroup } from "../utils/templateCatalog";
 
 const formService = new FormService();
 

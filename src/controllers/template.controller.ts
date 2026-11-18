@@ -9,9 +9,16 @@ import { getVerifiedWorkspaceId } from "../utils/requestContext";
 import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { getTemplateDescription, getTemplateSettings, slugify, slugifyWithId } from "../utils/templateDefaults";
-import { CATEGORY_GROUPS, estimateMinutes, resolveCategoryGroup } from "../utils/templateCatalog";
+import { estimateMinutes, findTemplateByKey, galleryGroups, groupOfCategory, resolveCategoryGroup } from "../utils/templateCatalog";
 
 const formService = new FormService();
+
+/** A template's branding for the new form: as it is, plus iconNone when the template shows no logo or icon of its own. */
+export const withIconChoice = (branding: Record<string, any> | undefined | null): Record<string, any> => {
+  const own = branding ?? {};
+  const hasMark = !!own.logoUrl || !!own.iconName;
+  return hasMark || own.iconNone === true ? { ...own } : { ...own, iconNone: true };
+};
 
 const BUILT_IN = { $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] };
 
@@ -52,6 +59,8 @@ const serializeTemplate = (t: any) => {
     fieldCount: live.length,
     layout: (settings as any).layout ?? "classic",
     thumbnail: t.thumbnail ?? null,
+    // the older slugs this template replaces: an old link to one of them opens this template
+    replaces: Array.isArray(t.replaces) ? t.replaces : [],
     fields: t.fields,
     pages: t.pages,
     theme: t.theme,
@@ -100,7 +109,8 @@ const galleryCard = (t: ReturnType<typeof serializeTemplate>) => ({
   slug: t.slug,
   name: t.name,
   description: t.description,
-  category: t.category,
+  // the group it belongs to, also for a template stored with an old category name
+  category: groupOfCategory(t.category),
   tags: t.tags,
   fieldCount: t.fieldCount,
   estimatedMinutes: t.estimatedMinutes,
@@ -123,7 +133,7 @@ export const getPublicGallery = async (req: Request, res: Response): Promise<voi
     const tag = typeof req.query.tag === "string" ? req.query.tag.trim().toLowerCase() : "";
     const data = all.filter((c) => (!wantedGroup || c.category === wantedGroup) && (!tag || c.tags.some((x: string) => x.toLowerCase() === tag)));
     // the groups always count the whole catalogue, so the list of groups does not shrink while one is chosen
-    const categories = CATEGORY_GROUPS.map((name) => ({ name, count: all.filter((c) => c.category === name).length })).filter((c) => c.count > 0);
+    const categories = galleryGroups(all.map((c) => c.category));
     res.status(200).json({ success: true, data, categories });
   } catch (error: any) {
     console.error("Error fetching the template gallery:", error);
@@ -136,12 +146,12 @@ export const getPublicTemplate = async (req: Request, res: Response): Promise<vo
   try {
     const key = String(req.params.slug ?? "").trim();
     const all = await fetchActiveTemplates(undefined, true);
-    const found = all.find((t) => t.slug === key) ?? all.find((t) => t._id === key);
+    const { found, redirectedFrom } = findTemplateByKey(all, key);
     if (!found) {
       res.status(404).json({ success: false, message: "Template not found" });
       return;
     }
-    res.status(200).json({ success: true, data: found });
+    res.status(200).json({ success: true, data: found, ...(redirectedFrom ? { redirectedFrom } : {}) });
   } catch (error: any) {
     console.error("Error fetching a public template:", error);
     res.status(500).json({ success: false, message: "Error fetching templates" });
@@ -302,6 +312,8 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
         previewSize: raw.previewSize,
         urlPreviewStyle: raw.urlPreviewStyle,
         urlDisplay: raw.urlDisplay,
+        yesLabel: raw.yesLabel,
+        noLabel: raw.noLabel,
         urlPreviewPosition: raw.urlPreviewPosition,
         urlAspectRatio: raw.urlAspectRatio,
         urlPreviewSize: raw.urlPreviewSize,
@@ -321,7 +333,9 @@ export const useTemplate = async (req: Request, res: Response): Promise<void> =>
       // immediately instead of starting blank. Older built-ins with no branding of their own are unaffected:
       // `branding` is simply omitted and the form falls back to its usual default, exactly as before.
       settings: (template.toObject() as any).settings,
-      ...((template.toObject() as any).branding ? { branding: (template.toObject() as any).branding } : {}),
+      // A form made from a template starts with NO icon (an explicit choice, so it is told apart from an older form that never chose): the
+      // template's own mark is kept when it has a logo or an icon of its own.
+      branding: withIconChoice((template.toObject() as any).branding),
       // Sprint 14 (B1.2): remember where the form came from so Insights can pick a template-shaped dashboard.
       templateId: template._id,
       templateCategory: template.category ?? null,

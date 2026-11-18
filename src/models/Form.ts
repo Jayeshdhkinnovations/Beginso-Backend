@@ -84,6 +84,8 @@ export interface IFormField {
   previewSize?: PreviewSize;
   urlPreviewStyle?: UrlPreviewStyle;
   urlDisplay?: UrlDisplay;
+  yesLabel?: string;
+  noLabel?: string;
   urlPreviewPosition?: PreviewPosition;
   urlAspectRatio?: AspectRatio;
   urlPreviewSize?: PreviewSize;
@@ -189,6 +191,8 @@ export interface IBranding {
   // The form's own icon when it has no uploaded logo: a name from the frontend's icon set (a slug, never rendered as markup) and a colour.
   iconName?: string;
   iconColor?: string;
+  /** The owner chose "No icon": true is a deliberate choice, absent is an older form that never chose. */
+  iconNone?: boolean;
   // A line of text and one link shown on the form's header, under the title.
   bannerText?: string;
   bannerLinks?: { label?: string; url: string }[];
@@ -343,6 +347,8 @@ export const FormFieldSchema = new Schema<IFormField>({
   previewSize: { type: String, enum: PREVIEW_SIZES },
   urlPreviewStyle: { type: String, enum: URL_PREVIEW_STYLES },
   urlDisplay: { type: String, enum: URL_DISPLAYS },
+  yesLabel: { type: String, trim: true, maxlength: 30 },
+  noLabel: { type: String, trim: true, maxlength: 30 },
   urlPreviewPosition: { type: String, enum: PREVIEW_POSITIONS },
   urlAspectRatio: { type: String, enum: ASPECT_RATIOS },
   urlPreviewSize: { type: String, enum: PREVIEW_SIZES },
@@ -411,6 +417,7 @@ const BrandingSchema = new Schema<IBranding>(
     logoSize: { type: String, enum: LOGO_SIZES },
     iconName: { type: String },
     iconColor: { type: String },
+    iconNone: { type: Boolean },
     bannerText: { type: String },
     bannerLinks: { type: [new Schema({ label: { type: String }, url: { type: String, required: true } }, { _id: false })], default: undefined },
   },

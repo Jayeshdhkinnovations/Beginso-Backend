@@ -1,15 +1,16 @@
 {
   "slug": "job-application",
   "name": "Job Application",
-  "description": "Collect a candidate's details, resume and portfolio for an open role.",
+  "description": "Collect a candidate's details, CV and a short note for an open role.",
   "category": "HR & Hiring",
   "tags": [
-    "Hiring"
+    "hiring",
+    "application"
   ],
-  "fieldCount": 7,
+  "fieldCount": 10,
   "estimatedMinutes": 4,
   "featured": true,
-  "sortOrder": 26,
-  "layout": "sidebar",
+  "sortOrder": 17,
+  "layout": "steps",
   "thumbnail": null
 }

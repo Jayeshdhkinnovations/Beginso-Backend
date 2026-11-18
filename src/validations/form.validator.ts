@@ -108,6 +108,14 @@ const fileUploadObj = baseFieldSchema.extend({
 
 const simpleObj = <T extends string>(type: T) => baseFieldSchema.extend({ type: z.literal(type) });
 
+// The words on the two buttons of a Yes / No question. Only the words change: the answer stored is still "Yes" or "No".
+const yesNoWord = z.string().trim().min(1, "Label cannot be empty").max(30, "Label cannot exceed 30 characters");
+const yesNoObj = baseFieldSchema.extend({
+  type: z.literal("yes_no"),
+  yesLabel: yesNoWord.optional(),
+  noLabel: yesNoWord.optional(),
+});
+
 const urlObj = baseFieldSchema.extend({
   type: z.literal("url"),
   urlPreviewStyle: z.enum(URL_PREVIEW_STYLES).optional(),
@@ -152,7 +160,7 @@ export const fieldSchema = z
     checkboxObj,
     fileUploadObj,
     simpleObj("rating"),
-    simpleObj("yes_no"),
+    yesNoObj,
     urlObj,
     simpleObj("time"),
     simpleObj("datetime"),
@@ -385,6 +393,8 @@ export const brandingSchema = z.object({
     .trim()
     .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "iconColor must be a valid hex color")
     .optional(),
+  // The owner chose "No icon" (the default for a new form). It tells a form that deliberately has no mark from an older form that never chose one.
+  iconNone: z.boolean().optional(),
   backgroundColor: z
     .string()
     .trim()

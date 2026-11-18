@@ -4,6 +4,7 @@
 import { fieldShowcaseTemplate } from "../utils/fieldShowcaseTemplate";
 import { kalaChasmaTemplate } from "./kalaChasmaTemplate";
 import { applyCatalogMeta } from "../utils/templateCatalog";
+import { seedTemplates } from "./seedTemplates";
 
 /** What seeds.json holds for the Pitch Plan template (read by the script that calls this). */
 export interface PitchSeedData {
@@ -11,7 +12,8 @@ export interface PitchSeedData {
   fields?: any[];
 }
 
-export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
+/** The templates the catalogue had before the 77 (wave 0): they stay as they were, and are switched off only when a template that replaces them is synced. */
+const legacyBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
       fieldShowcaseTemplate,
       kalaChasmaTemplate,
       {
@@ -207,29 +209,6 @@ export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
 
       // ─── HR & Hiring (sky blue, Work Sans) ───────────────────────────────────
       {
-        name: "Job Application",
-        slug: "job-application",
-        category: "HR",
-        description: "Collect a candidate's details, resume and portfolio for an open role.",
-        theme: "job-application",
-        isActive: true,
-        pages: [
-          { id: "page-1", order: 0, title: "Your details", description: "Basic contact information." },
-          { id: "page-2", order: 1, title: "Experience", description: "Tell us about your background." },
-        ],
-        fields: [
-          { pageId: "page-1", label: "Full Name", type: "short_text" as const, required: true, placeholder: "e.g. Noah Williams", helpText: "Your legal full name." },
-          { pageId: "page-1", label: "Email", type: "email" as const, required: true, placeholder: "e.g. noah@example.com", helpText: "We'll use this to contact you." },
-          { pageId: "page-1", label: "Phone", type: "phone" as const, required: true, placeholder: "e.g. +1 212 555 0138", helpText: "A number we can reach you on." },
-          { pageId: "page-1", label: "Position Applying For", type: "dropdown" as const, required: true, options: ["Software Engineer", "Product Designer", "Marketing Manager", "Customer Support"], placeholder: "Select role...", helpText: "The role you're applying to." },
-          { pageId: "page-2", label: "Resume / CV", type: "file_upload" as const, required: true, maxFileSize: 10, allowedMimeTypes: ["application/pdf"], placeholder: "Upload your resume...", helpText: "PDF, up to 10MB." },
-          { pageId: "page-2", label: "Portfolio or LinkedIn URL", type: "url" as const, required: false, placeholder: "e.g. https://linkedin.com/in/you", helpText: "Optional, but helpful." },
-          { pageId: "page-2", label: "Why do you want to work here?", type: "long_text" as const, required: false, placeholder: "A short cover note...", helpText: "Optional." },
-        ],
-        settings: { layout: "sidebar", successMessage: "Your application is in — our hiring team will review it and be in touch." },
-        branding: { coverFit: "original", typeScale: "compact", coverImageUrl: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#0369a1", fontFamily: "work_sans", panelTreatment: "solid", backgroundStyle: "plain", cardStyle: "bordered", buttonStyle: "outline", buttonRadius: "4px", formWidth: "standard", spacing: "compact" },
-      },
-      {
         name: "Employee Onboarding",
         slug: "employee-onboarding",
         category: "HR",
@@ -293,26 +272,6 @@ export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
         ],
         settings: { layout: "split_feature", successMessage: "You're registered! Your ticket is on its way by email." },
         branding: { coverImageUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=640&h=360&fit=crop&q=70&auto=format", bannerText: "Limited seats available", typeScale: "large", primaryColor: "#7c3aed", fontFamily: "bebas_neue", panelTreatment: "gradient", backgroundStyle: "mesh", cardStyle: "elevated", buttonStyle: "solid", buttonRadius: "16px", formWidth: "wide", spacing: "spacious" },
-      },
-      {
-        name: "Wedding RSVP",
-        slug: "wedding-rsvp",
-        category: "Events",
-        description: "A warm, personal RSVP for a wedding, with meal choice and a song request.",
-        theme: "wedding-rsvp",
-        isActive: true,
-        pages: [
-          { id: "page-1", order: 0, title: "Will you join us?", description: "We'd love to celebrate with you." },
-        ],
-        fields: [
-          { pageId: "page-1", label: "Guest Name", type: "short_text" as const, required: true, placeholder: "e.g. Isabella Moreau", helpText: "Your full name, as on the invitation." },
-          { fieldId: "wedding-attend", logicRules: [{ targetFieldId: "wedding-guests", action: "show" as const, condition: { fieldId: "wedding-attend", operator: "equals" as const, value: "Yes" } }, { targetFieldId: "wedding-meal", action: "show" as const, condition: { fieldId: "wedding-attend", operator: "equals" as const, value: "Yes" } }], pageId: "page-1", label: "Will you attend?", type: "yes_no" as const, required: true, placeholder: "Select an answer...", helpText: "We understand if you can't make it." },
-          { fieldId: "wedding-guests", pageId: "page-1", label: "Number of Guests", type: "number" as const, required: false, min: 1, max: 4, placeholder: "e.g. 2", helpText: "Including yourself." },
-          { fieldId: "wedding-meal", pageId: "page-1", label: "Meal Choice", type: "dropdown" as const, required: false, options: ["Chicken", "Fish", "Vegetarian", "Vegan"], placeholder: "Select meal...", helpText: "For the reception dinner." },
-          { pageId: "page-1", label: "Song Request", type: "short_text" as const, required: false, placeholder: "e.g. anything by Stevie Wonder", helpText: "We'll try to make it happen." },
-        ],
-        settings: { layout: "card_stack", successMessage: "Thank you — we can't wait to celebrate with you!" },
-        branding: { theme: { v: 1, success: { confetti: true } }, bannerText: "We can't wait to celebrate with you", typeScale: "default", coverImageUrl: "https://images.unsplash.com/photo-1519741497674-611481863552?w=640&h=360&fit=crop&q=70&auto=format", primaryColor: "#6d28d9", fontFamily: "dm_serif_display", panelTreatment: "solid", backgroundStyle: "wash", cardStyle: "soft", buttonStyle: "solid", buttonRadius: "8px", formWidth: "standard", spacing: "comfortable" },
       },
       {
         name: "Webinar Signup",
@@ -1232,6 +1191,15 @@ export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => [
  * The finished catalogue: every entry with its group, tags, order, time to fill and notes (templateCatalog.ts), and a stable `fieldId` on every field
  * (so a template that is synced again keeps the same field ids, and a show-if rule keeps pointing at the right field).
  */
+/**
+ * Every built-in template: the older ones (no wave) that no new template takes the slug of, then the 77 (wave 1, 2 or 3). A template of the 77 with the slug of an
+ * older one replaces its content in place (the sync upserts by slug), so its id stays.
+ */
+export const rawBuiltInTemplates = (pitchSeedsData: PitchSeedData): any[] => {
+  const fresh = new Set(seedTemplates.map((t) => t.slug));
+  return [...legacyBuiltInTemplates(pitchSeedsData).filter((t) => !fresh.has(t.slug)), ...seedTemplates];
+};
+
 export const builtInTemplates = (pitchSeedsData: PitchSeedData): any[] =>
   rawBuiltInTemplates(pitchSeedsData).map((t) => {
     const done = applyCatalogMeta(t);

@@ -15,6 +15,7 @@ export const CATEGORY_GROUPS = [
   "Community & Membership",
   "Internal Requests & Inspections",
   "Consent & Legal",
+  "Fun & Polls",
 ] as const;
 export type CategoryGroup = (typeof CATEGORY_GROUPS)[number];
 
@@ -71,6 +72,7 @@ export const CATALOG_META: Record<string, CatalogMeta> = {
   "support-request": { category: "Leads & Contact", tags: ["Support"] },
   "newsletter-signup": { category: "Leads & Contact", tags: ["Marketing"] },
   "product-waitlist": { category: "Leads & Contact", tags: ["Marketing", "Orders & Payments"] },
+  "waitlist": { category: "Leads & Contact", tags: ["SaaS", "Marketing"] },
   "partnership-inquiry": { category: "Leads & Contact", tags: ["Business"] },
   // Orders & Payments
   "product-order-form": { category: "Orders & Payments", tags: ["Shop"] },
@@ -185,6 +187,7 @@ const PICTURES: Record<CategoryGroup, string[]> = {
   "Community & Membership": ["coral-waves", "sunrise-peach"],
   "Internal Requests & Inspections": ["grid-paper", "dots-ink"],
   "Consent & Legal": ["mono-waves", "plum-night"],
+  "Fun & Polls": ["confetti", "citrus-light"],
 };
 const hash = (text: string): number => [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 export const libraryPicture = (group: CategoryGroup, slug: string): string => {
@@ -202,7 +205,9 @@ const hasPhotoCredit = (branding: any): boolean => !!branding?.theme?.credit;
 export function applyCatalogMeta<T extends Record<string, any>>(template: T): T & { category: string; tags: string[]; featured: boolean; sortOrder: number; estimatedMinutes: number } {
   const slug = String(template.slug ?? "");
   const meta = CATALOG_META[slug];
-  const category: CategoryGroup = meta?.category ?? resolveCategoryGroup(template.category) ?? "Leads & Contact";
+  // One of the 77 (it carries its wave) brings its own group, tags, featured flag and order; an older template takes them from the table below.
+  const own = typeof template.wave === "number";
+  const category: CategoryGroup = (own ? resolveCategoryGroup(template.category) : undefined) ?? meta?.category ?? resolveCategoryGroup(template.category) ?? "Leads & Contact";
   let branding = template.branding;
   if (branding && !hasPhotoCredit(branding)) {
     const swapped = { ...branding };
@@ -216,11 +221,38 @@ export function applyCatalogMeta<T extends Record<string, any>>(template: T): T 
   return {
     ...template,
     category,
-    tags: meta?.tags ?? [],
-    featured: meta?.featured === true,
-    sortOrder: catalogSortOrder(slug),
+    tags: own && Array.isArray(template.tags) ? template.tags : (meta?.tags ?? []),
+    featured: own ? template.featured === true : meta?.featured === true,
+    // the 77 come first in the gallery (their own order, 1 to 77); the older ones follow
+    sortOrder: own && typeof template.sortOrder === "number" ? template.sortOrder : 100 + catalogSortOrder(slug),
     estimatedMinutes: typeof template.estimatedMinutes === "number" ? template.estimatedMinutes : estimateMinutes(template.fields),
     ...(branding ? { branding } : {}),
-    ...(sensitive && description && !description.includes(SAMPLE_NOTE) ? { description: `${description} ${SAMPLE_NOTE}` } : {}),
+    ...(sensitive && description && !description.includes(SAMPLE_NOTE) && !/Sample template./.test(description) ? { description: `${description} ${SAMPLE_NOTE}` } : {}),
   };
+}
+
+/**
+ * A template by its slug, then by its id, then by an OLD slug it replaces (a renamed template: general-contact-form -> contact-us). `redirectedFrom` is set
+ * in the last case, so a caller can send the visitor on to the new address.
+ */
+export function findTemplateByKey<T extends { slug?: string; _id?: unknown; replaces?: string[] }>(all: T[], key: string): { found?: T; redirectedFrom?: string } {
+  const direct = all.find((t) => t.slug === key) ?? all.find((t) => String(t._id) === key);
+  if (direct) return { found: direct };
+  const successor = all.find((t) => Array.isArray(t.replaces) && t.replaces.includes(key));
+  return successor ? { found: successor, redirectedFrom: key } : {};
+}
+
+/** The group a stored category belongs to: a current group as it is, an old category name through the old-name map (so a catalogue that has not been
+ * synced yet still lands in the right group), and anything else as written. */
+export const groupOfCategory = (category: unknown): string => resolveCategoryGroup(category) ?? (typeof category === "string" ? category : "");
+
+/** The groups of the gallery with their counts: the current groups in their order, then any other name that is in use. A group with no template is left out. */
+export function galleryGroups(categories: unknown[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const c of categories) {
+    const name = groupOfCategory(c);
+    if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const ordered: string[] = [...CATEGORY_GROUPS, ...[...counts.keys()].filter((n) => !(CATEGORY_GROUPS as readonly string[]).includes(n))];
+  return ordered.filter((n) => (counts.get(n) ?? 0) > 0).map((name) => ({ name, count: counts.get(name) as number }));
 }

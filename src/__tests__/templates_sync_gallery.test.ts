@@ -6,7 +6,7 @@ import request from "supertest";
 import app from "../app";
 import Template from "../models/Template";
 import { builtInTemplates } from "../data/builtInTemplates";
-import { planTemplateSync, syncTemplates } from "../services/templateSync.service";
+import { syncTemplates } from "../services/templateSync.service";
 import { describeSync, refusesProductionWrite, wantsApply } from "../scripts/syncTemplates";
 
 process.env.JWT_SECRET = "test-secret-key-1234567890-test-key-long-enough";
@@ -14,6 +14,21 @@ process.env.JWT_SECRET = "test-secret-key-1234567890-test-key-long-enough";
 let mongoServer: MongoMemoryServer;
 const catalogue = builtInTemplates({ pages: [], fields: [] });
 const FIXTURE = path.join(__dirname, "fixtures", "gallery_card_job_application.json");
+
+/** Syncs the whole catalogue the way it is released: the older catalogue, then wave 1, 2 and 3 (each on its own). The result adds the four parts up. */
+async function syncEverything(cat: any[], apply = true) {
+  const parts = [undefined, 1, 2, 3];
+  const results = [];
+  for (const wave of parts) results.push(await syncTemplates(cat, { apply, wave }));
+  return {
+    applied: apply,
+    added: results.flatMap((r) => r.added),
+    changed: results.flatMap((r) => r.changed),
+    deactivated: results.flatMap((r) => r.deactivated),
+    unchanged: results.reduce((n, r) => n + r.unchanged, 0),
+    conflicts: results.flatMap((r) => r.conflicts),
+  };
+}
 
 beforeAll(async () => {
   await mongoose.disconnect();
@@ -30,7 +45,7 @@ beforeEach(async () => {
 
 describe("the safe sync of built-in templates", () => {
   it("is a dry run by default: it plans every template as added and writes nothing", async () => {
-    const result = await syncTemplates(catalogue, { apply: false });
+    const result = await syncEverything(catalogue, false);
     expect(result.applied).toBe(false);
     expect(result.added).toHaveLength(catalogue.length);
     expect(result.changed).toEqual([]);
@@ -39,12 +54,12 @@ describe("the safe sync of built-in templates", () => {
   });
 
   it("with --apply adds the catalogue, and a second run finds nothing to change and keeps every _id", async () => {
-    const first = await syncTemplates(catalogue, { apply: true });
+    const first = await syncEverything(catalogue);
     expect(first.applied).toBe(true);
     expect(await Template.countDocuments()).toBe(catalogue.length);
     const ids = Object.fromEntries((await Template.find()).map((t) => [t.slug, String(t._id)]));
 
-    const second = await syncTemplates(catalogue, { apply: true });
+    const second = await syncEverything(catalogue);
     expect(second.added).toEqual([]);
     expect(second.changed).toEqual([]);
     expect(second.deactivated).toEqual([]);
@@ -54,15 +69,15 @@ describe("the safe sync of built-in templates", () => {
   });
 
   it("updates a template that changed in place (same _id) and says which part changed", async () => {
-    await syncTemplates(catalogue, { apply: true });
+    await syncEverything(catalogue);
     const before = await Template.findOne({ slug: "job-application" });
     const edited = catalogue.map((t) => (t.slug === "job-application" ? { ...t, description: "A new description.", tags: [...t.tags, "Remote"] } : t));
 
-    const plan = await planTemplateSync(edited);
+    const plan = await syncEverything(edited, false);
     expect(plan.changed).toEqual([{ slug: "job-application", fields: expect.arrayContaining(["description", "tags"]) }]);
     expect(plan.added).toEqual([]);
 
-    await syncTemplates(edited, { apply: true });
+    await syncEverything(edited);
     const after = await Template.findOne({ slug: "job-application" });
     expect(String(after!._id)).toBe(String(before!._id));
     expect(after!.description).toBe("A new description.");
@@ -70,15 +85,15 @@ describe("the safe sync of built-in templates", () => {
   });
 
   it("deactivates a template that left the catalogue instead of deleting it, and reactivates it when it returns", async () => {
-    await syncTemplates(catalogue, { apply: true });
+    await syncEverything(catalogue);
     const without = catalogue.filter((t) => t.slug !== "exit-interview");
-    const result = await syncTemplates(without, { apply: true });
+    const result = await syncEverything(without);
     expect(result.deactivated).toEqual(["exit-interview"]);
     const row = await Template.findOne({ slug: "exit-interview" });
     expect(row).not.toBeNull();
     expect(row!.isActive).toBe(false);
 
-    const back = await syncTemplates(catalogue, { apply: true });
+    const back = await syncEverything(catalogue);
     expect(back.changed).toEqual([{ slug: "exit-interview", fields: ["isActive"] }]);
     expect((await Template.findOne({ slug: "exit-interview" }))!.isActive).toBe(true);
   });
@@ -88,7 +103,7 @@ describe("the safe sync of built-in templates", () => {
     const own = await Template.create({ name: "Our own", slug: "our-own-abc123", category: "Mine", theme: "x", workspaceId: ws, fields: [{ label: "Q", type: "short_text", required: false }] });
     const clash = await Template.create({ name: "Clash", slug: "job-application", category: "Mine", theme: "x", workspaceId: ws, fields: [{ label: "Q", type: "short_text", required: false }] });
 
-    const result = await syncTemplates(catalogue, { apply: true });
+    const result = await syncEverything(catalogue);
     expect(result.conflicts).toEqual(["job-application"]);
     expect(result.deactivated).not.toContain("our-own-abc123");
     expect((await Template.findById(own._id))!.isActive).toBe(true);
@@ -110,7 +125,7 @@ describe("the safe sync of built-in templates", () => {
 
 describe("the public gallery", () => {
   beforeEach(async () => {
-    await syncTemplates(catalogue, { apply: true });
+    await syncEverything(catalogue);
   });
 
   const CARD_KEYS = ["slug", "name", "description", "category", "tags", "fieldCount", "estimatedMinutes", "featured", "sortOrder", "layout", "thumbnail"].sort();
@@ -120,7 +135,10 @@ describe("the public gallery", () => {
     expect(res.status).toBe(200);
     const cards = res.body.data as any[];
     for (const c of cards) expect(Object.keys(c).sort()).toEqual(CARD_KEYS);
-    expect(cards.length).toBe(catalogue.filter((t) => t.showInGallery !== false).length);
+    // every wave is synced here, so the 13 older templates the new ones replace are switched off and are not in the gallery
+    const replaced = new Set(catalogue.flatMap((t) => t.replaces ?? []));
+    expect(replaced.size).toBe(13);
+    expect(cards.length).toBe(catalogue.filter((t) => t.showInGallery !== false && !replaced.has(t.slug)).length);
     expect(cards.map((c) => c.slug)).not.toContain("master-comprehensive-template");
     expect(cards.map((c) => c.slug)).not.toContain("field-showcase-all-field-types");
     // the featured six come first
@@ -151,8 +169,9 @@ describe("the public gallery", () => {
   });
 
   it("filters by a tag and refuses a category that does not exist", async () => {
-    const tagged = await request(app).get("/api/templates/gallery").query({ tag: "appointments" });
-    expect(tagged.body.data.map((c: any) => c.slug)).toEqual(expect.arrayContaining(["appointment-booking", "schedule-a-viewing"]));
+    const tagged = await request(app).get("/api/templates/gallery").query({ tag: "real-estate" });
+    expect(tagged.body.data.map((c: any) => c.slug)).toEqual(expect.arrayContaining(["schedule-a-viewing"]));
+    expect(tagged.body.data.every((c: any) => c.tags.some((x: string) => x.toLowerCase() === "real-estate"))).toBe(true);
     const bad = await request(app).get("/api/templates/gallery").query({ category: "nonsense" });
     expect(bad.status).toBe(400);
     expect(bad.body.error.code).toBe("UNKNOWN_CATEGORY");

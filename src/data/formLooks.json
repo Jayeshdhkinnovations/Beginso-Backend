@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "looks": [
     {
       "id": "clean",
@@ -295,27 +295,35 @@
       "id": "clean-corporate",
       "name": "Clean Corporate",
       "note": "Pale blue page, white card, calm blue button.",
-      "goodFor": "HR, business, internal forms",
+      "goodFor": "HR, B2B, business, internal forms",
       "layout": "classic",
       "branding": {
         "primaryColor": "#2457D6",
+        "backgroundColor": "#F4F6FB",
         "fontFamily": "work_sans",
-        "cardStyle": "elevated",
+        "typeScale": "default",
+        "cardStyle": "soft",
+        "buttonStyle": "solid",
+        "buttonRadius": "8px",
+        "formWidth": "standard",
+        "spacing": "comfortable",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#F4F6FB",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#1B2433",
             "card": "#FFFFFF",
             "field": "#FFFFFF",
-            "fieldBorder": "#7B8498"
+            "fieldBorder": "#7C879A",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "outlined",
-            "radius": 8
+            "radius": 8,
+            "label": "above",
+            "choice": "plain"
           },
           "card": {
             "radius": 12,
@@ -323,6 +331,11 @@
           },
           "fonts": {
             "heading": "manrope"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           },
           "cover": {
             "height": 120
@@ -338,31 +351,43 @@
       "layout": "guided",
       "branding": {
         "primaryColor": "#C4491C",
+        "backgroundColor": "#FFF8F1",
         "fontFamily": "dm_sans",
+        "typeScale": "default",
         "cardStyle": "soft",
+        "buttonStyle": "solid",
+        "buttonRadius": "16px",
+        "formWidth": "standard",
+        "spacing": "comfortable",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#FFF8F1",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#2B2118",
             "card": "#FFFFFF",
-            "field": "#FBF1E8",
-            "fieldBorder": "#8C7B6A"
+            "field": "#FBF3EA",
+            "fieldBorder": "#8F7B6C",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "filled",
             "radius": 14,
+            "label": "above",
             "choice": "tiles"
           },
           "card": {
             "radius": 24,
-            "shadow": 12
+            "shadow": 30
           },
           "fonts": {
             "heading": "fraunces"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           },
           "cover": {
             "height": 120
@@ -374,27 +399,35 @@
       "id": "elegant-serif",
       "name": "Elegant Serif",
       "note": "Ivory page, taupe accent, square underlined fields.",
-      "goodFor": "Weddings, premium, formal events",
+      "goodFor": "Weddings, premium and formal events",
       "layout": "card_stack",
       "branding": {
         "primaryColor": "#7A5C3E",
+        "backgroundColor": "#FBF7F2",
         "fontFamily": "dm_sans",
-        "cardStyle": "flat",
+        "typeScale": "default",
+        "cardStyle": "soft",
+        "buttonStyle": "solid",
+        "buttonRadius": "4px",
+        "formWidth": "standard",
+        "spacing": "spacious",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#FBF7F2",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#2A211B",
             "card": "#FFFFFF",
             "field": "#FFFFFF",
-            "fieldBorder": "#8C7B6A"
+            "fieldBorder": "#8C7B6B",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "underline",
-            "radius": 0
+            "radius": 0,
+            "label": "above",
+            "choice": "plain"
           },
           "card": {
             "radius": 6,
@@ -402,6 +435,11 @@
           },
           "fonts": {
             "heading": "dm_serif_display"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           },
           "cover": {
             "height": 120
@@ -417,24 +455,31 @@
       "layout": "split_feature",
       "branding": {
         "primaryColor": "#F0B429",
+        "backgroundColor": "#16130F",
         "fontFamily": "dm_sans",
+        "typeScale": "large",
         "cardStyle": "flat",
+        "buttonStyle": "solid",
+        "buttonRadius": "4px",
+        "formWidth": "wide",
+        "spacing": "spacious",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#16130F",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#F7F2E8",
             "card": "#211C17",
-            "field": "#2B251F",
-            "fieldBorder": "#8F8577",
+            "field": "#2A241E",
+            "fieldBorder": "#8A8072",
             "buttonText": "#16130F"
           },
           "fields": {
             "style": "filled",
-            "radius": 6
+            "radius": 6,
+            "label": "above",
+            "choice": "plain"
           },
           "card": {
             "radius": 8,
@@ -442,6 +487,11 @@
           },
           "fonts": {
             "heading": "bebas_neue"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           }
         }
       }
@@ -451,37 +501,46 @@
       "name": "Playful Bright",
       "note": "Butter page, red-orange button, tiles and confetti.",
       "goodFor": "Parties, polls, kids, quizzes",
-      "layout": "guided",
+      "layout": "chat",
       "branding": {
         "primaryColor": "#C93A21",
+        "backgroundColor": "#FFF1C9",
         "fontFamily": "quicksand",
-        "cardStyle": "elevated",
+        "typeScale": "default",
+        "cardStyle": "soft",
+        "buttonStyle": "solid",
+        "buttonRadius": "16px",
+        "formWidth": "narrow",
+        "spacing": "comfortable",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#FFF1C9",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#2A1A14",
             "card": "#FFFFFF",
-            "field": "#FFF7E0",
-            "fieldBorder": "#8A7355"
+            "field": "#FFF8E6",
+            "fieldBorder": "#8F6F5E",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "filled",
             "radius": 16,
+            "label": "above",
             "choice": "tiles"
           },
           "card": {
             "radius": 20,
-            "shadow": 30
+            "shadow": 20
           },
           "fonts": {
             "heading": "fredoka"
           },
-          "success": {
-            "confetti": true
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           },
           "cover": {
             "height": 120
@@ -493,35 +552,47 @@
       "id": "calm-care",
       "name": "Calm Care",
       "note": "Pale teal page, teal button, large readable type.",
-      "goodFor": "Healthcare, wellness, consent",
+      "goodFor": "Healthcare, wellness, consent, requests",
       "layout": "steps",
       "branding": {
         "primaryColor": "#0E7C86",
+        "backgroundColor": "#F2F8F8",
         "fontFamily": "work_sans",
         "typeScale": "large",
         "cardStyle": "soft",
+        "buttonStyle": "solid",
+        "buttonRadius": "8px",
+        "formWidth": "standard",
+        "spacing": "comfortable",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#F2F8F8",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#14302F",
             "card": "#FFFFFF",
             "field": "#FFFFFF",
-            "fieldBorder": "#6F8A8A"
+            "fieldBorder": "#6F8F91",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "outlined",
-            "radius": 10
+            "radius": 10,
+            "label": "above",
+            "choice": "plain"
           },
           "card": {
             "radius": 14,
-            "shadow": 14
+            "shadow": 15
           },
           "fonts": {
             "heading": "dm_sans"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           },
           "cover": {
             "height": 120
@@ -537,23 +608,31 @@
       "layout": "open",
       "branding": {
         "primaryColor": "#111111",
+        "backgroundColor": "#FFFFFF",
         "fontFamily": "dm_sans",
+        "typeScale": "default",
         "cardStyle": "flat",
+        "buttonStyle": "solid",
+        "buttonRadius": "4px",
+        "formWidth": "narrow",
+        "spacing": "spacious",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#FFFFFF",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#111111",
             "card": "#FFFFFF",
             "field": "#FFFFFF",
-            "fieldBorder": "#767676"
+            "fieldBorder": "#6B6B6B",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "underline",
-            "radius": 0
+            "radius": 0,
+            "label": "above",
+            "choice": "plain"
           },
           "card": {
             "radius": 0,
@@ -561,6 +640,11 @@
           },
           "fonts": {
             "heading": "space_grotesk"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           }
         }
       }
@@ -573,24 +657,31 @@
       "layout": "focus",
       "branding": {
         "primaryColor": "#5B8DEF",
+        "backgroundColor": "#101418",
         "fontFamily": "dm_sans",
+        "typeScale": "default",
         "cardStyle": "flat",
+        "buttonStyle": "solid",
+        "buttonRadius": "8px",
+        "formWidth": "narrow",
+        "spacing": "comfortable",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#101418",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#E8EAED",
             "card": "#181E24",
-            "field": "#222A33",
-            "fieldBorder": "#7F8A99",
-            "buttonText": "#0B1020"
+            "field": "#1F2730",
+            "fieldBorder": "#7B8794",
+            "buttonText": "#0B1220"
           },
           "fields": {
             "style": "filled",
-            "radius": 8
+            "radius": 8,
+            "label": "above",
+            "choice": "plain"
           },
           "card": {
             "radius": 10,
@@ -598,6 +689,11 @@
           },
           "fonts": {
             "heading": "space_grotesk"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           }
         }
       }
@@ -610,23 +706,31 @@
       "layout": "split_feature",
       "branding": {
         "primaryColor": "#B93A12",
+        "backgroundColor": "#FAF7F2",
         "fontFamily": "work_sans",
+        "typeScale": "large",
         "cardStyle": "flat",
+        "buttonStyle": "solid",
+        "buttonRadius": "4px",
+        "formWidth": "wide",
+        "spacing": "spacious",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
-        "backgroundColor": "#FAF7F2",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#1D1A17",
             "card": "#FFFFFF",
             "field": "#FFFFFF",
-            "fieldBorder": "#8C7B6A"
+            "fieldBorder": "#8A7F76",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "underline",
-            "radius": 0
+            "radius": 0,
+            "label": "above",
+            "choice": "plain"
           },
           "card": {
             "radius": 0,
@@ -634,6 +738,11 @@
           },
           "fonts": {
             "heading": "fraunces"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           }
         }
       }
@@ -643,25 +752,34 @@
       "name": "Appetite",
       "note": "A darkened photo behind a warm card, brick button.",
       "goodFor": "Restaurants, food orders, hospitality",
-      "layout": "card_stack",
+      "layout": "open",
       "branding": {
         "primaryColor": "#B3261E",
+        "backgroundColor": "#EFE3D3",
         "fontFamily": "quicksand",
+        "typeScale": "default",
         "cardStyle": "elevated",
+        "buttonStyle": "solid",
+        "buttonRadius": "16px",
+        "formWidth": "standard",
+        "spacing": "comfortable",
+        "backgroundStyle": "solid",
         "panelTreatment": "solid",
         "fieldGrouping": "single",
-        "backgroundStyle": "solid",
         "theme": {
           "v": 1,
           "colors": {
             "text": "#2A1A14",
             "card": "#FFFDF8",
-            "field": "#F6EFE3",
-            "fieldBorder": "#8C7B6A"
+            "field": "#F7EFE4",
+            "fieldBorder": "#8F7060",
+            "buttonText": "#FFFFFF"
           },
           "fields": {
             "style": "filled",
-            "radius": 12
+            "radius": 12,
+            "label": "above",
+            "choice": "tiles"
           },
           "card": {
             "radius": 20,
@@ -669,9 +787,13 @@
           },
           "fonts": {
             "heading": "dm_serif_display"
+          },
+          "buttons": {
+            "size": "default",
+            "width": "fill",
+            "hover": "darken"
           }
-        },
-        "backgroundColor": "#F6EEDD"
+        }
       }
     }
   ]

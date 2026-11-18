@@ -59,6 +59,8 @@ const serializeTemplate = (t: any) => {
     fieldCount: live.length,
     layout: (settings as any).layout ?? "classic",
     thumbnail: t.thumbnail ?? null,
+    // the older slugs this template replaces: an old link to one of them opens this template
+    replaces: Array.isArray(t.replaces) ? t.replaces : [],
     fields: t.fields,
     pages: t.pages,
     theme: t.theme,
@@ -144,12 +146,12 @@ export const getPublicTemplate = async (req: Request, res: Response): Promise<vo
   try {
     const key = String(req.params.slug ?? "").trim();
     const all = await fetchActiveTemplates(undefined, true);
-    const found = all.find((t) => t.slug === key) ?? all.find((t) => t._id === key);
+    const { found, redirectedFrom } = findTemplateByKey(all, key);
     if (!found) {
       res.status(404).json({ success: false, message: "Template not found" });
       return;
     }
-    res.status(200).json({ success: true, data: found });
+    res.status(200).json({ success: true, data: found, ...(redirectedFrom ? { redirectedFrom } : {}) });
   } catch (error: any) {
     console.error("Error fetching a public template:", error);
     res.status(500).json({ success: false, message: "Error fetching templates" });

@@ -78,6 +78,11 @@ export function readabilityChecks(b: Record<string, any>): ReadabilityCheck[] {
     ["brand-card", 3, brand, card],
   ];
   if (page) pairs.push(["text-page", 4.5, text, page], ["brand-page", 3, brand, page]);
-  if (c.heading) pairs.push(["heading-card", 4.5, c.heading, card]);
+  if (c.heading) {
+    pairs.push(["heading-card", 4.5, c.heading, card]);
+    if (page) pairs.push(["heading-page", 4.5, c.heading, page]);
+    // a heading colour also colours the title on the coloured header, so it is measured against the brand colour there (not when the header is a picture)
+    if (b.panelTreatment !== "image") pairs.push(["heading-header", 4.5, c.heading, brand]);
+  }
   return pairs.map(([id, need, a, bg]) => ({ id, need, ratio: Math.round(contrastRatio(a, bg) * 100) / 100 }));
 }

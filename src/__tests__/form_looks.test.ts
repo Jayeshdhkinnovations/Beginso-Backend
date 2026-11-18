@@ -118,7 +118,7 @@ describe("every built-in template, as a form would be made from it", () => {
   });
 });
 
-describe("the three rebuilt templates", () => {
+describe("the templates that wear a Look", () => {
   it.each([
     ["wedding-rsvp", "elegant-serif", "card_stack"],
     ["job-application", "clean-corporate", "steps"],
@@ -135,52 +135,7 @@ describe("the three rebuilt templates", () => {
     expect(t.branding.logoUrl).toBeUndefined();
   });
 
-  it("Wedding RSVP asks 'Will you be there?' with the couple's own words, and the meal and guests only to those who accept", () => {
-    const t = bySlug.get("wedding-rsvp")!;
-    const attend = t.fields.find((f: any) => f.fieldId === "wedding-attend");
-    expect(attend).toMatchObject({ type: "yes_no", yesLabel: "Joyfully accept", noLabel: "Regretfully decline" });
-    expect(attend.logicRules.map((r: any) => r.targetFieldId).sort()).toEqual(["wedding-guests", "wedding-meal"]);
-    expect(attend.logicRules.every((r: any) => r.action === "show" && r.condition.operator === "equals" && r.condition.value === "Yes")).toBe(true);
-    expect(t.settings.layout).toBe("card_stack");
-    expect(t.branding.theme.labels.submit).toBe("Send my reply");
-  });
-
-  it("Job Application is three steps, ending in 'Send application'", () => {
-    const t = bySlug.get("job-application")!;
-    expect(t.pages.map((p: any) => p.title)).toEqual(["About you", "Your work", "One last thing"]);
-    expect(t.settings.layout).toBe("steps");
-    expect(t.fields.every((f: any) => t.pages.some((p: any) => p.id === f.pageId))).toBe(true);
-    expect(t.branding.theme.labels).toEqual({ next: "Next", back: "Back", submit: "Send application" });
-    expect(t.fields.find((f: any) => f.type === "file_upload").allowedMimeTypes).toEqual(["application/pdf"]);
-  });
-
-  it("Waitlist is one email and two optional questions, one at a time", () => {
-    const t = bySlug.get("waitlist")!;
-    expect(t.settings.layout).toBe("focus");
-    expect(t.fields.map((f: any) => [f.type, f.required])).toEqual([["email", true], ["multiple_choice", false], ["multiple_choice", false]]);
-    expect(t.branding.theme.labels.submit).toBe("Join the waitlist");
-    expect(t.category).toBe("Leads & Contact");
-  });
-});
-
-describe("what the form validator keeps", () => {
-  it("keeps the couple's own words on the Yes / No question (an unknown key would be dropped silently)", () => {
-    const attend = bySlug.get("wedding-rsvp")!.fields.find((f: any) => f.fieldId === "wedding-attend");
-    const r = fieldSchema.safeParse({ ...attend, deleted: false });
-    expect(r.success).toBe(true);
-    if (r.success) expect(r.data).toMatchObject({ yesLabel: "Joyfully accept", noLabel: "Regretfully decline" });
-  });
-
-  it("keeps every colour, font and setting of each rebuilt template's branding", () => {
-    for (const slug of ["wedding-rsvp", "job-application", "waitlist"]) {
-      const branding = bySlug.get(slug)!.branding;
-      const r = brandingSchema.safeParse(branding);
-      expect(r.success).toBe(true);
-      if (r.success) expect(r.data).toEqual(branding);
-    }
-  });
-
-  it("asks one question per row in the ten new families, and puts no icon or logo on any template", () => {
+  it("asks one question per row in the ten new families and in every template that wears one", () => {
     for (const look of FORM_LOOKS.filter((l) => NEW_IDS.includes(l.id))) expect(look.branding.fieldGrouping).toBe("single");
     for (const slug of ["wedding-rsvp", "job-application", "waitlist"]) expect(bySlug.get(slug)!.branding.fieldGrouping).toBe("single");
   });

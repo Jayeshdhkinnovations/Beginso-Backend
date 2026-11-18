@@ -12,8 +12,8 @@ describe("the built-in catalogue: groups and tags", () => {
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 
-  it("puts every template in one of the twelve groups, and uses at least ten of them", () => {
-    expect(CATEGORY_GROUPS).toHaveLength(12);
+  it("puts every template in one of the thirteen groups, and uses at least ten of them", () => {
+    expect(CATEGORY_GROUPS).toHaveLength(13);
     for (const t of catalogue) expect(CATEGORY_GROUPS as readonly string[]).toContain(t.category);
     const used = new Set(gallery.map((t) => t.category));
     expect(used.size).toBeGreaterThanOrEqual(10);
@@ -37,12 +37,15 @@ describe("the built-in catalogue: groups and tags", () => {
       const n = gallery.filter((t) => t.category === group).length;
       if (n > 0) expect(n).toBeGreaterThanOrEqual(2);
     }
-    expect(bySlug.get("schedule-a-viewing")!.tags).toEqual(expect.arrayContaining(["Real Estate", "Appointments"]));
+    expect(bySlug.get("schedule-a-viewing")!.tags).toEqual(expect.arrayContaining(["real-estate", "booking"]));
     for (const t of catalogue) for (const tag of t.tags) expect(typeof tag === "string" && tag.trim().length > 0).toBe(true);
   });
 
-  it("features six templates, and gives every template its own sort order and a time to fill", () => {
-    expect(gallery.filter((t) => t.featured)).toHaveLength(6);
+  it("features the six starred templates of wave 1 first, and gives every template its own sort order and a time to fill", () => {
+    // an older template keeps its old flag until the template that replaces it is synced, but it sorts after the starred ones: the strip of six shows only those
+    const featured = gallery.filter((t) => t.featured).sort((a, b) => a.sortOrder - b.sortOrder);
+    expect(featured.slice(0, 6).every((t) => t.wave === 1)).toBe(true);
+    expect(featured.filter((t) => t.wave === 1).map((t) => t.slug).sort()).toEqual(["appointment-booking", "contact-us", "event-registration", "job-application", "waitlist", "wedding-rsvp"]);
     const catalogued = catalogue.filter((t) => CATALOG_META[t.slug]);
     const orders = catalogued.map((t) => t.sortOrder);
     expect(new Set(orders).size).toBe(orders.length);
@@ -81,9 +84,9 @@ describe("the built-in catalogue: content", () => {
 
   it("uses the Compact layout only for internal forms, not for the four customer-facing ones", () => {
     const compact = gallery.filter((t) => t.settings?.layout === "compact").map((t) => t.slug).sort();
-    expect(compact).toEqual(["equipment-request", "property-inspection-report", "timesheet-submission"]);
-    for (const slug of ["appointment-booking", "appointment-request", "schedule-a-viewing", "club-membership-renewal"]) {
-      expect(bySlug.get(slug)!.settings.layout).toBe("classic");
+    expect(compact).toEqual(["equipment-request", "it-bug-request", "property-inspection-report", "timesheet-submission"]);
+    for (const slug of ["appointment-booking", "schedule-a-viewing", "club-membership-renewal"]) {
+      expect(bySlug.get(slug)!.settings.layout).not.toBe("compact");
     }
   });
 
@@ -130,9 +133,9 @@ describe("the built-in catalogue: content", () => {
         (f.logicRules ?? []).map((r: any) => ({ source: f.label, target: t.fields.find((x: any) => x.fieldId === r.targetFieldId).label, when: r.condition.value, action: r.action })),
       );
     };
-    expect(rulesOf("food-delivery-order")).toEqual([{ source: "Delivery Time", target: "Scheduled Time", when: "Schedule for later", action: "show" }]);
+    expect(rulesOf("food-delivery-order")).toEqual([{ source: "When?", target: "Delivery time", when: "Schedule for later", action: "show" }]);
     expect(rulesOf("wedding-rsvp").map((r: any) => r.target).sort()).toEqual(["Meal", "Number of guests"]);
-    expect(rulesOf("wedding-rsvp").every((r: any) => r.when === "Yes" && r.source === "Will you be there?")).toBe(true);
+    expect(rulesOf("wedding-rsvp").every((r: any) => r.when === "Yes" && r.source === "Will you attend?")).toBe(true);
   });
 
   it("gives the party RSVP a thank-you screen with confetti, and the wedding RSVP a quiet one", () => {

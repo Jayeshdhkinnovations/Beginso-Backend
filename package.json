@@ -25,6 +25,7 @@
     "backfill:duplicates": "ts-node src/scripts/backfillDuplicateDetection.ts",
     "seed:templates": "ts-node src/scripts/seedTemplates.ts",
     "sync:templates": "ts-node src/scripts/syncTemplates.ts",
+    "reactivate:templates": "ts-node src/scripts/reactivateTemplates.ts",
     "report:form-icons": "ts-node src/scripts/reportFormIcons.ts",
     "migrate:form-icons-none": "ts-node src/scripts/migrateFormIconsNone.ts",
     "seed:field-showcase": "ts-node src/scripts/seedFieldShowcase.ts",

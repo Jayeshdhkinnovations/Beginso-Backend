@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { z, ZodError } from "zod";
 import { superAdminService } from "../services/superadmin.service";
+import { getAdminsList, getAdminActivity } from "../services/adminPeople.service";
+import { adminsQuerySchema, parseObjectId, parseQuery } from "../validations/adminPeople.validator";
 import { createAdminSchema, updateAdminSchema } from "../validations/superadmin.validator";
 
 export const getStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -71,18 +73,33 @@ export const getMailLogs = async (req: Request, res: Response, next: NextFunctio
 
 export const getAdmins = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { page, limit, search, status } = req.query;
-    const adminsData = await superAdminService.getAdmins({
-      page: page ? parseInt(String(page), 10) : undefined,
-      limit: limit ? parseInt(String(limit), 10) : undefined,
-      search: search ? String(search) : undefined,
-      status: status ? String(status) : undefined,
-    });
+    const adminsData = await getAdminsList(parseQuery(adminsQuerySchema, req.query));
     res.status(200).json({
       success: true,
       ...adminsData,
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.statusCode === 422) {
+      res.status(422).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+export const getAdminActivityFeed = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const activity = await getAdminActivity(parseObjectId(req.params.id));
+    if (!activity) {
+      res.status(404).json({ success: false, message: "Admin not found" });
+      return;
+    }
+    res.status(200).json({ success: true, activity });
+  } catch (error: any) {
+    if (error?.statusCode === 422) {
+      res.status(422).json({ success: false, message: error.message });
+      return;
+    }
     next(error);
   }
 };

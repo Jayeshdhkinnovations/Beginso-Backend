@@ -54,7 +54,7 @@ router.get("/health", ops.getHealth);
 router.get("/exports", ops.listExports);
 router.post("/exports/:id/retry", ops.retryExport);
 
-// Read-only metrics for Overview and Insights (docs/admin-metrics.md in Beginso-Admin): aggregations, cached for 60 seconds, limited to 60 requests a minute per user.
+// Read-only metrics for Overview and Insights (see the comments in this file): aggregations, cached for 60 seconds, limited to 60 requests a minute per user.
 const metricsLimit = userActionRateLimiter("admin-metrics", 60, 60 * 1000);
 router.get("/metrics/overview", metricsLimit, metrics.getOverviewMetrics);
 router.get("/metrics/growth", metricsLimit, metrics.getGrowthMetrics);

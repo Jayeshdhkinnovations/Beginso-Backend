@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { metricsQuerySchema } from "../validations/adminMetrics.validator";
 import * as metrics from "../services/adminMetrics.service";
 
-// Thin HTTP layer for the super admin metrics (docs/admin-metrics.md in Beginso-Admin). Read-only; the router already applies protect and
+// Thin HTTP layer for the super admin metrics (see the comments in this file). Read-only; the router already applies protect and
 // requireSuperAdmin. Answers are never cached by the browser or a proxy: the server keeps its own 60 second cache.
 
 const respond =

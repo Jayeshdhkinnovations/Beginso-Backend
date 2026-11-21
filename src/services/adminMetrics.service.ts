@@ -13,7 +13,7 @@ import { denseSeries, resolveRange, type MetricsRange } from "../utils/metricsRa
 
 // Read-only platform metrics for the super admin console (Insights and Overview). Every figure is an aggregation or an indexed count: no
 // collection is loaded into memory. Dates are UTC and ranges include the end day. Each result is cached for 60 seconds per range, and
-// carries `computedAt` so the console can say how old it is. See docs/admin-metrics.md for every definition.
+// carries `computedAt` so the console can say how old it is. See docs/admin-metrics.md in Beginso-Admin for every definition.
 //
 // Privacy: counts, ids and names of workspaces and forms only. No passwords, tokens, IPs, answers or respondent emails.
 
@@ -148,7 +148,7 @@ export function getOverviewMetrics(input: MetricsInput) {
     return {
       kpis: {
         totalUsers: { value: statusCount("active") + statusCount("suspended"), suspended: statusCount("suspended") },
-        // Last 30 days up to now, whatever range was asked for (the definition is in docs/admin-metrics.md).
+        // Last 30 days up to now, whatever range was asked for (the definition is in docs/admin-metrics.md in Beginso-Admin).
         activeUsers30d: { value: active30, previous: UNKNOWN("Sessions keep only their last activity, so an earlier window cannot be rebuilt.") },
         newRegistrations: { value: registrationsTotal, previous: prevRegistrations ? sum(prevRegistrations) : null },
         workspaces: { value: workspaces },

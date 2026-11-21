@@ -9,6 +9,7 @@ import ReportModel from "../models/Report";
 import SessionModel from "../models/Session";
 import { AuditLog, IAuditLog } from "../models/AuditLog";
 import { escapeRegex } from "../utils/safeInput";
+import { dayRange } from "../validations/adminContent.validator";
 import { buildInfo } from "../utils/buildInfo";
 import { auditInfo, parseAuditSummary, AuditSummary } from "../utils/auditInfo";
 import { deleteWorkspaceData } from "./cleanup.service";
@@ -226,22 +227,68 @@ const templateRow = (t: any, usage: number) => ({
   isActive: t.isActive,
   fieldCount: (t.fields ?? []).length,
   usageCount: usage,
+  featured: !!t.featured,
+  wave: typeof t.wave === "number" ? t.wave : null,
   updatedAt: t.updatedAt,
 });
 
-export const listTemplates = async (query: { page?: number; limit?: number; search?: string }) => {
+export interface TemplatesListQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  category?: string;
+  status?: "all" | "active" | "hidden";
+  sort?: "name" | "category" | "forms" | "updated" | "fields" | "featured";
+  order?: "asc" | "desc";
+}
+
+const TEMPLATE_SORT_KEY: Record<NonNullable<TemplatesListQuery["sort"]>, unknown> = {
+  name: { $toLower: { $ifNull: ["$name", ""] } },
+  category: { $toLower: { $ifNull: ["$category", ""] } },
+  forms: "$usageCount",
+  updated: "$updatedAt",
+  fields: "$fieldCount",
+  featured: { $ifNull: ["$featured", false] },
+};
+
+// One aggregation. `usageCount` is the number of forms created from the template (Form.templateId, soft-deleted forms included, as
+// before); sorting by it counts in the database. `fields` is dropped from the rows early: only its size is kept.
+export const listTemplates = async (query: TemplatesListQuery) => {
   const { page: p, limit, skip } = page(query);
-  const filter: any = { ...BUILT_IN, ...(query.search ? { name: { $regex: escapeRegex(query.search), $options: "i" } } : {}) };
-  const [total, templates] = await Promise.all([
+  const filter: any = { ...BUILT_IN };
+  if (query.search) filter.name = { $regex: escapeRegex(query.search), $options: "i" };
+  if (query.category) filter.category = query.category;
+  if (query.status === "active") filter.isActive = true;
+  if (query.status === "hidden") filter.isActive = false;
+  const dir: 1 | -1 = (query.order ?? "desc") === "asc" ? 1 : -1;
+  const sort = query.sort ?? "updated";
+
+  const usageStage = [
+    { $lookup: { from: Form.collection.name, localField: "_id", foreignField: "templateId", as: "uc", pipeline: [{ $count: "n" }] } },
+    { $addFields: { usageCount: { $ifNull: [{ $arrayElemAt: ["$uc.n", 0] }, 0] } } },
+  ];
+
+  const [total, rows, categories] = await Promise.all([
     Template.countDocuments(filter),
-    Template.find(filter).sort({ updatedAt: -1 }).skip(skip).limit(limit).lean(),
+    Template.aggregate([
+      { $match: filter },
+      { $addFields: { fieldCount: { $size: { $ifNull: ["$fields", []] } } } },
+      ...(sort === "forms" ? usageStage : []),
+      { $addFields: { sortKey: TEMPLATE_SORT_KEY[sort] } },
+      { $sort: { sortKey: dir, _id: dir } },
+      { $skip: skip },
+      { $limit: limit },
+      ...(sort === "forms" ? [] : usageStage),
+      { $project: { fields: 0, pages: 0, settings: 0, branding: 0, sortKey: 0, uc: 0 } },
+    ]).allowDiskUse(true),
+    // Every built-in category, whatever the other filters say, for the filter menu.
+    Template.distinct("category", BUILT_IN),
   ]);
-  const usage = await Form.aggregate([
-    { $match: { templateId: { $in: templates.map((t: any) => t._id) } } },
-    { $group: { _id: "$templateId", n: { $sum: 1 } } },
-  ]);
-  const usageOf = new Map(usage.map((u: any) => [String(u._id), u.n as number]));
-  return { data: templates.map((t: any) => templateRow(t, usageOf.get(String(t._id)) ?? 0)), pagination: pagination(total, p, limit) };
+  return {
+    data: rows.map((t: any) => ({ ...templateRow({ ...t, fields: [] }, t.usageCount ?? 0), fieldCount: t.fieldCount })),
+    pagination: pagination(total, p, limit),
+    categories: (categories as string[]).filter(Boolean).sort((a, b) => a.localeCompare(b)),
+  };
 };
 
 const TEMPLATE_KEYS = ["name", "description", "category", "theme", "isActive", "fields", "pages", "settings"] as const;
@@ -379,12 +426,31 @@ export const getHealth = async () => {
 // Export jobs
 // ---------------------------------------------------------------------------------------------------
 
-export const listExports = async (query: { page?: number; limit?: number; status?: string }) => {
+export interface ExportsListQuery {
+  page?: number;
+  limit?: number;
+  status?: string;
+  format?: "csv" | "pdf";
+  requester?: string;
+  from?: string;
+  to?: string;
+  order?: "asc" | "desc";
+}
+
+export const listExports = async (query: ExportsListQuery) => {
   const { page: p, limit, skip } = page(query);
   const filter: any = query.status ? { status: query.status } : {};
+  if (query.format) filter.format = query.format;
+  const created = dayRange(query.from, query.to);
+  if (created) filter.createdAt = created;
+  if (query.requester) {
+    const rx = { $regex: escapeRegex(query.requester), $options: "i" };
+    filter.requestedBy = { $in: await User.distinct("_id", { $or: [{ fullName: rx }, { email: rx }] }) };
+  }
+  const dir: 1 | -1 = (query.order ?? "desc") === "asc" ? 1 : -1;
   const [total, reports] = await Promise.all([
     ReportModel.countDocuments(filter),
-    ReportModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate("requestedBy", "fullName email").populate("workspaceId", "name").lean(),
+    ReportModel.find(filter).sort({ createdAt: dir, _id: dir }).skip(skip).limit(limit).populate("requestedBy", "fullName email").populate("workspaceId", "name").lean(),
   ]);
   return {
     data: reports.map((r: any) => ({

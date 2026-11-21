@@ -29,3 +29,4 @@ export const getGrowthMetrics = respond((q) => metrics.getGrowthMetrics(q));
 export const getEngagementMetrics = respond((q) => metrics.getEngagementMetrics(q));
 export const getUsageMetrics = respond((q) => metrics.getUsageMetrics(q));
 export const getAttentionMetrics = respond((q) => metrics.getAttentionMetrics(q));
+export const getMailMetrics = respond((q) => metrics.getMailMetrics(q));

@@ -17,7 +17,8 @@ import {
 import * as ops from "../controllers/superadminOps.controller";
 import * as metrics from "../controllers/adminMetrics.controller";
 import { userActionRateLimiter } from "../middleware/rateLimiter";
-import { protect, requireSuperAdmin } from "../middleware/auth.middleware";
+import * as serverAdmin from "../controllers/serverAdmin.controller";
+import { protect, requireSuperAdmin, blockSuspended } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -63,5 +64,11 @@ router.get("/metrics/engagement", metricsLimit, metrics.getEngagementMetrics);
 router.get("/metrics/usage", metricsLimit, metrics.getUsageMetrics);
 router.get("/metrics/attention", metricsLimit, metrics.getAttentionMetrics);
 router.get("/metrics/mail", metricsLimit, metrics.getMailMetrics);
+
+// Read-only Docker view for the Server page: container list, container logs, health. Reaches Docker only through a read-only socket proxy
+// (see serverAdmin.service.ts); each route has its own rate limit bucket, 30 a minute per user.
+router.get("/server/containers", blockSuspended as any, userActionRateLimiter("admin-server-containers", 30, 60 * 1000), serverAdmin.getContainers);
+router.get("/server/containers/:name/logs", blockSuspended as any, userActionRateLimiter("admin-server-logs", 30, 60 * 1000), serverAdmin.getContainerLogs);
+router.get("/server/health", blockSuspended as any, userActionRateLimiter("admin-server-health", 30, 60 * 1000), serverAdmin.getServerHealth);
 
 export default router;

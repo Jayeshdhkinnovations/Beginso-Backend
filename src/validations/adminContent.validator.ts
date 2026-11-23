@@ -77,7 +77,7 @@ export const logsStatusSchema = z.object({
   status: opt(z.string().trim().toLowerCase().regex(/^([1-5]\d\d|[2-5]xx)$/, "Use a status code like 400 or a class like 4xx")),
 });
 
-export const AUDIT_TARGET_TYPES = ["admin", "workspace", "form", "template", "session", "report"] as const;
+export const AUDIT_TARGET_TYPES = ["admin", "workspace", "form", "template", "session", "report", "server"] as const;
 export const auditTargetSchema = z.object({ targetType: opt(z.enum(AUDIT_TARGET_TYPES)) });
 
 /** One readable line for a 422 answer. */

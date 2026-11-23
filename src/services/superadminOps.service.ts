@@ -23,7 +23,7 @@ export type Actor = { id: string; email: string; fullName: string };
 
 const httpError = (statusCode: number, message: string): Error => Object.assign(new Error(message), { statusCode });
 
-const audit = (actor: Actor, action: IAuditLog["action"], targetType: IAuditLog["targetType"], targetId: string, before?: Record<string, any>, after?: Record<string, any>) =>
+export const audit = (actor: Actor, action: IAuditLog["action"], targetType: IAuditLog["targetType"], targetId: string, before?: Record<string, any>, after?: Record<string, any>) =>
   AuditLog.create({
     actorId: actor.id,
     actorEmail: actor.email,

@@ -67,6 +67,57 @@ services:
         max-file: "5"
     # The health check is the one built into the image (GET /api/health).
 
+  # OPTIONAL: powers the super admin "Server" page (read-only container list, stats and logs — see
+  # src/services/serverAdmin.service.ts). Leave the service out entirely, or stop it, and the page just reports
+  # "Server access is not configured" — nothing else depends on it. Settings for the api container above:
+  #   DOCKER_PROXY_URL=http://docker-socket-proxy:2375   (reached by service name, same private network)
+  #   ADMIN_VISIBLE_CONTAINERS=beginso-api                (comma separated; add more of THIS VM's container names to show them too)
+  # Image tag pinned on purpose (a moving tag such as latest could change what is allowed); bump it deliberately, after reading
+  # tecnativa/docker-socket-proxy's release notes. See docker-compose.dev-proxy.yml for what each permission flag below means.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: beginso-docker-proxy
+    labels:
+      com.beginso.app: api
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EXEC: "0"
+      GRPC: "0"
+      IMAGES: "0"
+      INFO: "0"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VOLUMES: "0"
+    volumes:
+      # Read-only for the proxy; never mounted into the api container itself.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+    # No `ports:` here on purpose — unlike docker-compose.dev-proxy.yml's loopback-published port for running the API outside
+    # Docker, production reaches this only by service name over the private `beginso-api` network below. Publishing it would
+    # let anything on the VM read every container's environment variables (CONTAINERS=1 permits inspect, not just list).
+
 # Our own network, named and labelled, so it is not the shared default of the machine and `docker compose down` removes exactly this one.
 networks:
   default:

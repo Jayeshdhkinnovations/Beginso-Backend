@@ -6,6 +6,7 @@ import {
   getMailLogs,
   getAdmins,
   getAdminDetail,
+  getAdminActivityFeed,
   createAdmin,
   updateAdmin,
   deleteAdmin,
@@ -15,7 +16,10 @@ import {
   reconcileStorage,
 } from "../controllers/superadmin.controller";
 import * as ops from "../controllers/superadminOps.controller";
-import { protect, requireSuperAdmin } from "../middleware/auth.middleware";
+import * as metrics from "../controllers/adminMetrics.controller";
+import { userActionRateLimiter } from "../middleware/rateLimiter";
+import * as serverAdmin from "../controllers/serverAdmin.controller";
+import { protect, requireSuperAdmin, blockSuspended } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -28,6 +32,7 @@ router.get("/logs", getLogs);
 router.get("/mail-logs", getMailLogs);
 router.get("/admins", getAdmins);
 router.get("/admins/:id", getAdminDetail);
+router.get("/admins/:id/activity", getAdminActivityFeed);
 router.post("/admins", createAdmin);
 router.patch("/admins/:id", updateAdmin);
 router.patch("/admins/:id/limits", updateAdminLimits);
@@ -44,6 +49,7 @@ router.get("/storage", ops.getStorage);
 router.get("/workspaces", ops.listWorkspaces);
 router.get("/workspaces/:id", ops.getWorkspace);
 router.delete("/workspaces/:id", ops.deleteWorkspace);
+router.get("/forms", ops.listForms);
 router.get("/templates", ops.listTemplates);
 router.post("/templates", ops.createTemplate);
 router.patch("/templates/:id", ops.updateTemplate);
@@ -51,5 +57,20 @@ router.delete("/templates/:id", ops.deleteTemplate);
 router.get("/health", ops.getHealth);
 router.get("/exports", ops.listExports);
 router.post("/exports/:id/retry", ops.retryExport);
+
+// Read-only metrics for Overview and Insights (see the comments in this file): aggregations, cached for 60 seconds, limited to 60 requests a minute per user.
+const metricsLimit = userActionRateLimiter("admin-metrics", 60, 60 * 1000);
+router.get("/metrics/overview", metricsLimit, metrics.getOverviewMetrics);
+router.get("/metrics/growth", metricsLimit, metrics.getGrowthMetrics);
+router.get("/metrics/engagement", metricsLimit, metrics.getEngagementMetrics);
+router.get("/metrics/usage", metricsLimit, metrics.getUsageMetrics);
+router.get("/metrics/attention", metricsLimit, metrics.getAttentionMetrics);
+router.get("/metrics/mail", metricsLimit, metrics.getMailMetrics);
+
+// Read-only Docker view for the Server page: container list, container logs, health. Reaches Docker only through a read-only socket proxy
+// (see serverAdmin.service.ts); each route has its own rate limit bucket, 30 a minute per user.
+router.get("/server/containers", blockSuspended as any, userActionRateLimiter("admin-server-containers", 30, 60 * 1000), serverAdmin.getContainers);
+router.get("/server/containers/:name/logs", blockSuspended as any, userActionRateLimiter("admin-server-logs", 30, 60 * 1000), serverAdmin.getContainerLogs);
+router.get("/server/health", blockSuspended as any, userActionRateLimiter("admin-server-health", 30, 60 * 1000), serverAdmin.getServerHealth);
 
 export default router;

@@ -1,0 +1,68 @@
+# OPTIONAL, local development and QA only: starts a READ-ONLY Docker socket proxy so the super admin "Server" page (container list and logs) can be
+# tried against your own dev containers. It is not used by docker-compose.prod.yml and no workflow copies or runs it.
+#
+# How to use it with the dev compose:
+#   docker compose -f docker-compose.yml -f docker-compose.dev-proxy.yml up
+# then give the API these settings (for the api service, or in .env.docker):
+#   DOCKER_PROXY_URL=http://docker-socket-proxy:2375        (the API runs inside compose, same network)
+#   DOCKER_PROXY_URL=http://127.0.0.1:2375                  (the API runs outside Docker with npm run dev)
+#   ADMIN_VISIBLE_CONTAINERS=beginso-api-dev-api-1,beginso-api-dev-mongo-1
+# The container names above are what compose usually generates (project-service-number); check yours with `docker ps` (NAMES column).
+# Only the names listed in ADMIN_VISIBLE_CONTAINERS are ever shown; every other container answers "not found".
+#
+# What the proxy allows: GET requests under /containers (CONTAINERS=1) and nothing else. POST=0 blocks every write, and every other API group
+# is switched off explicitly below. EVENTS, PING and VERSION keep the image default.
+#
+# RESIDUAL RISK, read this: CONTAINERS=1 allows EVERY GET under /containers, including inspect (/containers/<id>/json, which contains the
+# environment variables of the container, so secrets) and export. The proxy cannot tell a list from an inspect. Two things keep that safe:
+#   1. the proxy must be reachable ONLY by the API container (a private network, no published port in production), and
+#   2. the API code calls only the list, stats and logs endpoints (see the comments in src/services/serverAdmin.service.ts).
+# Anyone who can reach this proxy can read the environment of every container on the machine. Treat it like the Docker socket, read-only.
+#
+# Image tag: pinned to 0.3.0 on purpose (a moving tag such as latest could change what is allowed). Change it deliberately, after reading the
+# release notes of tecnativa/docker-socket-proxy.
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EXEC: "0"
+      GRPC: "0"
+      IMAGES: "0"
+      INFO: "0"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VOLUMES: "0"
+    volumes:
+      # The Docker socket, read-only for the proxy. It is mounted into the PROXY only, never into the API container.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default # the private network compose creates for the project (shared with the api service), not reachable from outside
+    # DEV ONLY: published on the loopback address of this machine so the API can run outside Docker (npm run dev). Never on 0.0.0.0, and
+    # production must NOT publish it: there the API reaches it by name over a private network only.
+    ports:
+      - "127.0.0.1:2375:2375"
+
+# No network is declared here: the proxy joins the default network of the compose project it is combined with, so the api service reaches it as
+# docker-socket-proxy. Run on its own, the file creates its own project network.

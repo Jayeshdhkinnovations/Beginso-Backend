@@ -208,14 +208,12 @@ export class SuperAdminService {
     to?: string;
     route?: string;
     search?: string;
+    /** An exact status code ("400") or a class ("4xx"), matched on statusCode. */
+    status?: string;
     page?: number;
     limit?: number;
   }) {
     const query: any = {};
-
-    if (filters.level) {
-      query.level = filters.level;
-    }
 
     if (filters.route) {
       query.route = { $regex: escapeRegex(String(filters.route)), $options: "i" };
@@ -233,6 +231,21 @@ export class SuperAdminService {
       if (filters.to) {
         query.createdAt.$lte = new Date(filters.to);
       }
+    }
+
+    if (filters.status) {
+      const s = filters.status.toLowerCase();
+      query.statusCode = s.endsWith("xx") ? { $gte: Number(s[0]) * 100, $lt: (Number(s[0]) + 1) * 100 } : Number(s);
+    }
+
+    // The level chips show how many rows each level has under the OTHER filters, so they are counted before `level` is applied: one
+    // $group over the matching rows, never a load of the collection.
+    const levelRows = await SystemLog.aggregate([{ $match: query }, { $group: { _id: "$level", n: { $sum: 1 } } }]);
+    const levelCounts = { info: 0, warn: 0, error: 0 };
+    for (const r of levelRows) if (r._id in levelCounts) levelCounts[r._id as keyof typeof levelCounts] = r.n;
+
+    if (filters.level) {
+      query.level = filters.level;
     }
 
     let page = filters.page || 1;
@@ -267,6 +280,7 @@ export class SuperAdminService {
 
     return {
       logs: sanitizedLogs,
+      levelCounts,
       pagination: {
         total,
         page,
@@ -770,12 +784,17 @@ export class SuperAdminService {
   async getAuditLogs(filters: {
     actor?: string;
     action?: string;
+    targetType?: string;
     from?: string;
     to?: string;
     page?: number;
     limit?: number;
   }) {
     const query: any = {};
+
+    if (filters.targetType) {
+      query.targetType = filters.targetType;
+    }
 
     if (filters.actor) {
       query.$or = [

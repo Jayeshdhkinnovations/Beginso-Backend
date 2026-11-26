@@ -30,6 +30,8 @@ const ADVISED = [
   "SMTP_USER",
   "SMTP_PASS",
   "SMTP_FROM_EMAIL",
+  "DOCKER_PROXY_URL", // optional: without it the super admin Server page says it is not configured
+  "ADMIN_VISIBLE_CONTAINERS", // optional: the container names that page may show
 ];
 
 // PREFLIGHT_KEY_PATH exists only so the tests can point at a temporary file.

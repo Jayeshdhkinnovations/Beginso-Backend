@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from "express";
+import { ZodError } from "zod";
 import * as ops from "../services/superadminOps.service";
+import { listWorkspacesPeople } from "../services/adminPeople.service";
+import { parseQuery, storageQuerySchema, workspacesQuerySchema } from "../validations/adminPeople.validator";
+import { listAdminForms } from "../services/adminContent.service";
+import { templatesQuerySchema, formsQuerySchema, exportsQuerySchema, zodMessage } from "../validations/adminContent.validator";
 
 // Thin HTTP layer for the operator-console surfaces in superadminOps.service.ts. Errors carrying a statusCode
 // (404, 422) are answered here; everything else goes to the global handler.
@@ -18,7 +23,9 @@ const handle =
     try {
       res.status(ok).json({ success: true, ...(await run(req)) });
     } catch (error: any) {
-      if (error?.statusCode === 404 || error?.statusCode === 422) {
+      if (error instanceof ZodError) {
+        res.status(422).json({ success: false, message: zodMessage(error) });
+      } else if (error?.statusCode === 404 || error?.statusCode === 422) {
         res.status(error.statusCode).json({ success: false, message: error.message });
       } else if (error?.name === "ValidationError") {
         res.status(422).json({ success: false, message: error.message });
@@ -30,13 +37,13 @@ const handle =
 
 const listQuery = (req: Request) => ({ page: num(req.query.page), limit: num(req.query.limit), search: str(req.query.search) });
 
-export const getStorage = handle((req) => ops.getStorage({ ...listQuery(req), state: str(req.query.state) as ops.StorageState | undefined }));
+export const getStorage = handle((req) => ops.getStorage(parseQuery(storageQuerySchema, req.query)));
 
-export const listWorkspaces = handle((req) => ops.listWorkspaces(listQuery(req)));
+export const listWorkspaces = handle((req) => listWorkspacesPeople(parseQuery(workspacesQuerySchema, req.query)));
 export const getWorkspace = handle((req) => ops.getWorkspace(String(req.params.id)));
 export const deleteWorkspace = handle((req) => ops.deleteWorkspace(actorOf(req), String(req.params.id), req.body?.confirm));
 
-export const listTemplates = handle((req) => ops.listTemplates(listQuery(req)));
+export const listTemplates = handle((req) => ops.listTemplates(templatesQuerySchema.parse(req.query)));
 export const createTemplate = handle((req) => ops.createTemplate(actorOf(req), req.body), 201);
 export const updateTemplate = handle((req) => ops.updateTemplate(actorOf(req), String(req.params.id), req.body));
 export const deleteTemplate = handle((req) => ops.deleteTemplate(actorOf(req), String(req.params.id), req.body?.confirm));
@@ -47,5 +54,7 @@ export const revokeAllUserSessions = handle((req) => ops.revokeAllUserSessions(a
 
 export const getHealth = handle(() => ops.getHealth());
 
-export const listExports = handle((req) => ops.listExports({ ...listQuery(req), status: str(req.query.status) }));
+export const listExports = handle((req) => ops.listExports(exportsQuerySchema.parse(req.query)));
 export const retryExport = handle((req) => ops.retryExport(actorOf(req), String(req.params.id)));
+
+export const listForms = handle((req) => listAdminForms(formsQuerySchema.parse(req.query)));

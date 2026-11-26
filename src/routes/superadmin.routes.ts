@@ -16,6 +16,8 @@ import {
   reconcileStorage,
 } from "../controllers/superadmin.controller";
 import * as ops from "../controllers/superadminOps.controller";
+import * as metrics from "../controllers/adminMetrics.controller";
+import { userActionRateLimiter } from "../middleware/rateLimiter";
 import { protect, requireSuperAdmin } from "../middleware/auth.middleware";
 
 const router = Router();
@@ -53,5 +55,13 @@ router.delete("/templates/:id", ops.deleteTemplate);
 router.get("/health", ops.getHealth);
 router.get("/exports", ops.listExports);
 router.post("/exports/:id/retry", ops.retryExport);
+
+// Read-only metrics for Overview and Insights (see the comments in this file): aggregations, cached for 60 seconds, limited to 60 requests a minute per user.
+const metricsLimit = userActionRateLimiter("admin-metrics", 60, 60 * 1000);
+router.get("/metrics/overview", metricsLimit, metrics.getOverviewMetrics);
+router.get("/metrics/growth", metricsLimit, metrics.getGrowthMetrics);
+router.get("/metrics/engagement", metricsLimit, metrics.getEngagementMetrics);
+router.get("/metrics/usage", metricsLimit, metrics.getUsageMetrics);
+router.get("/metrics/attention", metricsLimit, metrics.getAttentionMetrics);
 
 export default router;

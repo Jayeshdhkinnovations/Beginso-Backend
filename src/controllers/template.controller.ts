@@ -10,6 +10,7 @@ import { hasPermission } from "../middleware/permission.middleware";
 import mongoose from "mongoose";
 import { getTemplateDescription, getTemplateSettings, slugify, slugifyWithId } from "../utils/templateDefaults";
 import { estimateMinutes, galleryGroups, groupOfCategory, resolveCategoryGroup } from "../utils/templateCatalog";
+import { findTemplateByKey } from "../utils/templateLookup";
 
 const formService = new FormService();
 

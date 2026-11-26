@@ -6,7 +6,8 @@ import { REPLACES, seedTemplates, showIfProblems } from "../data/seedTemplates";
 import { brandingSchema, fieldSchema } from "../validations/form.validator";
 import { FORM_LAYOUT_VALUES } from "../models/Form";
 import { readabilityChecks } from "../utils/formLooks";
-import { CATEGORY_GROUPS, findTemplateByKey } from "../utils/templateCatalog";
+import { CATEGORY_GROUPS } from "../utils/templateCatalog";
+import { findTemplateByKey } from "../utils/templateLookup";
 import { planTemplateSync, syncTemplates } from "../services/templateSync.service";
 import { waveOf } from "../scripts/syncTemplates";
 

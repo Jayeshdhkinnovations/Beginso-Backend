@@ -332,6 +332,34 @@ function aggregateRows(rows: any[]): { _id: string; n: number }[] {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+// Mail: outcomes per day, from MailLog by createdAt. MailLog keeps only 30 days (a TTL index purges older rows), so a range reaching
+// further back shows zeros for the purged days: they are not "no mail", they are gone. One $group by day and outcome.
+// ---------------------------------------------------------------------------------------------------------------------------------
+export function getMailMetrics(input: MetricsInput) {
+  return run("mail", input, async (range) => {
+    const rows = await MailLog.aggregate([
+      { $match: between("createdAt", range.from, range.to) },
+      { $group: { _id: { day: dayOf("createdAt"), outcome: "$outcome" }, n: { $sum: 1 } } },
+    ]);
+    const series = (outcome: string) => denseSeries(range.dayKeys, aggregateRows(rows.filter((r: any) => r._id.outcome === outcome)));
+    const sent = series("sent");
+    const failed = series("failed");
+    const rateLimited = series("rate_limited");
+    const queued = series("queued");
+    const totals = { sent: sum(sent), failed: sum(failed), rateLimited: sum(rateLimited), queued: sum(queued) };
+    return {
+      days: range.dayKeys,
+      sent,
+      failed,
+      rateLimited,
+      queued,
+      totals,
+      deliveryRate: totals.sent + totals.failed > 0 ? totals.sent / (totals.sent + totals.failed) : null,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
 // Needs attention: counts only, each linking to the page that explains it. Not range based.
 // ---------------------------------------------------------------------------------------------------------------------------------
 export async function getAttentionMetrics(input: Pick<MetricsInput, "refresh">) {

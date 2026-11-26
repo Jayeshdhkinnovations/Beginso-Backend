@@ -4,6 +4,7 @@ import { superAdminService } from "../services/superadmin.service";
 import { getAdminsList, getAdminActivity } from "../services/adminPeople.service";
 import { adminsQuerySchema, parseObjectId, parseQuery } from "../validations/adminPeople.validator";
 import { createAdminSchema, updateAdminSchema } from "../validations/superadmin.validator";
+import { logsStatusSchema, auditTargetSchema, zodMessage } from "../validations/adminContent.validator";
 
 export const getStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -32,7 +33,9 @@ export const getAbuse = async (req: Request, res: Response, next: NextFunction):
 export const getLogs = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { level, from, to, route, search, page, limit } = req.query;
+    const { status } = logsStatusSchema.parse(req.query);
     const logsData = await superAdminService.getLogs({
+      status,
       level: level ? String(level) : undefined,
       from: from ? String(from) : undefined,
       to: to ? String(to) : undefined,
@@ -46,6 +49,10 @@ export const getLogs = async (req: Request, res: Response, next: NextFunction): 
       ...logsData,
     });
   } catch (error) {
+    if (error instanceof ZodError) {
+      res.status(422).json({ success: false, message: zodMessage(error) });
+      return;
+    }
     next(error);
   }
 };
@@ -217,7 +224,9 @@ export const deleteAdmin = async (req: Request, res: Response, next: NextFunctio
 export const getAuditLogs = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { actor: filterActor, action, from, to, page, limit } = req.query;
+    const { targetType } = auditTargetSchema.parse(req.query);
     const auditData = await superAdminService.getAuditLogs({
+      targetType,
       actor: filterActor ? String(filterActor) : undefined,
       action: action ? String(action) : undefined,
       from: from ? String(from) : undefined,
@@ -230,6 +239,10 @@ export const getAuditLogs = async (req: Request, res: Response, next: NextFuncti
       ...auditData,
     });
   } catch (error) {
+    if (error instanceof ZodError) {
+      res.status(422).json({ success: false, message: zodMessage(error) });
+      return;
+    }
     next(error);
   }
 };

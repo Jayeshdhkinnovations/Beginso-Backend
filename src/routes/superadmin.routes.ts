@@ -48,6 +48,7 @@ router.get("/storage", ops.getStorage);
 router.get("/workspaces", ops.listWorkspaces);
 router.get("/workspaces/:id", ops.getWorkspace);
 router.delete("/workspaces/:id", ops.deleteWorkspace);
+router.get("/forms", ops.listForms);
 router.get("/templates", ops.listTemplates);
 router.post("/templates", ops.createTemplate);
 router.patch("/templates/:id", ops.updateTemplate);
@@ -63,5 +64,6 @@ router.get("/metrics/growth", metricsLimit, metrics.getGrowthMetrics);
 router.get("/metrics/engagement", metricsLimit, metrics.getEngagementMetrics);
 router.get("/metrics/usage", metricsLimit, metrics.getUsageMetrics);
 router.get("/metrics/attention", metricsLimit, metrics.getAttentionMetrics);
+router.get("/metrics/mail", metricsLimit, metrics.getMailMetrics);
 
 export default router;

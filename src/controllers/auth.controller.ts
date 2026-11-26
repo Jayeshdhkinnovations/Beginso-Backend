@@ -14,6 +14,7 @@ import { resolveIpLocation } from "../services/geolocation.service";
 import { recordMailLog } from "../models/MailLog";
 import { getRealClientIp } from "../utils/ip";
 import SessionModel, { hashIpAddress } from "../models/Session";
+import { recordActivity } from "../models/UserActivity";
 
 export const getMe = async (
   req: Request,
@@ -216,6 +217,7 @@ export const session = async (
       ipHash: hashedIp,
       lastActiveAt: new Date(),
     });
+    await recordActivity(user!._id);
 
     // Generate custom JWT containing sessionId claim
     const jwtToken = generateToken({

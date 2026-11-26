@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import User, { IUser } from "../models/User";
 
 import SessionModel from "../models/Session";
+import { recordActivity } from "../models/UserActivity";
 
 export interface AuthenticatedRequest extends Request {
   user?: IUser;
@@ -79,6 +80,7 @@ export const protect = async (
       if (!session.lastActiveAt || Date.now() - session.lastActiveAt.getTime() > 60_000) {
         session.lastActiveAt = new Date();
         await session.save();
+        await recordActivity(session.userId);
       }
       req.sessionId = decoded.sessionId;
     }

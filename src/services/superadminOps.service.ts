@@ -53,7 +53,9 @@ const validId = (id: string): void => {
 
 export type StorageState = "under" | "over_quota" | "over_ceiling";
 
-export const getStorage = async (query: { page?: number; limit?: number; search?: string; state?: StorageState }) => {
+export type StorageSort = "used" | "quota" | "name" | "workspaces" | "state";
+
+export const getStorage = async (query: { page?: number; limit?: number; search?: string; state?: StorageState; sort?: StorageSort; order?: "asc" | "desc" }) => {
   const { page: p, limit, skip } = page(query);
   const match: any = { role: "admin" };
   if (query.search) {
@@ -86,14 +88,32 @@ export const getStorage = async (query: { page?: number; limit?: number; search?
     ...(query.state ? [{ $match: { state: query.state } }] : []),
   ];
 
+  // No sort given: the original order (most over quota first). Otherwise the requested key, ties by _id.
+  const direction = query.order === "asc" ? 1 : -1;
+  const sortStages: any[] = !query.sort
+    ? [{ $sort: { overBy: -1, _id: 1 } }]
+    : [
+        ...(query.sort === "workspaces"
+          ? [
+              { $lookup: { from: Workspace.collection.name, let: { u: "$_id" }, as: "_w", pipeline: [{ $match: { $expr: { $eq: ["$owner", "$$u"] } } }, { $count: "n" }] } },
+              { $addFields: { _wsCount: { $ifNull: [{ $arrayElemAt: ["$_w.n", 0] }, 0] } } },
+              { $project: { _w: 0 } },
+            ]
+          : []),
+        ...(query.sort === "state"
+          ? [{ $addFields: { _stateRank: { $switch: { branches: [{ case: { $eq: ["$state", "over_ceiling"] }, then: 2 }, { case: { $eq: ["$state", "over_quota"] }, then: 1 }], default: 0 } } } }]
+          : []),
+        { $sort: { [{ used: "used", quota: "quota", name: "fullName", workspaces: "_wsCount", state: "_stateRank" }[query.sort]]: direction, _id: direction } },
+      ];
+
   const [rows, count, totals] = await Promise.all([
     User.aggregate([
       ...withState,
-      { $sort: { overBy: -1, _id: 1 } },
+      ...sortStages,
       { $skip: skip },
       { $limit: limit },
       { $project: { fullName: 1, email: 1, used: 1, quota: 1, overBy: 1, state: 1, workspaceLimit: 1 } },
-    ]),
+    ]).collation({ locale: "en", strength: 2 }),
     User.aggregate([...withState, { $count: "n" }]),
     User.aggregate([
       { $match: { role: "admin" } },

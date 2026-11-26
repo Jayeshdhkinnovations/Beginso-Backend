@@ -6,6 +6,9 @@ import Upload from "../models/Upload";
 import Template from "../models/Template";
 import ReportModel from "../models/Report";
 import SessionModel from "../models/Session";
+import UserActivity from "../models/UserActivity";
+import { getAuth } from "firebase-admin/auth";
+import { computeCompletionRate } from "../utils/completionRate";
 import { SystemLog } from "../models/SystemLog";
 import { MailLog } from "../models/MailLog";
 import { cachedFor } from "../utils/ttlCache";
@@ -170,15 +173,38 @@ export function getOverviewMetrics(input: MetricsInput) {
 // ---------------------------------------------------------------------------------------------------------------------------------
 // Growth
 // ---------------------------------------------------------------------------------------------------------------------------------
+/** Email verification lives in Firebase, not in the database: ask it about every registered account, 100 at a time (its limit). */
+// ponytail: one Firebase call per 100 users, cached 60 s with the rest; store an emailVerified field when that gets slow.
+async function verifiedSplit() {
+  const users = await User.find(ADMINS).select("firebaseUid").lean();
+  const ids = users.map((u: any) => u.firebaseUid).filter(Boolean) as string[];
+  try {
+    let verified = 0;
+    let unverified = 0;
+    for (let i = 0; i < ids.length; i += 100) {
+      const found = await getAuth().getUsers(ids.slice(i, i + 100).map((uid) => ({ uid })));
+      for (const account of found.users) {
+        if (account.emailVerified) verified += 1;
+        else unverified += 1;
+      }
+    }
+    // `unknown`: accounts in the database that Firebase has no record of.
+    return { available: true as const, verified, unverified, unknown: users.length - verified - unverified };
+  } catch {
+    return UNKNOWN("Firebase did not answer, so email verification cannot be shown right now.");
+  }
+}
+
 export function getGrowthMetrics(input: MetricsInput) {
   return run("growth", input, async (range) => {
-    const [registrations, usersBefore, workspacesDaily, formsDaily, workspacesBefore, formsBefore] = await Promise.all([
+    const [registrations, usersBefore, workspacesDaily, formsDaily, workspacesBefore, formsBefore, verification] = await Promise.all([
       perDay(User, "createdAt", range.from, range.to, range.dayKeys, ADMINS),
       User.countDocuments({ ...ADMINS, createdAt: { $lt: range.from } }),
       perDay(Workspace, "createdAt", range.from, range.to, range.dayKeys),
       perDay(Form, "createdAt", range.from, range.to, range.dayKeys, { deletedAt: null }),
       Workspace.countDocuments({ createdAt: { $lt: range.from } }),
       Form.countDocuments({ createdAt: { $lt: range.from } }),
+      verifiedSplit(),
     ]);
     const running = (start: number, daily: number[]) => daily.reduce<number[]>((acc, n) => [...acc, (acc[acc.length - 1] ?? start) + n], []);
 
@@ -190,7 +216,7 @@ export function getGrowthMetrics(input: MetricsInput) {
       cumulativeWorkspaces: running(workspacesBefore, workspacesDaily),
       formsCreated: formsDaily,
       cumulativeForms: running(formsBefore, formsDaily),
-      verifiedVsUnverified: UNKNOWN("Email verification and sign-in method live in Firebase, not in the database. Showing them needs the Firebase Admin API or a new stored field."),
+      verifiedVsUnverified: verification,
     };
   });
 }
@@ -201,7 +227,7 @@ export function getGrowthMetrics(input: MetricsInput) {
 export function getEngagementMetrics(input: MetricsInput) {
   return run("engagement", input, async (range) => {
     const now = new Date();
-    const [dau, wau, mau, activeRows, publishedNow, totalNow, publishedDaily, responseHeat, sessionHeat] = await Promise.all([
+    const [dau, wau, mau, activeRows, publishedNow, totalNow, publishedDaily, responseHeat, sessionHeat, activeSeries] = await Promise.all([
       activeUsersIn(new Date(now.getTime() - DAY_MS), now),
       activeUsersIn(new Date(now.getTime() - 7 * DAY_MS), now),
       activeUsersIn(new Date(now.getTime() - 30 * DAY_MS), now),
@@ -218,6 +244,7 @@ export function getEngagementMetrics(input: MetricsInput) {
       perDay(Form, "publishedAt", range.from, range.to, range.dayKeys, { deletedAt: null }),
       heatmap(ResponseModel, "submittedAt", range, { deletedAt: null }),
       heatmap(SessionModel, "lastActiveAt", range),
+      activeUsersPerDay(range),
     ]);
     const split = (k: string) => activeRows.find((r: any) => r._id === k)?.n ?? 0;
 
@@ -228,8 +255,7 @@ export function getEngagementMetrics(input: MetricsInput) {
         weekly: wau,
         monthly: mau,
         definition: "Distinct admin accounts with a session whose last activity falls in the window, counted back from now. A revoked session still counts.",
-        // A per-day series cannot be rebuilt: a session stores only its latest activity time.
-        series: UNKNOWN("Sessions keep only their last activity, so a past day's active users cannot be rebuilt."),
+        series: activeSeries,
       },
       newVsReturning: { new: split("new"), returning: split("returning"), approximate: true },
       heatmap: { responses: responseHeat, adminActivity: sessionHeat, rows: "Mon..Sun", columns: "hour 0..23 UTC" },
@@ -242,6 +268,22 @@ export function getEngagementMetrics(input: MetricsInput) {
       },
     };
   });
+}
+
+/** Distinct registered users per UTC day, from the daily activity rows (see models/UserActivity). */
+async function activeUsersPerDay(range: MetricsRange) {
+  const [first, rows] = await Promise.all([
+    UserActivity.findOne().sort({ day: 1 }).select("day").lean(),
+    UserActivity.aggregate([
+      { $match: between("day", range.from, range.to) },
+      { $lookup: { from: User.collection.name, localField: "userId", foreignField: "_id", as: "u", pipeline: [{ $match: ADMINS }, { $project: { _id: 1 } }] } },
+      { $match: { "u.0": { $exists: true } } },
+      { $group: { _id: dayOf("day"), n: { $sum: 1 } } },
+    ]),
+  ]);
+  if (!first) return UNKNOWN("Daily activity has only just started being recorded. The chart fills in from today.");
+  // Days before `since` were never recorded: their zeros mean "not counted", not "nobody".
+  return { available: true as const, since: (first as any).day.toISOString().slice(0, 10), values: denseSeries(range.dayKeys, rows) };
 }
 
 /** 7 x 24 counts, Monday first, hours in UTC. */
@@ -261,9 +303,25 @@ async function heatmap(model: any, field: string, range: MetricsRange, extra: Re
 // ---------------------------------------------------------------------------------------------------------------------------------
 // Usage
 // ---------------------------------------------------------------------------------------------------------------------------------
+/**
+ * Responses divided by counted views, over live forms whose view count covers all their responses. A form with more responses
+ * than views collected some before views were counted, so it is left out rather than pushing the rate past 100%.
+ */
+async function platformCompletionRate() {
+  const [row] = await Form.aggregate([
+    { $match: { deletedAt: null, viewsCount: { $gt: 0 } } },
+    { $lookup: { from: ResponseModel.collection.name, localField: "_id", foreignField: "formId", as: "r", pipeline: [{ $match: { deletedAt: null, isTest: { $ne: true } } }, { $count: "n" }] } },
+    { $project: { views: "$viewsCount", submissions: { $ifNull: [{ $arrayElemAt: ["$r.n", 0] }, 0] } } },
+    { $match: { $expr: { $lte: ["$submissions", "$views"] } } },
+    { $group: { _id: null, views: { $sum: "$views" }, submissions: { $sum: "$submissions" }, forms: { $sum: 1 } } },
+  ]);
+  if (!row) return UNKNOWN("No form views have been recorded yet.");
+  return { available: true as const, value: computeCompletionRate(row.submissions, row.views) as number, views: row.views, submissions: row.submissions, forms: row.forms };
+}
+
 export function getUsageMetrics(input: MetricsInput) {
   return run("usage", input, async (range) => {
-    const [responsesDaily, totalForms, responsesTotal, top, uploadRows, bytesBefore, exportRows, templateTop, templateFormsInRange, templateFormsTotal] =
+    const [responsesDaily, totalForms, responsesTotal, top, uploadRows, bytesBefore, exportRows, templateTop, templateFormsInRange, templateFormsTotal, completion] =
       await Promise.all([
         perDay(ResponseModel, "submittedAt", range.from, range.to, range.dayKeys, { deletedAt: null }),
         Form.countDocuments({}),
@@ -288,6 +346,7 @@ export function getUsageMetrics(input: MetricsInput) {
         ]),
         Form.countDocuments({ ...between("createdAt", range.from, range.to), templateId: { $ne: null } }),
         Form.countDocuments({ templateId: { $ne: null } }),
+        platformCompletionRate(),
       ]);
 
     const uploadCount = denseSeries(range.dayKeys, uploadRows.map((r: any) => ({ _id: r._id, n: r.n })));
@@ -319,7 +378,7 @@ export function getUsageMetrics(input: MetricsInput) {
       },
       exportsPerDay: { csv: exportsBy("csv"), pdf: exportsBy("pdf"), failed: exportsFailed },
       templates: { top: templateTop, formsCreatedFromTemplatesInRange: templateFormsInRange, formsCreatedFromTemplatesTotal: templateFormsTotal },
-      completionRate: UNKNOWN("Form views are never counted (viewsCount is not incremented), so a completion rate cannot be computed."),
+      completionRate: completion,
     };
   });
 }

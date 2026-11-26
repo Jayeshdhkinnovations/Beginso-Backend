@@ -14,6 +14,7 @@ import Notification from "../models/Notification";
 import Membership from "../models/Membership";
 import Workspace from "../models/Workspace";
 import SessionModel from "../models/Session";
+import UserActivity from "../models/UserActivity";
 import User from "../models/User";
 import Note from "../models/Note";
 import ScoreEntry from "../models/ScoreEntry";
@@ -226,6 +227,7 @@ export const deleteAccountData = async (user: any): Promise<void> => {
   await SavedView.deleteMany({ ownerId: userId, workspaceId: null }); // personal saved inbox views
   await Invitation.deleteMany({ email: String(user.email).toLowerCase(), status: "pending" });
   await SessionModel.deleteMany({ userId });
+  await UserActivity.deleteMany({ userId });
   await Notification.deleteMany({ userId });
 
   await removeUploads({ owner: userId });

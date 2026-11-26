@@ -41,3 +41,39 @@ describe("docker-compose.prod.yml", () => {
     expect(script).toContain("MEM_LIMIT_MB=768");
   });
 });
+
+describe("docker-compose.server-page.yml (optional, the only place the Docker socket appears on the server)", () => {
+  const settings = read("docker-compose.server-page.yml")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("#"))
+    .join("\n");
+
+  it("is its own beginso-api project, joins the API's network without owning it, and carries a label the API clean-up does not match", () => {
+    expect(settings).toMatch(/^name: beginso-api-proxy$/m);
+    expect(settings).toMatch(/^ {4}name: beginso-api\n {4}external: true$/m);
+    expect(settings).toMatch(/com\.beginso\.app: docker-proxy/);
+    expect(settings).not.toMatch(/com\.beginso\.app: api\b/);
+  });
+
+  it("publishes no port at all", () => {
+    expect(settings).not.toMatch(/^\s*ports:/m);
+    expect(settings).not.toMatch(/network_mode:/);
+  });
+
+  it("only reads containers: the socket is read-only, writes and exec are off, and it is hardened", () => {
+    expect(settings).toMatch(/\/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/);
+    expect(settings).toMatch(/CONTAINERS: "1"/);
+    for (const off of ["POST", "EXEC", "SECRETS", "IMAGES", "VOLUMES", "NETWORKS", "SYSTEM"]) expect(settings).toContain(`${off}: "0"`);
+    expect(settings).toMatch(/read_only: true/);
+    expect(settings).toMatch(/cap_drop:\n\s+- ALL/);
+    expect(settings).toMatch(/no-new-privileges:true/);
+    expect(settings).not.toMatch(/privileged:/);
+    expect(settings).toMatch(/mem_limit: 128m/);
+    expect(settings).toMatch(/image: tecnativa\/docker-socket-proxy:\d+\.\d+\.\d+/);
+  });
+
+  it("is not run by the deploy script or any workflow", () => {
+    expect(read("scripts/deploy-docker.sh")).not.toContain("server-page");
+    expect(read(".github/workflows/deploy-docker.yml")).not.toContain("server-page");
+  });
+});

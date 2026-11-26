@@ -6,6 +6,7 @@ import {
   getMailLogs,
   getAdmins,
   getAdminDetail,
+  getAdminActivityFeed,
   createAdmin,
   updateAdmin,
   deleteAdmin,
@@ -28,6 +29,7 @@ router.get("/logs", getLogs);
 router.get("/mail-logs", getMailLogs);
 router.get("/admins", getAdmins);
 router.get("/admins/:id", getAdminDetail);
+router.get("/admins/:id/activity", getAdminActivityFeed);
 router.post("/admins", createAdmin);
 router.patch("/admins/:id", updateAdmin);
 router.patch("/admins/:id/limits", updateAdminLimits);

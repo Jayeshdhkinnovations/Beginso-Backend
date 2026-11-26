@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as ops from "../services/superadminOps.service";
+import { listWorkspacesPeople } from "../services/adminPeople.service";
+import { parseQuery, storageQuerySchema, workspacesQuerySchema } from "../validations/adminPeople.validator";
 
 // Thin HTTP layer for the operator-console surfaces in superadminOps.service.ts. Errors carrying a statusCode
 // (404, 422) are answered here; everything else goes to the global handler.
@@ -30,9 +32,9 @@ const handle =
 
 const listQuery = (req: Request) => ({ page: num(req.query.page), limit: num(req.query.limit), search: str(req.query.search) });
 
-export const getStorage = handle((req) => ops.getStorage({ ...listQuery(req), state: str(req.query.state) as ops.StorageState | undefined }));
+export const getStorage = handle((req) => ops.getStorage(parseQuery(storageQuerySchema, req.query)));
 
-export const listWorkspaces = handle((req) => ops.listWorkspaces(listQuery(req)));
+export const listWorkspaces = handle((req) => listWorkspacesPeople(parseQuery(workspacesQuerySchema, req.query)));
 export const getWorkspace = handle((req) => ops.getWorkspace(String(req.params.id)));
 export const deleteWorkspace = handle((req) => ops.deleteWorkspace(actorOf(req), String(req.params.id), req.body?.confirm));
 

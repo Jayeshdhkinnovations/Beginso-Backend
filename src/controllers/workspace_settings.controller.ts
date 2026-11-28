@@ -31,7 +31,17 @@ const findExportFile = (files: string[], workspaceId: string, jobId: string): st
     const name = `${prefix}${jobId}.json`;
     return files.includes(name) ? name : undefined;
   }
-  return files.filter((f) => f.startsWith(prefix)).sort().pop();
+  return files.filter((f) => f.startsWith(prefix) && f.endsWith(".json")).sort().pop();
+};
+
+// An export still without a file after this long was lost (a restart while it was being written).
+const EXPORT_GIVE_UP_MS = 15 * 60 * 1000;
+
+// Failed: building it left a ".failed" marker, or it is too old to still be on its way.
+const exportFailed = (files: string[], workspaceId: string, jobId: string): boolean => {
+  if (!jobId || !mongoose.Types.ObjectId.isValid(jobId)) return false;
+  if (files.includes(`workspace_export_${workspaceId}_${jobId}.failed`)) return true;
+  return Date.now() - new mongoose.Types.ObjectId(jobId).getTimestamp().getTime() > EXPORT_GIVE_UP_MS;
 };
 
 // Exports advertise a 24h lifetime; enforce it.
@@ -244,9 +254,17 @@ export const createWorkspaceExport = async (req: Request, res: Response, next: N
           exportedAt: new Date().toISOString(),
         };
 
-        fs.writeFileSync(exportFilePath, JSON.stringify(exportData, null, 2), "utf8");
+        // Written under another name first, so a half-written file is never offered as finished.
+        fs.writeFileSync(`${exportFilePath}.part`, JSON.stringify(exportData, null, 2), "utf8");
+        fs.renameSync(`${exportFilePath}.part`, exportFilePath);
       } catch (err) {
         console.error("Workspace export generation error:", err);
+        try {
+          fs.rmSync(`${exportFilePath}.part`, { force: true });
+          fs.writeFileSync(exportFilePath.replace(/\.json$/, ".failed"), "", "utf8");
+        } catch (markErr) {
+          console.error("Could not record the failed export:", markErr);
+        }
       }
     });
 
@@ -290,7 +308,7 @@ export const getWorkspaceExportStatus = async (req: Request, res: Response, next
       success: true,
       exportJob: {
         id: jobId || "latest",
-        status: matchingFile ? "completed" : "processing",
+        status: matchingFile ? "completed" : exportFailed(files, workspace._id.toString(), jobId) ? "failed" : "processing",
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
     });
@@ -317,6 +335,11 @@ export const downloadWorkspaceExportFile = async (req: Request, res: Response, n
     const files = fs.readdirSync(UPLOADS_EXPORTS_DIR);
     
     const matchingFile = findExportFile(files, workspace._id.toString(), jobId);
+
+    if (!matchingFile && exportFailed(files, workspace._id.toString(), jobId)) {
+      res.status(410).json({ success: false, message: "This export failed. Start a new one.", exportJob: { id: jobId, status: "failed" } });
+      return;
+    }
 
     if (!matchingFile) {
       // Return 202 status envelope instead of breaking crash when retried before file finishes writing

@@ -362,6 +362,24 @@ export const createForm = async (req: Request, res: Response, next: NextFunction
   }
 };
 
+// What the builder edits: once a form is published, that is its staged draft (so the owner edits the draft, not the
+// live form, without noticing a seam) until they publish or discard it; before that, or with no draft, it is the
+// live content itself. `hasUnpublishedChanges` tells the UI whether a draft exists (and so to show "Publish changes").
+const editableView = (form: any) => {
+  const draft = form.draft ?? null;
+  const base = draft ?? form;
+  return {
+    title: base.title,
+    description: base.description,
+    fields: base.fields,
+    pages: base.pages,
+    branding: base.branding,
+    settings: draft ? { ...(form.settings?.toObject ? form.settings.toObject() : form.settings), ...(draft.settings ?? {}) } : form.settings,
+    hasUnpublishedChanges: !!draft,
+    draftSavedAt: draft?.savedAt ?? null,
+  };
+};
+
 export const getForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authReq = req as any;
@@ -412,16 +430,19 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
     const form = await formService.getFormById(formId as string, workspaceId, !workspaceId || !!authReq.formAccessGrant);
 
     const myRole = authReq.formAccessGrant?.role ?? authReq.workspaceRole ?? "owner";
+    const view = editableView(form);
     res.status(200).json({
       _id: form._id,
-      title: form.title,
-      description: form.description,
+      title: view.title,
+      description: view.description,
       workspaceId: form.workspaceId,
       status: form.status,
-      fields: form.fields,
-      pages: form.pages,
-      branding: form.branding,
-      settings: form.settings,
+      fields: view.fields,
+      pages: view.pages,
+      branding: view.branding,
+      settings: view.settings,
+      hasUnpublishedChanges: view.hasUnpublishedChanges,
+      draftSavedAt: view.draftSavedAt,
       slug: form.status === "published" ? (form.publishedSlug || form.slug) : form.slug,
       publishedSlug: form.publishedSlug,
       publishedAt: form.publishedAt,
@@ -435,7 +456,7 @@ export const getForm = async (req: Request, res: Response, next: NextFunction): 
       myRole,
       // For compatibility
       success: true,
-      form: { ...((form as any).toObject ? (form as any).toObject() : form), myRole },
+      form: { ...((form as any).toObject ? (form as any).toObject() : form), ...view, myRole },
     });
   } catch (error) {
     next(error);
@@ -577,28 +598,39 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
+    // A content edit (not a status change) to a form that is already published is staged on its draft instead of
+    // changing the live, public form (CF unpublished-changes, Nov 2026) — a status change (publish/unpublish/close)
+    // always acts on the live form directly, same as before.
+    const isStatusChange = validatedData.status !== undefined && validatedData.status !== formDoc.status;
+    const stagesAsDraft = !isStatusChange && formDoc.status === "published";
+
     // Publishing through PATCH/PUT returns the same full form payload as any other update.
     const form = replay
       ? formDoc
       : validatedData.status === "published"
         ? await formService.publishForm(formId as string, workspaceId, validatedData)
-        : await formService.patchForm(formId as string, workspaceId, validatedData, expected);
+        : stagesAsDraft
+          ? await formService.patchDraft(formId as string, workspaceId, validatedData)
+          : await formService.patchForm(formId as string, workspaceId, validatedData, expected);
 
     if (validatedData.status !== undefined && validatedData.status !== formDoc.status) {
       const action = validatedData.status === "published" ? "form.publish" : validatedData.status === "closed" ? "form.close" : "form.unpublish";
       await recordEvent(req, form.workspaceId, action, { id: form._id, type: "form", label: form.title });
     }
 
+    const view = editableView(form);
     res.status(200).json({
       _id: form._id,
-      title: form.title,
-      description: form.description,
+      title: view.title,
+      description: view.description,
       workspaceId: form.workspaceId,
       status: form.status,
-      fields: form.fields,
-      pages: form.pages,
-      branding: form.branding,
-      settings: form.settings,
+      fields: view.fields,
+      pages: view.pages,
+      branding: view.branding,
+      settings: view.settings,
+      hasUnpublishedChanges: view.hasUnpublishedChanges,
+      draftSavedAt: view.draftSavedAt,
       slug: form.status === "published" ? (form.publishedSlug || form.slug) : form.slug,
       publishedSlug: form.publishedSlug,
       publishedAt: form.publishedAt,
@@ -609,7 +641,7 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
       // For compatibility
       success: true,
       message: "Form updated successfully",
-      form,
+      form: { ...((form as any).toObject ? (form as any).toObject() : form), ...view },
     });
   } catch (error: any) {
     // A stale save is an expected conflict, not a fault: say so, and hand back the current updatedAt.
@@ -746,6 +778,99 @@ export const closeForm = async (req: Request, res: Response, next: NextFunction)
       _id: form._id,
       status: form.status,
       success: true,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /:formId/publish-changes — copies the staged draft onto the live, published form (the orange "Publish changes" button, CF unpublished-changes,
+// Nov 2026). Anyone who can edit the form may call this (the same permission as a regular save, not the narrower forms:publish).
+export const publishDraftChanges = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized", error: { message: "Not authorized" } });
+      return;
+    }
+    const formId = req.params.formId || req.params.id;
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(formId as string, authReq.user, authReq.formAccessGrant);
+    if (!formDoc) {
+      res.status(404).json({ success: false, message: "Form not found", error: { message: "Form not found" } });
+      return;
+    }
+    if (!isAuthorized) {
+      res.status(403).json({ success: false, message: "Forbidden: You do not have permission to update this form", error: { message: "Forbidden: You do not have permission to update this form" } });
+      return;
+    }
+
+    const form = await formService.publishDraftChanges(formId as string, workspaceId);
+    await recordEvent(req, form.workspaceId, "form.publishChanges", { id: form._id, type: "form", label: form.title });
+
+    const view = editableView(form);
+    res.status(200).json({
+      _id: form._id,
+      status: form.status,
+      title: view.title,
+      description: view.description,
+      fields: view.fields,
+      pages: view.pages,
+      branding: view.branding,
+      settings: view.settings,
+      hasUnpublishedChanges: view.hasUnpublishedChanges,
+      schemaVersion: form.schemaVersion,
+      updatedAt: form.updatedAt,
+      contentVersion: versionOf(form as any),
+      success: true,
+      message: "Changes published",
+    });
+  } catch (error: any) {
+    if (error?.code === FORM_STALE) {
+      res.status(409).json(staleFormBody(error));
+      return;
+    }
+    if (error?.code === "NO_DRAFT") {
+      res.status(400).json({ success: false, message: error.message, error: { code: error.code, message: error.message } });
+      return;
+    }
+    next(error);
+  }
+};
+
+// POST /:formId/discard-draft — throws the staged draft away; the live, published form is untouched.
+export const discardDraftChanges = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user) {
+      res.status(401).json({ success: false, message: "Not authorized", error: { message: "Not authorized" } });
+      return;
+    }
+    const formId = req.params.formId || req.params.id;
+    const { formDoc, workspaceId, isAuthorized } = await resolveFormAccess(formId as string, authReq.user, authReq.formAccessGrant);
+    if (!formDoc) {
+      res.status(404).json({ success: false, message: "Form not found", error: { message: "Form not found" } });
+      return;
+    }
+    if (!isAuthorized) {
+      res.status(403).json({ success: false, message: "Forbidden: You do not have permission to update this form", error: { message: "Forbidden: You do not have permission to update this form" } });
+      return;
+    }
+
+    const form = await formService.discardDraftChanges(formId as string, workspaceId);
+    const view = editableView(form);
+    res.status(200).json({
+      _id: form._id,
+      status: form.status,
+      title: view.title,
+      description: view.description,
+      fields: view.fields,
+      pages: view.pages,
+      branding: view.branding,
+      settings: view.settings,
+      hasUnpublishedChanges: view.hasUnpublishedChanges,
+      contentVersion: versionOf(form as any),
+      success: true,
+      message: "Changes discarded",
     });
   } catch (error) {
     next(error);

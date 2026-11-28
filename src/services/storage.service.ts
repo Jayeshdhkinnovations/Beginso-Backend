@@ -24,7 +24,7 @@ export const WARN_AT = 0.8;
 
 export const hardCeilingOf = (quota: number): number => Math.round(quota * HARD_CEILING_FACTOR);
 
-const model = (name: string): mongoose.Model<any> => mongoose.model(name);
+const model = (name: string): mongoose.Model<any> => mongoose.model(name) as unknown as mongoose.Model<any>;
 
 export const bsonSize = (doc: unknown): number => {
   const plain = doc && typeof (doc as any).toObject === "function" ? (doc as any).toObject({ minimize: false }) : doc;

@@ -189,7 +189,8 @@ class MailService {
 
   private getTransporter(): Transporter {
     if (!this.transporter) {
-      const host = process.env.SMTP_HOST || "email.toowix.com";
+      // Outside production an unset SMTP_HOST must not reach a real mail server.
+      const host = process.env.SMTP_HOST || (process.env.NODE_ENV === "production" ? "email.toowix.com" : "localhost");
       const port = Number(process.env.SMTP_PORT) || 587;
       const secure = process.env.SMTP_SECURE === "true";
       const user = process.env.SMTP_USER || "";

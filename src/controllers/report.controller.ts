@@ -13,6 +13,8 @@ import { countReportRows } from "../services/report.service";
 import { exportFilename } from "../utils/reportExport";
 import { userHasAccessToForm, reportFormsFilter } from "../utils/formAccess";
 import { fieldSegmentFilter, SegmentError } from "../utils/fieldSegments";
+import { chartListFilter } from "../utils/chartQuery";
+import { chartTimezone } from "../services/chartQuery.service";
 
 const reportCreateSchema = z.object({
   format: z.enum(["csv", "pdf"]),
@@ -33,6 +35,9 @@ const reportCreateSchema = z.object({
   field: z.string().optional(),
   value: z.string().optional(),
   granularity: z.string().optional(),
+  // The list's other two filters: a chart drill-through (needs formId) and test responses.
+  chart: z.string().optional(),
+  includeTest: z.boolean().optional(),
 });
 
 const getWorkspaceId = async (req: Request): Promise<string | null> => {
@@ -91,7 +96,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { format, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity } = parseResult.data;
+    const { format, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity, chart, includeTest } = parseResult.data;
     let formId = parseResult.data.formId;
 
     // A form outside the caller's scope (another user's personal form, another workspace's form) would only yield an empty
@@ -107,6 +112,18 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       const chosen = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
       const owners = chosen.length > 0 ? await ResponseModel.distinct("formId", { _id: { $in: chosen }, deletedAt: null }) : [];
       if (owners.length === 1 && (await Form.exists({ _id: owners[0], ...formsFilter }))) formId = String(owners[0]);
+    }
+
+    if (chart !== undefined) {
+      const chartForm = formId ? await Form.findOne({ _id: formId, ...formsFilter }).lean() : null;
+      try {
+        if (!chartForm) throw new SegmentError(400, "FIELD_FILTER_REQUIRES_FORM", "a chart filter needs a formId in this workspace");
+        chartListFilter(chartForm, chart, await chartTimezone(chartForm as any));
+      } catch (e: any) {
+        if (!e?.statusCode) throw e;
+        res.status(e.statusCode).json({ success: false, message: e.message, error: { code: e.code, message: e.message } });
+        return;
+      }
     }
 
     if (field !== undefined || value !== undefined) {
@@ -145,7 +162,7 @@ export const createReport = async (req: Request, res: Response, next: NextFuncti
       workspaceId: userWorkspaceId ? new mongoose.Types.ObjectId(userWorkspaceId) : null,
       requestedBy: (req as any).user?._id,
       format,
-      filters: { formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity },
+      filters: { formId, status, stageId, search, from, to, tagIds, assigneeId, unread, duplicate, ids, field, value, granularity, chart, includeTest },
       status: "queued",
       expiresAt,
     });

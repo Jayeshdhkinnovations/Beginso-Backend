@@ -89,12 +89,12 @@ describe("editing a published form", () => {
     expect(res.body.hasUnpublishedChanges).toBe(true);
   });
 
-  it("does not bump the live contentVersion (the public form has not changed)", async () => {
+  it("each staged save moves the version by one, so another editor's older copy is refused", async () => {
     const form = await mkPublishedForm();
     const before = (await Form.findById(form._id).lean())!.contentVersion ?? 0;
     await patch(form._id.toString(), { title: "Staged again" });
     const after = (await Form.findById(form._id).lean())!.contentVersion ?? 0;
-    expect(after).toBe(before);
+    expect(after).toBe(before + 1);
   });
 
   it("a second edit builds on the draft, not on the live form again", async () => {
@@ -143,7 +143,7 @@ describe("publishing the staged changes", () => {
     expect(stored!.title).toBe("Published now");
     expect(stored!.draft).toBeFalsy();
     expect((stored!.fields as any[]).map((f: any) => f.label)).toEqual(["Renamed", "New field"]);
-    expect(stored!.contentVersion).toBe(1); // the live form's own version moved, once
+    expect(stored!.contentVersion).toBe(2); // one staged save, then the publish
   });
 
   it("bumps schemaVersion only when the fields actually changed", async () => {
@@ -181,6 +181,85 @@ describe("publishing the staged changes", () => {
     await Form.updateOne({ _id: form._id }, { $inc: { contentVersion: 1 } });
     await expect(formService.publishDraftChanges(form._id.toString(), ws._id.toString())).rejects.toMatchObject({ code: "FORM_STALE" });
     expect((staleFormError(3) as any).code).toBe("FORM_STALE");
+  });
+});
+
+describe("the response limit while changes are staged", () => {
+  it("can be changed after an edit, and the changes still publish", async () => {
+    const id = (await mkPublishedForm())._id.toString();
+    await patch(id, { title: "Staged first" });
+    await patch(id, { settings: { responseLimit: 50, responseLimitEnabled: true } });
+    expect((await publishChanges(id)).status).toBe(200);
+    const stored = await Form.findById(id).lean();
+    expect(stored!.title).toBe("Staged first");
+    expect((stored!.settings as any).responseLimit).toBe(50);
+  });
+
+  it("can be changed in the same save, and the changes still publish", async () => {
+    const id = (await mkPublishedForm())._id.toString();
+    await patch(id, { title: "Both at once", settings: { responseLimit: 5, responseLimitEnabled: true } });
+    await patch(id, { description: "And again", settings: { responseLimit: 9, responseLimitEnabled: true } });
+    expect((await publishChanges(id)).status).toBe(200);
+  });
+});
+
+describe("two editors", () => {
+  it("the second save from the same older version is refused, and the first one's change stays", async () => {
+    const id = (await mkPublishedForm())._id.toString();
+    expect((await patch(id, { title: "First editor", expectedContentVersion: 0, saveId: "a" })).status).toBe(200);
+    const second = await patch(id, { title: "Second editor", expectedContentVersion: 0, saveId: "b" });
+    expect(second.status).toBe(409);
+    expect(second.body.error.code).toBe("FORM_STALE");
+    expect((await get(id)).body.title).toBe("First editor");
+  });
+
+  it("repeating a save whose reply was lost succeeds without saving twice", async () => {
+    const id = (await mkPublishedForm())._id.toString();
+    await patch(id, { title: "Once", expectedContentVersion: 0, saveId: "same" });
+    const again = await patch(id, { title: "Once", expectedContentVersion: 0, saveId: "same" });
+    expect(again.status).toBe(200);
+    expect(again.body.contentVersion).toBe(1);
+  });
+});
+
+describe("publishing changes that are not ready", () => {
+  it("is refused when no question is left, and the live form keeps its questions", async () => {
+    const id = (await mkPublishedForm())._id.toString();
+    await patch(id, { fields: [] });
+    const res = await publishChanges(id);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("FORM_HAS_NO_FIELDS");
+    expect(((await Form.findById(id).lean())!.fields as any[]).filter((f) => !f.deleted)).toHaveLength(1);
+  });
+});
+
+describe("a form unpublished with changes still staged", () => {
+  const offline = async () => {
+    const id = (await mkPublishedForm())._id.toString();
+    await patch(id, { title: "Staged title" });
+    await patch(id, { status: "draft" });
+    return id;
+  };
+
+  it("the next save builds on what the builder shows, and nothing stays hidden in a draft", async () => {
+    const id = await offline();
+    const res = await patch(id, { description: "Saved while unpublished" });
+    expect(res.body.title).toBe("Staged title");
+    expect(res.body.hasUnpublishedChanges).toBe(false);
+    const stored = await Form.findById(id).lean();
+    expect(stored!.title).toBe("Staged title");
+    expect(stored!.description).toBe("Saved while unpublished");
+    expect(stored!.draft).toBeFalsy();
+  });
+
+  it("publishing again publishes what the builder shows", async () => {
+    const id = await offline();
+    const res = await request(app).post(`/api/forms/${id}/publish`).set(auth()).send({});
+    expect(res.status).toBe(200);
+    const stored = await Form.findById(id).lean();
+    expect(stored!.status).toBe("published");
+    expect(stored!.title).toBe("Staged title");
+    expect(stored!.draft).toBeFalsy();
   });
 });
 

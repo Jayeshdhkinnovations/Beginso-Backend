@@ -53,7 +53,8 @@ export class FormRepository {
   }
 
   // Builder-owned content: only an update that touches one of these counts as an edit (bumps contentVersion).
-  // Status, slug, archive, trash, view counters and the like do not.
+  // Status, slug, archive, trash, view counters and the like do not. Saving a staged draft is an edit too (so two editors cannot
+  // silently overwrite each other's staged changes); throwing a draft away is not.
   //
   // `expected` makes the write conditional ON THE SAME ATOMIC OPERATION: if another save got in first, no document
   // matches and nothing is written (null). Never read-then-write: that has a race.
@@ -72,7 +73,7 @@ export class FormRepository {
     }
     // A form saved before the counter existed has no field: that is version 0, and $inc creates it.
     if (expected) query.contentVersion = expected.contentVersion === 0 ? { $in: [0, null] } : expected.contentVersion;
-    const isEdit = CONTENT_KEYS.some((k) => k in data);
+    const isEdit = CONTENT_KEYS.some((k) => k in data) || !!data.draft;
     const update = isEdit
       ? { ...data, ...(expected?.saveId ? { lastSaveId: expected.saveId } : {}), $inc: { contentVersion: 1 } }
       : data;

@@ -1,0 +1,69 @@
+# OPTIONAL, on the server: a READ-ONLY Docker socket proxy for the super admin "Server" page (container list, figures and logs, see
+# src/services/serverAdmin.service.ts). It is deliberately NOT part of docker-compose.prod.yml: the API's compose file never mounts the Docker
+# socket, no workflow copies or runs this file, and without it the page just says "Server access is not configured".
+#
+# Switching it on, on the server, AFTER the API is running (its network must exist):
+#   1. copy this file next to docker-compose.prod.yml
+#   2. docker compose -f docker-compose.server-page.yml up -d
+#   3. in the API's .env:  DOCKER_PROXY_URL=http://docker-socket-proxy:2375
+#                          ADMIN_VISIBLE_CONTAINERS=beginso-api      (comma separated; only these names are ever shown)
+#   4. start the API again so it reads them (deploy as usual)
+# Switching it off:  docker compose -f docker-compose.server-page.yml down, then remove the two settings. Stop it before taking the API's
+# compose project down, or Docker keeps the network because this container is still on it.
+#
+# RESIDUAL RISK, read this: CONTAINERS=1 allows EVERY GET under /containers, including inspect, which shows a container's environment
+# variables (so secrets). It is safe only because no port is published, so nothing but containers on the beginso-api network can reach it,
+# and the API calls only the list, stats and logs endpoints. See docker-compose.dev-proxy.yml for what each setting allows.
+#
+# Its own project and label, so a deploy or clean-up of the API never touches it. The image tag is pinned on purpose.
+name: beginso-api-proxy
+
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: beginso-docker-proxy
+    labels:
+      com.beginso.app: docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EXEC: "0"
+      GRPC: "0"
+      IMAGES: "0"
+      INFO: "0"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VOLUMES: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # No ports on purpose: the API reaches it by name over the private network below.
+    networks:
+      - api
+    read_only: true
+    tmpfs:
+      - /run
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # The VM has little memory to spare (see mem_limit in docker-compose.prod.yml).
+    mem_limit: 128m
+
+# The network docker-compose.prod.yml creates. Joined, never created or removed from here.
+networks:
+  api:
+    name: beginso-api
+    external: true

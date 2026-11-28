@@ -43,6 +43,17 @@ afterAll(async () => {
 // the branding as the reply carries it: at the top, or inside the form
 const brandingOf = (body: any) => body.branding ?? body.form?.branding;
 
+// Publishes the form the first time; every later call (the shared form is already published by then, CF unpublished-changes, Nov 2026 — a patch
+// to an already-published form stages a draft instead of changing it live) publishes the staged draft instead, so the public read sees the edit.
+async function goLive(): Promise<{ status: number; body: { slug?: string; publishedSlug?: string } }> {
+  const current = await request(app).get(`/api/forms/${formId}`).set(headers());
+  if (current.body.status === "published") {
+    const r = await request(app).post(`/api/forms/${formId}/publish-changes`).set(headers()).send({});
+    return { status: r.status, body: { slug: current.body.publishedSlug, publishedSlug: current.body.publishedSlug } };
+  }
+  return request(app).post(`/api/forms/${formId}/publish`).set(headers());
+}
+
 describe("curated look choices", () => {
   it("accepts every documented value", async () => {
     const res = await patchBranding({
@@ -93,7 +104,7 @@ describe("header text and links", () => {
     const bannerLinks = [{ label: "Privacy", url: "https://example.com/privacy" }, { url: "http://example.org" }];
     const res = await patchBranding({ bannerText: "Takes two minutes", bannerLinks });
     expect(res.status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding).toMatchObject({ bannerText: "Takes two minutes", bannerLinks });
   });
@@ -114,7 +125,7 @@ describe("header text and links", () => {
 describe("public form read", () => {
   it("returns the new keys the page needs to draw itself", async () => {
     await patchBranding({ backgroundStyle: "image", backgroundImageUrl: "https://cdn.example.com/bg.jpg", formWidth: "narrow", coverFit: "banner", fontFamily: "inter" });
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     expect(published.status).toBe(200);
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect(pub.status).toBe(200);
@@ -140,7 +151,7 @@ describe("form icon (used when there is no uploaded logo)", () => {
 
   it("the public form read returns the icon", async () => {
     await patchBranding({ iconName: "briefcase", iconColor: "#7C3AED" });
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug ?? published.body.publishedSlug}`);
     expect((pub.body.form ?? pub.body).branding).toMatchObject({ iconName: "briefcase", iconColor: "#7C3AED" });
   });
@@ -157,7 +168,7 @@ describe("branding.theme (colours, fields look, exact values)", () => {
 
   it("accepts every key and the public form read returns the theme", async () => {
     expect((await patchBranding({ theme })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme).toEqual(theme);
   });
@@ -217,7 +228,7 @@ describe("built-in pictures (the app's own library)", () => {
 
   it.each(["coverImageUrl", "backgroundImageUrl"])("%s keeps the built-in path on the public form read", async (key) => {
     await patchBranding({ [key]: "/form-pictures/calm-waves.jpg" });
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding[key]).toBe("/form-pictures/calm-waves.jpg");
   });
@@ -244,7 +255,7 @@ describe("more typefaces and a heading font", () => {
 
   it("theme.fonts.heading is stored and returned by the public form read", async () => {
     expect((await patchBranding({ theme: { v: 1, fonts: { heading: "playfair_display" } } })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme).toEqual({ v: 1, fonts: { heading: "playfair_display" } });
   });
@@ -265,7 +276,7 @@ describe("new layouts and the Split Feature picture side", () => {
   it.each(["chat", "sidebar", "open", "focus"])("accepts the %s layout and the public read returns it unchanged", async (layout) => {
     const res = await request(app).patch(`/api/forms/${formId}`).set(headers()).send({ settings: { layout } });
     expect(res.status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).settings.layout).toBe(layout);
   });
@@ -276,7 +287,7 @@ describe("new layouts and the Split Feature picture side", () => {
 
   it.each(["start", "end"])("theme.layout.panelSide accepts %s and the public read returns it", async (side) => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelSide: side } } })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme.layout.panelSide).toBe(side);
   });
@@ -298,7 +309,7 @@ describe("new layouts and the Split Feature picture side", () => {
 
   it("theme.layout.panelSplit accepts 20 to 80 and the public read returns it", async () => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelSplit: 35 } } })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme.layout.panelSplit).toBe(35);
   });
@@ -319,7 +330,7 @@ describe("buttons and details (theme.buttons, labels, progress, footer)", () => 
 
   it("stores all of it and returns it on the public form read", async () => {
     expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
   });
@@ -370,7 +381,7 @@ describe("the thank-you screen (theme.success)", () => {
 
   it("stores all of it and returns it on the public form read", async () => {
     expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
   });
@@ -417,7 +428,7 @@ describe("backgrounds and the cover height (theme.background, theme.cover)", () 
 
   it("stores all of it and returns it on the public form read", async () => {
     expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
   });
@@ -462,7 +473,7 @@ describe("a remembered crop (theme.crop)", () => {
 
   it("stores it and returns it on the public form read", async () => {
     expect((await patchBranding({ theme: WHOLE })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme).toEqual(WHOLE);
   });

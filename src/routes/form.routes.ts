@@ -8,6 +8,8 @@ import {
   deleteForm,
   duplicateForm,
   publishForm,
+  publishDraftChanges,
+  discardDraftChanges,
   closeForm,
   moveForm,
   listFormGrants,
@@ -52,6 +54,10 @@ router.patch("/:formId/move", protect as any, blockSuspended as any, requirePerm
 router.delete("/:formId", protect as any, blockSuspended as any, requirePermission("forms:delete", { resourceType: "form" }) as any, deleteForm);
 router.post("/:formId/duplicate", protect as any, blockSuspended as any, requirePermission("forms:create", { resourceType: "form" }) as any, duplicateForm);
 router.post("/:formId/publish", protect as any, blockSuspended as any, requirePermission("forms:publish", { resourceType: "form" }) as any, publishForm);
+// Unpublished changes (CF unpublished-changes, Nov 2026): once published, an edit is staged on the form's draft (see patchForm's own branch) instead of
+// changing the live form. These two act on that draft; anyone who can save the form (forms:write) may use them, not only someone who can publish.
+router.post("/:formId/publish-changes", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, publishDraftChanges);
+router.post("/:formId/discard-draft", protect as any, blockSuspended as any, requirePermission("forms:write", { resourceType: "form" }) as any, discardDraftChanges);
 // Sprint 13 (BE 0.3, 0.4, 0.8). Readiness is read-only (forms:read); changing what is public needs forms:publish;
 // archiving is the same Owner/Admin tier; a test submission is an edit-tier action (forms:write).
 router.get("/:formId/readiness", protect as any, blockSuspended as any, requirePermission("forms:read", { resourceType: "form" }) as any, getReadiness);

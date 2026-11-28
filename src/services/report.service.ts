@@ -6,6 +6,8 @@ import ReportModel from "../models/Report";
 import Form from "../models/Form";
 import ResponseModel from "../models/Response";
 import { buildResponseFilterQuery } from "../utils/responseFilters";
+import { chartListFilter } from "../utils/chartQuery";
+import { chartTimezone } from "./chartQuery.service";
 import { reportFormsFilter } from "../utils/formAccess";
 import { ScoreService } from "./score.service";
 import Stage from "../models/Stage";
@@ -147,6 +149,13 @@ export const buildReportQuery = async (report: any, workspaceFormIds: any[]): Pr
       if (filters.status && ["new", "in_progress", "completed"].includes(filters.status)) {
         query.status = filters.status;
       }
+      // A chart drill-through and "include test responses", exactly as the list applies them.
+      if (filters.chart !== undefined && filters.chart !== null) {
+        const form = await Form.findById(filters.formId);
+        if (!form) throw new Error("The form of this chart filter no longer exists");
+        query.$and = [...(query.$and ?? []), chartListFilter(form, filters.chart, await chartTimezone(form))];
+      }
+      if (filters.includeTest) query.isTest = { $in: [true, false, null] };
     }
   return query;
 };

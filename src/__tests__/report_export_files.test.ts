@@ -49,6 +49,33 @@ const fetchReport = async (body: any) => {
 };
 
 describe("report files", () => {
+  it("includes test responses only when the export asks for them, as the list does", async () => {
+    const form = await Form.create({
+      title: "Tests too", workspaceId: null, createdBy: alice._id, status: "published",
+      fields: [{ fieldId: "f1", pageId: "p1", label: "Name", type: "short_text", required: false }],
+      pages: [{ id: "p1", order: 0, title: "P" }],
+    } as any);
+    await ResponseModel.create([
+      { formId: form._id, answers: { Name: "Real person" } },
+      { formId: form._id, answers: { Name: "Test person" }, isTest: true },
+    ]);
+
+    const without = ((await fetchReport({ format: "csv", formId: String(form._id) })).body as Buffer).toString("utf8");
+    expect(without).toContain("Real person");
+    expect(without).not.toContain("Test person");
+    const withTests = ((await fetchReport({ format: "csv", formId: String(form._id), includeTest: true })).body as Buffer).toString("utf8");
+    expect(withTests).toContain("Test person");
+  });
+
+  it("refuses a chart filter that is not valid, or that names no form", async () => {
+    const noForm = await request(app).post("/api/reports").set(personal(alice)).send({ format: "csv", chart: "{}" });
+    expect(noForm.status).toBe(400);
+    const form = await Form.create({ title: "Chart", workspaceId: null, createdBy: alice._id, status: "published", fields: [], pages: [{ id: "p1", order: 0, title: "P" }] } as any);
+    const broken = await request(app).post("/api/reports").set(personal(alice)).send({ format: "csv", formId: String(form._id), chart: "not json" });
+    expect(broken.status).toBe(400);
+    expect(broken.body.error.code).toBe("INVALID_CHART_FILTER");
+  });
+
   it("CSV: a 3-question form gives 3 question columns, BOM, readable status and filename; injection is neutralised", async () => {
     const form = await Form.create({
       title: "Customer Feedback", workspaceId: null, createdBy: alice._id, status: "published",

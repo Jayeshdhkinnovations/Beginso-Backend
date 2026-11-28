@@ -5,6 +5,13 @@
 // Tests mint bare JWTs without a Session row; production protect() rejects those (auth.middleware).
 process.env.ALLOW_SESSIONLESS_TOKENS = "true";
 
+// The MongoDB driver (7.5+) loads `os` with a dynamic import(), which Jest's sandbox refuses (every connection then fails with
+// "Missing required sub-document 'driver'"). Hand it the module the ordinary way; outside Jest nothing needs this.
+jest.mock("mongodb/lib/runtime_adapters", () => ({
+  ALLOWED_DRIVER_REQUIRE_PROPERTY_NAME: "allowedDriverRequire",
+  resolveRuntimeAdapters: async (options: any) => ({ os: options.runtimeAdapters?.os ?? jest.requireActual("os") }),
+}));
+
 // Never let a test open a socket to the real mail server.
 jest.mock("nodemailer", () => {
   const transport = {

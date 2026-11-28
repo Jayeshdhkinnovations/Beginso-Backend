@@ -3,7 +3,7 @@ import { FormRepository } from "../repositories/form.repository";
 import { deleteFormData } from "./cleanup.service";
 import FormPin from "../models/FormPin";
 import { PIN_LIMIT } from "./pin.service";
-import Form, { IForm, IFormField } from "../models/Form";
+import Form, { IForm, IFormDraft, IFormField } from "../models/Form";
 import ResponseModel from "../models/Response";
 import mongoose from "mongoose";
 import { nanoid } from "nanoid";
@@ -447,9 +447,16 @@ export class FormService {
     }
 
     const existing = await this.getFormById(formId, workspaceId);
+    // A draft left behind by an unpublish or a close is what the owner sees in the builder, so this save builds on it and clears it.
+    const folded = this.offlineDraft(existing);
+    const baseline = folded ? ({ branding: folded.branding, settings: folded.settings } as unknown as IForm) : existing;
+    this.preserveAccessMode(baseline, patchDetails);
+    this.preserveTheme(baseline, patchDetails);
+    if (folded) {
+      const settings = { ...(folded.settings as any), ...(patchDetails.settings as any) };
+      patchDetails = { ...folded, ...patchDetails, settings, draft: null };
+    }
     const pages = patchDetails.pages || existing.pages || [];
-    this.preserveAccessMode(existing, patchDetails);
-    this.preserveTheme(existing, patchDetails);
 
     if (patchDetails.fields) {
       const { fields, fieldsChanged } = this.processFieldsUpdate(existing.fields, patchDetails.fields);
@@ -481,6 +488,196 @@ export class FormService {
     return updated;
   }
 
+  // Settings that keep applying live even while the rest of an edit is staged as a draft (CF unpublished-changes, Nov 2026, decision 1): the response
+  // limit. A status change (publish/unpublish/close) is a separate action from patchDraft entirely, not a settings key, so it is unaffected by this.
+  private static readonly LIVE_SETTINGS_KEYS = ["responseLimit", "responseLimitEnabled"] as const;
+
+  private splitSettings(settings: Partial<IForm["settings"]> | undefined): { live: Record<string, unknown>; staged: Record<string, unknown> } {
+    const live: Record<string, unknown> = {};
+    const staged: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(settings ?? {})) {
+      if ((FormService.LIVE_SETTINGS_KEYS as readonly string[]).includes(key)) live[key] = value;
+      else staged[key] = value;
+    }
+    return { live, staged };
+  }
+
+  private plainOf<T>(value: T): T {
+    return ((value as any)?.toObject ? (value as any).toObject() : value) as T;
+  }
+
+  /** The staged draft of a form that is no longer published, as ordinary form content; null for a published form or when there is no draft. */
+  private offlineDraft(existing: IForm): Partial<IForm> | null {
+    if (existing.status === "published" || !existing.draft) return null;
+    const draft = this.plainOf(existing.draft) as IFormDraft;
+    return {
+      title: draft.title ?? existing.title,
+      description: draft.description ?? existing.description,
+      fields: draft.fields ?? this.plainOf(existing.fields),
+      pages: draft.pages ?? this.plainOf(existing.pages),
+      branding: draft.branding ?? this.plainOf(existing.branding),
+      settings: { ...this.plainOf(existing.settings), ...this.plainOf(draft.settings) } as any,
+    };
+  }
+
+  /**
+   * A save to a form that is already published (CF unpublished-changes, Nov 2026): title, description, fields, pages, branding and most of settings are
+   * staged on `draft` instead of changing the live, public form; the response limit still applies live (settings.responseLimit / responseLimitEnabled).
+   * The draft starts from the live content the first time it is touched, then from itself. Not for a form that is not published — the caller (patchForm's
+   * caller in the controller) only takes this path when the existing status is "published" and the patch is not itself a status change.
+   */
+  async patchDraft(
+    formId: string,
+    workspaceId: string,
+    patchDetails: Partial<IForm>,
+    expected?: { contentVersion: number; saveId?: string },
+    retried = false
+  ): Promise<IForm> {
+    if (patchDetails.pages && patchDetails.pages.length === 0) {
+      const err = new Error("Pages array must not be empty");
+      (err as any).statusCode = 400;
+      throw err;
+    }
+
+    const existing = await this.getFormById(formId, workspaceId);
+    const existingDraft = existing.draft;
+    const baseFields = existingDraft?.fields ?? existing.fields;
+    const basePages = (patchDetails.pages ?? existingDraft?.pages ?? existing.pages) || [];
+
+    let fields = existingDraft?.fields ?? existing.fields;
+    if (patchDetails.fields) {
+      const { fields: merged } = this.processFieldsUpdate(baseFields, patchDetails.fields);
+      fields = merged;
+      validateFieldsIntegrity(fields, basePages);
+    }
+
+    // Same two carry-overs an ordinary patchForm applies — a branding patch that omits theme keeps the stored theme, a settings patch that omits
+    // accessMode keeps it — but against the DRAFT's own branding/settings (what the next "publish changes" would send live), not the live form's, so
+    // a second staged edit builds on the first one's staged theme/accessMode rather than losing it back to what is still live.
+    const stagedSettingsBase = this.plainOf(existingDraft?.settings ?? this.splitSettings(this.plainOf(existing.settings)).staged);
+    const baseline = { branding: existingDraft?.branding ?? this.plainOf(existing.branding), settings: stagedSettingsBase } as unknown as IForm;
+    this.preserveTheme(baseline, patchDetails);
+    this.preserveAccessMode(baseline, patchDetails);
+
+    const { live: liveSettings, staged: stagedSettingsPatch } = this.splitSettings(patchDetails.settings as any);
+
+    const draft: IFormDraft = {
+      title: patchDetails.title ?? existingDraft?.title ?? existing.title,
+      description: patchDetails.description ?? existingDraft?.description ?? existing.description,
+      fields,
+      pages: patchDetails.pages ?? existingDraft?.pages ?? existing.pages,
+      branding: (patchDetails.branding as any) ?? baseline.branding,
+      settings: { ...stagedSettingsBase, ...stagedSettingsPatch } as any,
+      savedAt: new Date(),
+      // Saving the draft moves the form's version by one. A draft that was in step stays in step; one that had already fallen behind
+      // a newer live form stays behind, so publishing it is still refused.
+      baseContentVersion:
+        !existingDraft || existingDraft.baseContentVersion === versionOf(existing) ? versionOf(existing) + 1 : existingDraft.baseContentVersion,
+    };
+
+    // Only a live key whose VALUE actually changed counts as a live write. The autosave sends the whole settings object on every save, not only
+    // when something changed, so `liveSettings` has responseLimit/responseLimitEnabled on every single staged edit even when neither was touched —
+    // treating their mere presence as a change bumped the live form's version on every keystroke, so "Publish changes" always found the live form
+    // had "moved on" and refused with 409 after the very next edit. A value is live only once it differs from what is already stored.
+    const currentLiveSettings = this.plainOf(existing.settings) as Record<string, unknown>;
+    const changedLiveSettings: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(liveSettings)) {
+      if (JSON.stringify(currentLiveSettings?.[key] ?? null) !== JSON.stringify(value ?? null)) changedLiveSettings[key] = value;
+    }
+
+    const updateDetails: Partial<IForm> = { draft };
+    if (Object.keys(changedLiveSettings).length > 0) {
+      updateDetails.settings = { ...currentLiveSettings, ...changedLiveSettings } as any;
+    }
+
+    // Written only if the form is still the version this draft was built from, in the same atomic operation.
+    const condition = { contentVersion: versionOf(existing), saveId: expected?.saveId };
+    const updated = await this.formRepository.update(formId, workspaceId, updateDetails, condition);
+    if (!updated) {
+      const current = await this.formRepository.findById(formId, workspaceId).catch(() => null);
+      if (current) {
+        if (expected?.saveId && current.lastSaveId === expected.saveId) return current; // the reply to this same save was lost
+        // A caller that named no version cannot be stale: build on the newer draft instead, once.
+        if (!expected && !retried) return this.patchDraft(formId, workspaceId, patchDetails, undefined, true);
+        throw staleFormError(versionOf(current));
+      }
+      const err = new Error("Form not found for update");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    return updated;
+  }
+
+  /** Copies the staged draft onto the live, published form, and clears the draft. Refuses (FORM_STALE) if the live form moved on since the draft was
+   * started — someone else published a change in the meantime — so a draft started on an older version is never blindly stamped over a newer live form. */
+  async publishDraftChanges(formId: string, workspaceId: string): Promise<IForm> {
+    const existing = await this.getFormById(formId, workspaceId);
+    if (!existing.draft) {
+      const err = new Error("There is nothing to publish — no changes are staged.");
+      (err as any).statusCode = 400;
+      (err as any).code = "NO_DRAFT";
+      throw err;
+    }
+    const liveVersion = versionOf(existing);
+    if (existing.draft.baseContentVersion !== liveVersion) {
+      throw staleFormError(liveVersion);
+    }
+
+    // Plain objects, not the draft's own Mongoose subdocuments: processFieldsUpdate's deep-equal compares plain JSON on one side already (via
+    // JSON.stringify of `existing.fields`) — a raw subdocument on the other side never looks equal to it even when nothing really changed, which
+    // wrongly bumped schemaVersion on every publish.
+    const draft = this.plainOf(existing.draft) as IFormDraft;
+    const fields = draft.fields ?? this.plainOf(existing.fields);
+    const pages = draft.pages ?? existing.pages;
+    validateFieldsIntegrity(fields, pages);
+    this.assertReady(fields, { ...this.plainOf(existing.settings), ...this.plainOf(draft.settings) } as any);
+    const { fieldsChanged } = this.processFieldsUpdate(existing.fields, fields);
+
+    const updateDetails: Partial<IForm> = {
+      title: draft.title ?? existing.title,
+      description: draft.description,
+      fields,
+      pages,
+      branding: draft.branding,
+      settings: { ...this.plainOf(existing.settings), ...this.plainOf(draft.settings) } as any,
+      schemaVersion: fieldsChanged ? (existing.schemaVersion || 1) + 1 : existing.schemaVersion || 1,
+      draft: null,
+    };
+
+    const updated = await this.formRepository.update(formId, workspaceId, updateDetails, { contentVersion: liveVersion });
+    if (!updated) {
+      // Someone published (or discarded and restaged) between the read above and this write: refuse rather than silently lose that change.
+      const current = await this.formRepository.findById(formId, workspaceId).catch(() => null);
+      throw staleFormError(versionOf(current));
+    }
+    return updated;
+  }
+
+  /** Throws the staged draft away; the live, published form is untouched. */
+  async discardDraftChanges(formId: string, workspaceId: string): Promise<IForm> {
+    const existing = await this.getFormById(formId, workspaceId);
+    if (!existing.draft) return existing;
+    const updated = await this.formRepository.update(formId, workspaceId, { draft: null });
+    if (!updated) {
+      const err = new Error("Form not found for update");
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    return updated;
+  }
+
+  // One readiness rule for the pre-flight screen and for the server (readiness.service.ts). Only the blocking issues stop a publish.
+  private assertReady(fields: IForm["fields"], settings: IForm["settings"]): void {
+    const readiness = evaluateReadiness({ fields, settings });
+    if (readiness.ready) return;
+    const first = readiness.blocking[0];
+    const err = new Error(first.message);
+    (err as any).statusCode = 400;
+    (err as any).code = first.code;
+    (err as any).blocking = readiness.blocking;
+    throw err;
+  }
+
   async publishForm(
     formId: string,
     workspaceId: string,
@@ -501,10 +698,18 @@ export class FormService {
       (err as any).code = "FORM_ARCHIVED";
       throw err;
     }
-    const pages = (extraPatch && extraPatch.pages) || existing.pages || [];
+    // Publishing a form that was unpublished with changes still staged publishes what the builder shows: the draft.
+    const folded = this.offlineDraft(existing);
+    const pages = (extraPatch && extraPatch.pages) || folded?.pages || existing.pages || [];
 
-    let fields = existing.fields;
+    let fields = folded?.fields ?? existing.fields;
     const updateDetails: Partial<IForm> = {};
+    if (folded) {
+      Object.assign(updateDetails, folded, { draft: null });
+      if (this.processFieldsUpdate(existing.fields, folded.fields as any[]).fieldsChanged) {
+        updateDetails.schemaVersion = (existing.schemaVersion || 1) + 1;
+      }
+    }
 
     if (extraPatch) {
       if (extraPatch.title !== undefined) updateDetails.title = extraPatch.title;
@@ -526,7 +731,8 @@ export class FormService {
 
     // Settings the pre-flight chose (access mode, closing date) are applied on top of what is stored, so
     // the readiness check below judges the form as it will actually go live.
-    const currentSettings: any = (existing.settings as any)?.toObject ? (existing.settings as any).toObject() : { ...(existing.settings as any) };
+    const storedSettings: any = folded?.settings ?? existing.settings;
+    const currentSettings: any = storedSettings?.toObject ? storedSettings.toObject() : { ...storedSettings };
     const settings = { ...currentSettings };
     if (commit?.accessMode !== undefined) settings.accessMode = commit.accessMode;
     if (commit?.closeDate !== undefined) {
@@ -537,17 +743,7 @@ export class FormService {
       updateDetails.settings = settings;
     }
 
-    // One readiness rule for the pre-flight screen and for the server (readiness.service.ts). Only the
-    // blocking issues stop a publish; the same two rules and codes as before Sprint 13.
-    const readiness = evaluateReadiness({ fields, settings });
-    if (!readiness.ready) {
-      const first = readiness.blocking[0];
-      const err = new Error(first.message);
-      (err as any).statusCode = 400;
-      (err as any).code = first.code;
-      (err as any).blocking = readiness.blocking;
-      throw err;
-    }
+    this.assertReady(fields, settings);
 
     // Reuse existing slug on re-publish; only generate a new one on first publish
     const publishedSlug = existing.publishedSlug || await this.generateUniqueSlug();

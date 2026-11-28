@@ -279,8 +279,25 @@ export interface IForm extends Document {
   templateCategory?: string | null;
   branding?: IBranding;
   settings?: IFormSettings;
+  // Unpublished changes: once a form is published, an edit to its content (title, description, fields, pages, branding, or settings other than
+  // responseLimit/responseLimitEnabled, which still apply live) is staged here instead of changing the live form. "Publish changes" copies this onto
+  // the live form and clears it; "discard changes" clears it without copying. Absent = no staged change. See services/form.service.ts patchDraft().
+  draft?: IFormDraft | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface IFormDraft {
+  title?: string;
+  description?: string;
+  fields?: IFormField[];
+  pages?: IFormPage[];
+  branding?: IBranding;
+  settings?: IFormSettings;
+  savedAt: Date;
+  // The live form's contentVersion when this draft was started (or last caught up to the live form). "Publish changes" refuses if the live form has
+  // moved on since (someone else published a change in the meantime) — see staleFormError in utils/staleForm.ts.
+  baseContentVersion: number;
 }
 
 const ConditionSchema = new Schema<ICondition>(
@@ -446,6 +463,22 @@ export const FormSettingsSchema = new Schema<IFormSettings>(
   { _id: false }
 );
 
+const FormDraftSchema = new Schema<IFormDraft>(
+  {
+    title: { type: String },
+    description: { type: String },
+    fields: { type: [FormFieldSchema], default: undefined },
+    pages: { type: [FormPageSchema], default: undefined },
+    // A default of {} (matching the top-level form's own branding/settings fields): without one, Mongoose's single-subdocument cast turns an
+    // EMPTY object (clearing the theme, say) into `undefined` on save instead of keeping it as the empty object it was set to.
+    branding: { type: BrandingSchema, default: {} },
+    settings: { type: FormSettingsSchema, default: {} },
+    savedAt: { type: Date, required: true },
+    baseContentVersion: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
 const FormSchema = new Schema<IForm>(
   {
     title: { type: String, required: true, trim: true },
@@ -491,6 +524,7 @@ const FormSchema = new Schema<IForm>(
     templateId: { type: Schema.Types.ObjectId, ref: "Template", default: null },
     templateCategory: { type: String, default: null },
     branding: { type: BrandingSchema, default: {} },
+    draft: { type: FormDraftSchema, default: null },
     settings: { type: FormSettingsSchema, default: {} },
   },
   {

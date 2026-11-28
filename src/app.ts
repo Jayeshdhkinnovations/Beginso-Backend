@@ -30,6 +30,7 @@ import respondRoutes from "./routes/respond.routes";
 import mySubmissionsRoutes from "./routes/mySubmissions.routes";
 import { errorHandler } from "./middleware/error.middleware";
 import { normalizeErrorShape } from "./middleware/errorShape.middleware";
+import { proxyCheck } from "./middleware/proxyCheck.middleware";
 import { buildInfo, publicBuildInfo } from "./utils/buildInfo";
 
 // Continuous Deployment Test Comment
@@ -38,6 +39,7 @@ const app = express();
 // With `true` any caller could choose their own IP by sending X-Forwarded-For.
 const proxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? "1", 10);
 app.set("trust proxy", Number.isFinite(proxyHops) && proxyHops >= 0 ? proxyHops : 1);
+app.use(proxyCheck());
 
 // Browsers only call this API directly from these origins: the public form (beginso.com,
 // beginso.vercel.app) and the admin console. The main app goes through its own same-origin proxy, which sends no Origin header.

@@ -33,7 +33,8 @@ services:
     # by the ONE variable BIND_ADDRESS, which defaults to the loopback: reachable only from this machine, with a proxy on the same host in front.
     # On the Beginso VM nothing runs in front of the backend (no nginx, no Caddy): the live backend answers on port 5000 of every address, and
     # whatever forwards to it reaches it at the VM's address. There .deploy/env sets BIND_ADDRESS=0.0.0.0, which is exactly the exposure the pm2
-    # backend has today, no more. The app trusts TRUST_PROXY_HOPS proxies for the client IP. scripts/deploy-docker.sh checks that the port is
+    # backend has today, no more. The app trusts TRUST_PROXY_HOPS proxies for the client IP: whatever forwards to this VM counts as one, so
+    # here .env must say TRUST_PROXY_HOPS=1 (0 once left every response without a map location). scripts/deploy-docker.sh checks that the port is
     # free BEFORE it starts anything and never takes it from another container.
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-5000}:5000"

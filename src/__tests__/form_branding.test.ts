@@ -285,6 +285,17 @@ describe("new layouts and the Split Feature picture side", () => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelSide: value } } })).status).toBe(400);
   });
 
+  it.each(["top", "bottom"])("theme.layout.panelText accepts %s and the public read returns it", async (position) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelText: position } } })).status).toBe(200);
+    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const pub = await request(app).get(`/api/public/${published.body.slug}`);
+    expect((pub.body.form ?? pub.body).branding.theme.layout.panelText).toBe(position);
+  });
+
+  it.each([["middle"], [""], [1], [null]])("theme.layout.panelText rejects %j", async (value) => {
+    expect((await patchBranding({ theme: { v: 1, layout: { panelText: value } } })).status).toBe(400);
+  });
+
   it("theme.layout.panelSplit accepts 20 to 80 and the public read returns it", async () => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelSplit: 35 } } })).status).toBe(200);
     const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());

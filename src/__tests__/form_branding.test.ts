@@ -298,7 +298,7 @@ describe("new layouts and the Split Feature picture side", () => {
 
   it.each(["top", "bottom"])("theme.layout.panelText accepts %s and the public read returns it", async (position) => {
     expect((await patchBranding({ theme: { v: 1, layout: { panelText: position } } })).status).toBe(200);
-    const published = await request(app).post(`/api/forms/${formId}/publish`).set(headers());
+    const published = await goLive();
     const pub = await request(app).get(`/api/public/${published.body.slug}`);
     expect((pub.body.form ?? pub.body).branding.theme.layout.panelText).toBe(position);
   });

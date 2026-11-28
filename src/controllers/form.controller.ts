@@ -610,7 +610,7 @@ export const patchForm = async (req: Request, res: Response, next: NextFunction)
       : validatedData.status === "published"
         ? await formService.publishForm(formId as string, workspaceId, validatedData)
         : stagesAsDraft
-          ? await formService.patchDraft(formId as string, workspaceId, validatedData)
+          ? await formService.patchDraft(formId as string, workspaceId, validatedData, expected)
           : await formService.patchForm(formId as string, workspaceId, validatedData, expected);
 
     if (validatedData.status !== undefined && validatedData.status !== formDoc.status) {
